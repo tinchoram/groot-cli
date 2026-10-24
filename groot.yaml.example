@@ -1,0 +1,37 @@
+# groot.yaml: copy to groot.yaml and adjust. Every field is optional; missing
+# fields use the defaults shown here. Strings support ${VAR} and
+# ${VAR:-default} expansion. Never write API keys in this file: the Anthropic
+# key is read from the ANTHROPIC_API_KEY environment variable.
+
+provider:
+  name: anthropic                # only "anthropic" in this release
+  model: ${GROOT_MODEL:-claude-sonnet-5-5}
+
+max_turns: 20                    # model calls allowed per user request
+
+compaction:
+  strategy: none                 # none | window | summarize
+  keep: 40                       # window: messages kept (strategy window)
+  threshold: 60                  # summarize: history length that triggers a summary
+
+memory:
+  path: .groot/groot.db          # unused since 0.2.0: each space keeps its own
+                                 # <space>/.groot/groot.db
+
+audit:
+  path: .groot/audit.jsonl       # unused since 0.2.0: each space keeps its own
+                                 # <space>/.groot/audit.jsonl
+
+gate:
+  policy: interactive            # interactive: ask for writes and commands
+                                 # readonly: allow reads only
+                                 # auto: allow everything (trusted scripts only)
+
+kubectl:
+  # Allowlist of namespaces. Empty means any namespace. When set, the model
+  # must name one of these namespaces and cannot use -A.
+  namespaces: ["${GROOT_NAMESPACE:-}"]
+
+# Optional. Replaces the built-in SRE system prompt.
+# system_prompt: |
+#   You are Groot, a careful SRE assistant for the payments platform.

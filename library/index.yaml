@@ -1,0 +1,25 @@
+# The "@tinchoram" collection: the agents embedded in this binary. The same
+# file describes them for a remote source, so this repository can be
+# published as an index later. Each url points at the raw file in the
+# repository.
+collection: "@tinchoram"
+author: "@tinchoram"
+agents:
+  - name: developer
+    description: "Expert software engineer: reads the codebase before editing, writes tests first, small reviewable diffs, explains trade-offs"
+    url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/developer.md
+  - name: devsecops-platform
+    description: "Platform and security engineering: cloud architecture, scalability, infrastructure as code, CI/CD hardening, least privilege"
+    url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/devsecops-platform.md
+  - name: observability
+    description: "Observability, alerting and platform maintenance: SLOs, dashboards, alert quality, noise reduction, incident timelines, runbooks"
+    url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/observability.md
+  - name: project-manager
+    description: "Plans releases and delivery dates, keeps the backlog and status notes, writes release notes and risk logs"
+    url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/project-manager.md
+  - name: security-tester
+    description: "Offensive security testing of authorized targets only: reproduces vulnerabilities, documents impact and fixes"
+    url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/security-tester.md
+  - name: ux-designer
+    description: "Designs user experience across web, mobile, CLI and TUI: flows, ASCII wireframes, components, accessibility checks"
+    url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/ux-designer.md

@@ -1,0 +1,15 @@
+# Public agent catalogs that were reviewed before they were added here.
+# "validated_by" is the person who checked the catalog's license, the files
+# we import from it, and that the import rules cope with them.
+#
+# kind: github  lists the .md files under "path" in the repository "repo"
+#               at "ref", and fetches each file when it is shown or installed.
+# kind: index   names an index.yaml in the format of library/index.yaml.
+sources:
+  - name: "VoltAgent awesome-claude-code-subagents"
+    kind: github
+    repo: VoltAgent/awesome-claude-code-subagents
+    ref: main
+    path: categories
+    license: MIT
+    validated_by: "@tinchoram"

@@ -1,0 +1,115 @@
+package workspace
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"unicode/utf8"
+
+	"github.com/tinchoram/groot-cli/internal/memory"
+)
+
+// localSummaryRunes caps the answer text of a local summary.
+const localSummaryRunes = 300
+
+// localSummary is the summary written without a model call: the last request
+// and the start of the last answer. It is empty when there was no exchange.
+func (c *Conversation) localSummary() string {
+	user, answer := c.LastExchange()
+	if user == "" && answer == "" {
+		return ""
+	}
+	if utf8.RuneCountInString(answer) > localSummaryRunes {
+		answer = string([]rune(answer)[:localSummaryRunes]) + "…"
+	}
+	return fmt.Sprintf("Last request: %s\nLast answer: %s", strings.TrimSpace(user), strings.TrimSpace(answer))
+}
+
+// endLocal writes the local summary of the conversation and ends its session,
+// without calling the model.
+func (c *Conversation) endLocal(ctx context.Context) error {
+	if c.SessionID() == "" || c.MessageCount() == 0 {
+		return c.Agent.End(ctx)
+	}
+	var errs []error
+	if text := c.localSummary(); text != "" {
+		errs = append(errs, c.store.Remember(ctx, memory.Entry{
+			Kind:   memory.KindSessionSummary,
+			Scope:  memory.ScopeProject,
+			Agent:  c.name,
+			Text:   text,
+			Source: "session:" + c.SessionID(),
+		}))
+	}
+	errs = append(errs, c.Agent.End(ctx))
+	return errors.Join(errs...)
+}
+
+// shutdown ends every open conversation and closes the stores. Graceful ends
+// them with model summaries, in parallel, bounded by ctx; a conversation whose
+// model summary does not finish keeps a local one. Otherwise every conversation
+// gets its local summary at once.
+func (w *Workspace) shutdown(ctx context.Context, graceful bool) error {
+	w.mu.Lock()
+	convs := w.convs
+	stores := w.stores
+	w.convs = map[string]*Conversation{}
+	w.stores = map[string]*spaceStores{}
+	w.mu.Unlock()
+
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		errs []error
+	)
+	note := func(err error) {
+		if err != nil {
+			mu.Lock()
+			errs = append(errs, err)
+			mu.Unlock()
+		}
+	}
+	for _, c := range convs {
+		wg.Add(1)
+		go func(c *Conversation) {
+			defer wg.Done()
+			if !graceful {
+				note(c.endLocal(context.Background()))
+				return
+			}
+			if err := c.End(ctx); err != nil {
+				// The model did not finish its summary in time: the session is
+				// ended, so only the local summary is still missing.
+				note(c.writeLocalSummary(context.Background()))
+			}
+		}(c)
+	}
+	wg.Wait()
+
+	for _, s := range stores {
+		if s.aud != nil {
+			note(s.aud.Close())
+		}
+		note(s.mem.Close())
+	}
+	note(w.inbox.Close())
+	return errors.Join(errs...)
+}
+
+// writeLocalSummary stores the local summary when the conversation has one. It
+// is used after a model summary failed, when the session is already ended.
+func (c *Conversation) writeLocalSummary(ctx context.Context) error {
+	text := c.localSummary()
+	if text == "" {
+		return nil
+	}
+	return c.store.Remember(ctx, memory.Entry{
+		Kind:   memory.KindSessionSummary,
+		Scope:  memory.ScopeProject,
+		Agent:  c.name,
+		Text:   text,
+		Source: "session:" + c.SessionID(),
+	})
+}

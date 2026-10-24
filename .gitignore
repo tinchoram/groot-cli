@@ -1,0 +1,7 @@
+.groot/
+.env
+bin/
+/groot
+*.test
+*.out
+/dist/
