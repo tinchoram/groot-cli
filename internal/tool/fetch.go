@@ -72,6 +72,9 @@ func (*Fetch) Definition() api.ToolDef {
 func (*Fetch) Risk() Risk            { return RiskRead }
 func (f *Fetch) RiskFor(string) Risk { return f.Risk() }
 
+// Untrusted: the page text is written by whoever runs the site.
+func (*Fetch) Untrusted() bool { return true }
+
 func (*Fetch) Preview(input string) string {
 	var in struct {
 		URL string `json:"url"`

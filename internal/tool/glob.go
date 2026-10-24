@@ -68,6 +68,9 @@ func (*Glob) Definition() api.ToolDef {
 
 func (*Glob) Risk() Risk { return RiskRead }
 
+// Untrusted: matched file names are chosen by whoever created the files.
+func (*Glob) Untrusted() bool { return true }
+
 func (g *Glob) RiskFor(string) Risk { return g.Risk() }
 
 func (*Glob) Preview(input string) string {

@@ -48,6 +48,19 @@ type Tool interface {
 	Execute(ctx context.Context, input string) (string, bool)
 }
 
+// Untrusted marks a tool whose output carries external or user-authored text:
+// web pages, files, command output, memories and messages. The agent wraps that
+// output in a guard envelope and scans it for instructions aimed at the model.
+type Untrusted interface {
+	Untrusted() bool
+}
+
+// SelfEnveloped marks an Untrusted tool that already wraps its own parts with
+// the guard. The agent then scans its output without adding a second envelope.
+type SelfEnveloped interface {
+	SelfEnveloped() bool
+}
+
 // Registry holds tools in registration order.
 type Registry struct {
 	mu    sync.RWMutex

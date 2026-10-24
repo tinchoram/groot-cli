@@ -39,7 +39,7 @@ handled by the `debug` agent.
 - A real sandbox for `bash` (today the gate decides, but the command runs with
   the user's full permissions) (done).
 - Prompt-injection guard for `fetch_url` and tool results: external content is
-  data, not instructions.
+  data, not instructions (done).
 - `/audit` in the UI and export of audit records to an external sink.
 
 ## 0.6.0: connectivity

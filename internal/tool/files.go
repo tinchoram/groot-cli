@@ -110,6 +110,9 @@ func (*ReadFile) Definition() api.ToolDef {
 
 func (*ReadFile) Risk() Risk { return RiskRead }
 
+// Untrusted: a file in the workspace can carry text written by anyone.
+func (*ReadFile) Untrusted() bool { return true }
+
 func (r *ReadFile) RiskFor(string) Risk { return r.Risk() }
 
 func (*ReadFile) Preview(input string) string {

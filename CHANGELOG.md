@@ -5,6 +5,19 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.5.0-dev (unreleased)
 
+### Prompt-injection guard
+- Output from `fetch_url`, `read_file`, `list_dir`, `glob`, `bash`, `kubectl` and
+  `recall`, and message bodies from other agents, are wrapped in an envelope with
+  a random id per call. The system prompt tells the model that this content is
+  data, not instructions.
+- The scanner reports phrases that address the model, and invisible or bidirectional
+  characters, which it removes. Findings appear in the result, in the transcript
+  and in the audit entry (`guard`).
+- `guard.mode`: `warn` (default), `strict` (withholds `fetch_url` results with
+  findings) or `off` (unsafe).
+- A tool call that copies the id of a recent envelope is tagged in its approval
+  preview, and a read-only command asks instead of running unasked.
+
 ### Sandbox
 - Every `bash` command runs inside an OS sandbox: `sandbox-exec` on macOS, `bwrap`
   on Linux. It can write only the space directory, the temp directories and

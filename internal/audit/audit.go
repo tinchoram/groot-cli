@@ -27,6 +27,9 @@ type Record struct {
 	// Sandbox is the backend that confined the call (sandbox-exec, bwrap, none,
 	// off). Empty for tools that run no process.
 	Sandbox string `json:"sandbox,omitempty"`
+	// Guard lists the kinds of suspicious text the untrusted-content guard
+	// found in the result, such as "override" or "command". Empty when none.
+	Guard []string `json:"guard,omitempty"`
 }
 
 // Log is an append-only JSONL file. A nil *Log discards records.

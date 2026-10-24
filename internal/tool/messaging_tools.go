@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/tinchoram/groot-cli/internal/api"
+	"github.com/tinchoram/groot-cli/internal/guard"
 	"github.com/tinchoram/groot-cli/internal/inbox"
 )
 
@@ -91,6 +92,9 @@ func (s *SendMessage) execute(ctx context.Context, input string) (string, bool) 
 // ReadInbox returns the unread messages for the running agent and marks them read.
 type ReadInbox struct {
 	messenger Messenger
+	// Guard envelopes each body with its sender as the source. Nil, or an off
+	// guard, returns the bodies as they are.
+	Guard *guard.Guard
 }
 
 // NewReadInbox returns the read_inbox tool.
@@ -107,10 +111,24 @@ func (*ReadInbox) Definition() api.ToolDef {
 // Risk is RiskRead: the tool reads the agent's own inbox.
 func (*ReadInbox) Risk() Risk { return RiskRead }
 
+// Untrusted is true: a message body comes from another agent, which may be
+// compromised. SelfEnveloped is true: each body is wrapped here with its
+// sender as the source, so the agent only scans the output.
+func (*ReadInbox) Untrusted() bool { return true }
+
+// SelfEnveloped is true; see Untrusted.
+func (*ReadInbox) SelfEnveloped() bool { return true }
+
 // RiskFor is the static risk.
 func (r *ReadInbox) RiskFor(string) Risk { return r.Risk() }
 
 func (*ReadInbox) Preview(string) string { return "read_inbox" }
+
+// body is the message text as the model reads it. The subject stays outside
+// the envelope, so delegation subjects keep their plain form.
+func (r *ReadInbox) body(m inbox.Message) string {
+	return r.Guard.Wrap("message from "+m.FromSpace+"/"+m.FromAgent, m.Body)
+}
 
 func (r *ReadInbox) Execute(ctx context.Context, input string) (string, bool) {
 	out, isErr := r.execute(ctx)
@@ -132,7 +150,7 @@ func (r *ReadInbox) execute(ctx context.Context) (string, bool) {
 			sb.WriteString("\n\n")
 		}
 		fmt.Fprintf(&sb, "#%d · from %s/%s · %s\nSubject: %s\n%s",
-			m.ID, m.FromSpace, m.FromAgent, m.CreatedAt.Format("2006-01-02 15:04"), m.Subject, m.Body)
+			m.ID, m.FromSpace, m.FromAgent, m.CreatedAt.Format("2006-01-02 15:04"), m.Subject, r.body(m))
 		ids = append(ids, m.ID)
 	}
 	if err := r.messenger.MarkRead(ctx, ids); err != nil {

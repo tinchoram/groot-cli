@@ -21,6 +21,7 @@ under `internal/`:
 | `workspace` | Runtime for spaces and agents: builds conversations, opens stores, composes the gate chain, messaging, library, review. |
 | `ui` | Bubble Tea terminal interface. Renders and forwards input; no agent logic. |
 | `term` | Runs an interactive shell in a pseudo-terminal (`pty.go`) and renders its output (`render.go`). |
+| `guard` | Untrusted-content guard (`guard.go`): wraps tool output and messages in a nonce envelope, scans for instruction-like text, strips invisible characters, and remembers the nonces so the gate can tag calls that copy them. The agent applies it to tool results, `read_inbox` wraps its own bodies, and the workspace uses it for the inbox notice. |
 | `inbox` | Messages between agents and groot, in SQLite (`inbox.go`). |
 | `library` | Lists the agents that can be installed: builtin, GitHub collections, local files (`sources.go`). |
 | `space` | The list of spaces, the active space and the agents assigned to each (`space.go`). |

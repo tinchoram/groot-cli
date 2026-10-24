@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/tinchoram/groot-cli/internal/guard"
 	"github.com/tinchoram/groot-cli/internal/inbox"
 )
 
@@ -20,14 +22,50 @@ const (
 	inboxInjectBytes = 8 * 1024
 )
 
-// inboxBlock is one delivered message as the model reads it.
-func inboxBlock(m inbox.Message) string {
+// inboxBlock is one delivered message as the model reads it. The body is
+// enveloped with its sender as the source. The subject stays plain, because
+// the delegation contract reads it, and the guard's summary follows a body
+// with findings.
+func inboxBlock(m inbox.Message, g *guard.Guard) string {
 	subject := m.Subject
 	if strings.TrimSpace(subject) == "" {
 		subject = "(none)"
 	}
-	return fmt.Sprintf("[inbox] from %s/%s · %s\nSubject: %s\n%s",
-		m.FromSpace, m.FromAgent, m.CreatedAt.Local().Format("2006-01-02 15:04"), subject, m.Body)
+	body := g.Wrap("message from "+m.FromSpace+"/"+m.FromAgent, m.Body)
+	block := fmt.Sprintf("[inbox] from %s/%s · %s\nSubject: %s\n%s",
+		m.FromSpace, m.FromAgent, m.CreatedAt.Local().Format("2006-01-02 15:04"), subject, body)
+	if g.Enabled() {
+		if fs := guard.Scan(m.Body); len(fs) > 0 {
+			block += "\n" + guard.Summary(fs)
+		}
+	}
+	return block
+}
+
+// plainLen is the size of a message as the turn cap counts it: the notice
+// without the envelope and without the guard summary.
+func plainLen(m inbox.Message) int {
+	return len(inboxBlock(m, nil))
+}
+
+// fitBody cuts the body of a message that alone exceeds limit, so the first
+// message still reaches the model, with its envelope closed.
+func fitBody(m inbox.Message, limit int) inbox.Message {
+	empty := m
+	empty.Body = ""
+	room := limit - plainLen(empty) - len("…")
+	if room < 0 {
+		room = 0
+	}
+	if len(m.Body) <= room {
+		return m
+	}
+	cut := room
+	for cut > 0 && !utf8.RuneStart(m.Body[cut]) {
+		cut--
+	}
+	m.Body = m.Body[:cut] + "…"
+	return m
 }
 
 // injectInbox puts the unread messages of the conversation in front of the
@@ -49,17 +87,19 @@ func (c *Conversation) injectInbox(ctx context.Context, prompt string) string {
 		if len(blocks) == inboxInjectMax {
 			break
 		}
-		block := inboxBlock(m)
-		if used+len(block) > inboxInjectBytes {
+		// The cap counts the message text without the guard's envelope; the
+		// envelope is bounded overhead on top of it.
+		orig := m
+		if used+plainLen(m) > inboxInjectBytes {
 			if len(blocks) > 0 {
 				break
 			}
-			block = block[:inboxInjectBytes] + "…"
+			m = fitBody(m, inboxInjectBytes)
 		}
-		blocks = append(blocks, block)
+		blocks = append(blocks, inboxBlock(m, c.Agent.Guard))
 		ids = append(ids, m.ID)
-		c.expectHandover(m)
-		used += len(block)
+		c.expectHandover(orig)
+		used += plainLen(m)
 	}
 	if err := c.inbox.MarkRead(ctx, ids); err != nil {
 		c.warn(fmt.Sprintf("inbox: messages not marked read: %v", err))

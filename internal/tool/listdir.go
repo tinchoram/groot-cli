@@ -93,6 +93,9 @@ func (*ListDir) Definition() api.ToolDef {
 
 func (*ListDir) Risk() Risk { return RiskRead }
 
+// Untrusted: file names are chosen by whoever created the files.
+func (*ListDir) Untrusted() bool { return true }
+
 func (l *ListDir) RiskFor(string) Risk { return l.Risk() }
 
 func (*ListDir) Preview(input string) string {

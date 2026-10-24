@@ -151,6 +151,9 @@ func (*Bash) Definition() api.ToolDef {
 
 func (*Bash) Risk() Risk { return RiskExec }
 
+// Untrusted: command output carries whatever the files and services print.
+func (*Bash) Untrusted() bool { return true }
+
 func (*Bash) Preview(input string) string {
 	var in commandInput
 	if err := json.Unmarshal([]byte(input), &in); err != nil || in.Command == "" {
@@ -321,6 +324,9 @@ func (*Kubectl) Definition() api.ToolDef {
 }
 
 func (*Kubectl) Risk() Risk { return RiskRead }
+
+// Untrusted: resource names, logs and events carry text from the cluster.
+func (*Kubectl) Untrusted() bool { return true }
 
 func (*Kubectl) Preview(input string) string {
 	var in kubectlInput

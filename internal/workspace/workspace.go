@@ -524,6 +524,8 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	sess := gate.Session{Inner: confirmingGate(w.opts.Gate, w.opts.Hooks, key), Grants: w.grantsFor(key), Work: work}
 	// conv is set below; the limit reads it only once a turn runs.
 	var conv *Conversation
+	g := newConversationGuard(w.opts.Config.Guard.Mode)
+	bindGuard(tools, g)
 	ag := &agent.Agent{
 		Name:      agentName,
 		Provider:  prov,
@@ -536,6 +538,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		WindowFor:         w.windowFor,
 		Memory:            st.mem,
 		Audit:             st.aud,
+		Guard:             g,
 		System:            config.ComposeSystemPrompt(base, preamble, projectCtx),
 		MaxTurns:          maxTurns,
 		OnText:            keyedText(w.opts.Hooks, key),

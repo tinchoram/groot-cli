@@ -106,6 +106,9 @@ func (*Recall) Definition() api.ToolDef {
 
 func (*Recall) Risk() Risk { return RiskRead }
 
+// Untrusted: remembered entries may have been saved from external content.
+func (*Recall) Untrusted() bool { return true }
+
 func (*Recall) Preview(input string) string {
 	var in recallInput
 	if err := json.Unmarshal([]byte(input), &in); err != nil {

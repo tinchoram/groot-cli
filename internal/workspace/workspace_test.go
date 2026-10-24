@@ -93,7 +93,7 @@ func TestChatRunsToolsInsideSpaceDirectory(t *testing.T) {
 		t.Fatalf("Send = %q, %v", reply, err)
 	}
 	last := f.mock.Calls[1].Messages[len(f.mock.Calls[1].Messages)-1].Content[0]
-	if last.Type != api.BlockToolResult || last.Content != "hello from space" {
+	if last.Type != api.BlockToolResult || !strings.Contains(last.Content, "hello from space") {
 		t.Fatalf("tool did not read from the space directory: %+v", last)
 	}
 }
