@@ -70,7 +70,7 @@ func danglingHistory() []api.Message {
 
 func TestResumeRepairsADanglingToolUse(t *testing.T) {
 	a := newAgent(provider.NewMock(), registry(t), gate.AutoApprove{})
-	a.Resume("s1", danglingHistory(), 1)
+	a.Resume("s1", danglingHistory(), 1, 0)
 
 	h := a.snapshot()
 	if len(h) != 3 || h[2].Role != api.RoleUser {
@@ -86,7 +86,7 @@ func TestSendPersistsTheRepairBeforeThePrompt(t *testing.T) {
 	store := &captureStore{}
 	a := newAgent(provider.NewMock(textResponse("ok")), registry(t), gate.AutoApprove{})
 	a.Memory = store
-	a.Resume("s1", danglingHistory(), 1)
+	a.Resume("s1", danglingHistory(), 1, 0)
 
 	if _, err := a.Send(context.Background(), "again"); err != nil {
 		t.Fatal(err)

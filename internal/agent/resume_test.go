@@ -48,7 +48,7 @@ func TestResumeContinuesTheSameSession(t *testing.T) {
 
 	mock := provider.NewMock(replyStep("ok"))
 	ag := &Agent{Name: "reader", Provider: mock, Memory: store}
-	ag.Resume("s-1", earlier, 1)
+	ag.Resume("s-1", earlier, 1, 0)
 
 	if _, err := ag.Send(ctx, "next"); err != nil {
 		t.Fatal(err)

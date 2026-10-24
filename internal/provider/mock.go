@@ -52,7 +52,8 @@ func (m *Mock) Send(_ context.Context, req Request) (api.Response, error) {
 		}
 	}
 	step.Response.Model = m.model
-	m.usage.add(step.Response.Usage, "")
+	// The model's price applies when it has one, so tests can script spend.
+	m.usage.add(step.Response.Usage, m.model)
 	return step.Response, nil
 }
 

@@ -18,6 +18,22 @@ built in one day of live testing, so they are grouped by what shipped.
 - The override is read when a conversation opens. Running conversations keep the
   settings they started with; restart groot to apply a change to them.
 
+### Budgets
+- `budget_usd` on a space (`spaces.yaml`) and on an agent (frontmatter). Zero or
+  a missing value means no budget.
+- The spend of a session is stored after every model answer, so a crash keeps it.
+  Budgets sum the stored spend per agent and per space. `sessions.cost_usd` holds
+  the session's own spend: a session ended by `/clear` used to store the
+  conversation's running total.
+- A turn is refused, with no model call, when a budget is spent. A turn that may
+  pass a limit warns once and runs. The check runs again before each model call
+  in a turn.
+- The sidebar shows spend after each space and agent, amber from 80% and red at
+  the budget.
+- `/budget`, `/budget space <usd>` and `/budget agent <name> <usd>`. Admin tools
+  `set_space_budget` and `set_agent_budget`, granted to `groot`.
+- Not yet: a global default in `groot.yaml`.
+
 ## 0.3.0 — 2026-10-24
 
 Coordination, control and day-to-day ergonomics.

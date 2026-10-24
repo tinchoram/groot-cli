@@ -505,6 +505,8 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		maxTurns = w.opts.Config.MaxTurns
 	}
 	sess := gate.Session{Inner: confirmingGate(w.opts.Gate, w.opts.Hooks, key), Grants: w.grantsFor(key), Work: work}
+	// conv is set below; the limit reads it only once a turn runs.
+	var conv *Conversation
 	ag := &agent.Agent{
 		Name:       agentName,
 		Provider:   prov,
@@ -518,10 +520,16 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		OnText:     keyedText(w.opts.Hooks, key),
 		OnToolCall: autoAwareTool(w.opts.Hooks, key, work, sess),
 		OnWarning:  keyedWarn(w.opts.Hooks, key),
+		// Checked before every model call, so a turn that goes over its budget
+		// stops between tool rounds.
+		Limit: func(ctx context.Context) error { return conv.checkBudget(ctx, 0) },
 	}
 	resumed := w.startOrResume(ctx, ag, st.mem, agentName)
-	return &Conversation{Agent: ag, prov: prov, store: st.mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, work: work, files: files, review: box,
-		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key)}, nil
+	conv = &Conversation{Agent: ag, prov: prov, store: st.mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, work: work, files: files, review: box,
+		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key),
+		budgets:      func(ctx context.Context) ([]Budget, error) { return w.budgetsFor(ctx, st.mem, sp.Name, agentName) },
+		budgetNotice: keyedWarn(w.opts.Hooks, key)}
+	return conv, nil
 }
 
 // memoryPathFor resolves memory.path for a space. A relative path is taken

@@ -84,6 +84,10 @@ type Manager interface {
 	SetSpaceRoute(ctx context.Context, space, size, model, agent string) (string, error)
 	// SetSpaceModel sets the default model of a space's agents; empty clears it.
 	SetSpaceModel(ctx context.Context, space, model string) (string, error)
+	// SetSpaceBudget sets the budget of all agents of a space; 0 clears it.
+	SetSpaceBudget(space string, usd float64) error
+	// SetAgentBudget sets the budget of an agent; 0 clears it.
+	SetAgentBudget(agent string, usd float64) error
 	// AgentTools lists the tools of an agent.
 	AgentTools(name string) ([]string, error)
 	// EditAgentTools adds and removes tools of an agent. The managed agents keep
@@ -116,6 +120,8 @@ func All(m Manager, home string) []tool.Tool {
 		NewSetAgentModel(m),
 		NewSetSpaceRoute(m),
 		NewSetSpaceModel(m),
+		NewSetSpaceBudget(m),
+		NewSetAgentBudget(m),
 		NewGrantTool(m),
 		NewRevokeTool(m),
 		NewSetDefaultModel(m),

@@ -112,6 +112,8 @@ Per space, `<space>/.groot/`, at the paths set by `memory.path` and `audit.path`
   - `memories`: long-term entries (`kind`, `scope`, `agent`, `text`).
   - `memories_fts`: FTS5 index over `memories.text`, kept in sync by triggers.
   - `tasks`, `task_evidence`: ODD flow tasks and their evidence.
+  - The spend ledger is `sessions.cost_usd`, written after every model answer;
+    budgets sum it (`memory.SpendUSD`, `SpendByAgent`; checks in `internal/workspace/budget.go`).
 - `audit.jsonl`: one JSON line per tool call.
 
 Relative `memory.path` and `audit.path` values resolve against the space

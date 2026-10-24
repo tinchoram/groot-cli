@@ -58,7 +58,7 @@ func (w *Workspace) resume(ctx context.Context, ag *agent.Agent, store memory.St
 	if err != nil {
 		return nil, err
 	}
-	ag.Resume(sess.ID, restoreHistory(msgs, w.opts.Config.Compaction), sess.Turns)
+	ag.Resume(sess.ID, restoreHistory(msgs, w.opts.Config.Compaction), sess.Turns, sess.CostUSD)
 	last := sess.EndedAt
 	if last.IsZero() {
 		last = sess.StartedAt
@@ -125,8 +125,10 @@ func (c *Conversation) Resumed() (Resumed, bool) {
 // finishes the old session: it writes the summary, records the end and marks the
 // session cleared. The caller runs it off the UI loop.
 func (c *Conversation) Clear() func(context.Context) error {
+	// The session's own spend, not the provider's total: the provider keeps
+	// counting across the sessions of this conversation.
+	cost := c.Agent.SessionCost()
 	id, transcript, n := c.Agent.Detach()
-	cost := c.CostUSD()
 	c.resumed = nil
 	return func(ctx context.Context) error {
 		if id == "" {

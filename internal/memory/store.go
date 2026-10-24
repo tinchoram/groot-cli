@@ -58,6 +58,7 @@ type Session struct {
 	Cleared  bool      // the user cleared it with /clear; it is never resumed
 	Messages int       // stored messages
 	Turns    int       // highest turn number stored
+	CostUSD  float64   // spend stored for the session so far
 }
 
 // Entry is one long-term memory.
@@ -75,6 +76,13 @@ type Entry struct {
 type Store interface {
 	StartSession(ctx context.Context, s Session) error
 	EndSession(ctx context.Context, id string, costUSD float64) error
+	// SetSessionCost stores the spend of a session so far. The agent calls it
+	// after every model answer, so a crash loses no spend.
+	SetSessionCost(ctx context.Context, id string, costUSD float64) error
+	// SpendUSD is the total spend of agent in this store, over all its sessions.
+	SpendUSD(ctx context.Context, agent string) (float64, error)
+	// SpendByAgent is the total spend of each agent in this store.
+	SpendByAgent(ctx context.Context) (map[string]float64, error)
 	AppendMessage(ctx context.Context, sessionID string, turn int, m api.Message, u api.Usage) error
 	Remember(ctx context.Context, e Entry) error
 	// Recall searches the entries visible to agent (see Visible).
@@ -99,6 +107,12 @@ type NoMemory struct{}
 func (NoMemory) StartSession(context.Context, Session) error { return nil }
 
 func (NoMemory) EndSession(context.Context, string, float64) error { return nil }
+
+func (NoMemory) SetSessionCost(context.Context, string, float64) error { return nil }
+
+func (NoMemory) SpendUSD(context.Context, string) (float64, error) { return 0, nil }
+
+func (NoMemory) SpendByAgent(context.Context) (map[string]float64, error) { return nil, nil }
 
 func (NoMemory) AppendMessage(context.Context, string, int, api.Message, api.Usage) error {
 	return nil

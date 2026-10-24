@@ -25,6 +25,9 @@ type Space struct {
 	// Model is the default model of agents in this space that set none.
 	Model string    `yaml:"model,omitempty"`
 	Flow  SpaceFlow `yaml:"flow,omitempty"`
+	// BudgetUSD caps the cumulative spend of all agents in this space. Zero
+	// means no budget.
+	BudgetUSD float64 `yaml:"budget_usd,omitempty"`
 }
 
 // SpaceFlow overrides the ODD flow settings of a space.
@@ -194,6 +197,16 @@ func (s *Store) SetModel(spaceName, model string) error {
 		return fmt.Errorf("no space named %q", spaceName)
 	}
 	s.data.Spaces[i].Model = model
+	return s.save()
+}
+
+// SetBudget sets the spend budget of a space. Zero clears it.
+func (s *Store) SetBudget(spaceName string, usd float64) error {
+	i := s.index(spaceName)
+	if i < 0 {
+		return fmt.Errorf("no space named %q", spaceName)
+	}
+	s.data.Spaces[i].BudgetUSD = usd
 	return s.save()
 }
 

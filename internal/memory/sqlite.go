@@ -120,6 +120,43 @@ func (s *SQLite) EndSession(ctx context.Context, id string, costUSD float64) err
 	return err
 }
 
+// SetSessionCost stores the spend of a session so far.
+func (s *SQLite) SetSessionCost(ctx context.Context, id string, costUSD float64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET cost_usd = ? WHERE id = ?`, costUSD, id)
+	return err
+}
+
+// SpendUSD sums the stored cost of every session of agent.
+func (s *SQLite) SpendUSD(ctx context.Context, agent string) (float64, error) {
+	var total float64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(cost_usd), 0) FROM sessions WHERE agent = ?`, agent).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("spend of %s: %w", agent, err)
+	}
+	return total, nil
+}
+
+// SpendByAgent sums the stored cost of the sessions of each agent.
+func (s *SQLite) SpendByAgent(ctx context.Context) (map[string]float64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT agent, COALESCE(SUM(cost_usd), 0) FROM sessions GROUP BY agent`)
+	if err != nil {
+		return nil, fmt.Errorf("spend by agent: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]float64{}
+	for rows.Next() {
+		var agent string
+		var total float64
+		if err := rows.Scan(&agent, &total); err != nil {
+			return nil, fmt.Errorf("scan spend: %w", err)
+		}
+		out[agent] = total
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLite) AppendMessage(ctx context.Context, sessionID string, turn int, m api.Message, u api.Usage) error {
 	raw, err := json.Marshal(m)
 	if err != nil {

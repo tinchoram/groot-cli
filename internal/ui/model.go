@@ -70,6 +70,11 @@ type Workspace interface {
 	EditAgentTools(name string, add, remove []string) error
 	Close(ctx context.Context) error
 	CloseFast() error
+	// Spend reads the spend of every space and of the agents of the active one.
+	Spend(ctx context.Context) (workspace.SpendView, error)
+	// SetSpaceBudget and SetAgentBudget set a budget in dollars; 0 clears it.
+	SetSpaceBudget(space string, usd float64) error
+	SetAgentBudget(agent string, usd float64) error
 }
 
 // Options wires a Model.
@@ -191,8 +196,9 @@ type Model struct {
 	closing       bool               // the session is closing: summaries are running
 	closeCancel   context.CancelFunc // skips the summaries still running
 	unread        map[string]int
-	ticking       bool      // the spinner tick chain runs
-	lastPoll      time.Time // when the badges were last re-read     // unread counts per "space/agent", for the sidebar badges
+	spend         workspace.SpendView // spend and budgets behind the sidebar badges
+	ticking       bool                // the spinner tick chain runs
+	lastPoll      time.Time           // when the badges were last re-read     // unread counts per "space/agent", for the sidebar badges
 
 	newTerm   func() term.Terminal
 	tm        term.Terminal // the shell, nil until ctrl-t first opens it
@@ -660,6 +666,8 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		m.runModelCommand(cmd.Arg)
 	case "models":
 		m.runModelsCommand()
+	case "budget":
+		m.runBudgetCommand(cmd.Arg)
 	case "compact":
 		before := m.session.MessageCount()
 		m.busy = true

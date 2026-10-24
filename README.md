@@ -279,6 +279,7 @@ and backslashes escaped).
 /space assign <agent>            add a catalog agent to the active space
 /space unassign <agent>          remove an agent from the active space
 /space routes [name]             show the mode, default model and routes of a space, with where each value comes from
+/budget [space|agent ...]        show or set spend budgets (see Budgets)
 /agent list                      list the catalog (✓ = assigned to the active space)
 /agent new <name> [description]  create agents/<name>.md with a starter prompt
 /agent import <path-or-url> [--force]  import an agent file (see below)
@@ -689,7 +690,7 @@ Work mode decides by tool:
 | `write_file` inside the space | `write_file` outside the space |
 | `bash`, unless it matches `work.always_ask` | `bash` matching `work.always_ask` (defaults: `rm -rf` outside the space, `sudo`, `git push --force`, `git reset --hard`, `git clean`, `kubectl apply/delete/patch/edit/scale/rollout`, `docker rm/rmi/system prune`, `terraform apply/destroy`, `curl`/`wget` writing a file) |
 | `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent` |
-| `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_work_mode` |
+| `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_budget`, `set_agent_budget`, `set_work_mode` |
 | `task_classify`, `task_open`, `task_advance`, `task_status` | `set_work_mode` |
 
 Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.
@@ -710,6 +711,46 @@ inside the space and bash outside `work.always_ask`. Admin tools never get `a`.
 `/allow` lists the grants of the conversation and `/allow clear` drops them. Calls
 covered by a grant print as `[auto]`. The sidebar marks agents in work mode with `⚙`, and a waiting approval
 with a tan `?`.
+
+## Budgets
+
+A budget caps spend in dollars. Two budgets apply, and both are checked before
+each turn:
+
+- **Agent budget**: `budget_usd` in the agent file's frontmatter. It counts that
+  agent's spend in each space.
+- **Space budget**: `budget_usd` in the space's entry in `spaces.yaml`. It counts
+  the spend of all agents in that space.
+
+```yaml
+# spaces.yaml, under the space
+- name: payments
+  budget_usd: 10
+```
+
+Zero or no budget means unlimited. Spend is the estimate from the price table
+(`internal/provider/pricing.go`); a model without a price adds no spend.
+
+- The spend of each session is stored in the space's `groot.db` after every model
+  answer, so a restart or a crash keeps it.
+- The sidebar shows the spend after each space and agent, for example `$0.90/$2.00`.
+  It turns amber at 80% of the budget and red at the budget.
+- When a budget is spent, the turn is refused with an error line and the model is
+  not called. The same check runs before each model call inside a turn, so a turn
+  stops between tool rounds.
+- When the next turn may pass a limit, groot warns once in the transcript and runs
+  the turn.
+
+```
+/budget                      spend and budgets of the active space and its agents
+/budget space <usd>          budget of the active space (0 clears it)
+/budget agent <name> <usd>   budget of an agent (0 clears it)
+```
+
+The admin agent sets budgets with `set_space_budget {space, usd}` and
+`set_agent_budget {agent, usd}`. Work mode still asks before them.
+
+There is no global default yet: a `budget` key in `groot.yaml` is not read.
 
 ## Keys and exit
 

@@ -51,6 +51,14 @@ type Conversation struct {
 	startModel string
 	prevModel  string
 	revertWarn func(string)
+	// budgets reads the budgets of this agent and space with their spend.
+	// Nil means no budget checks. budgetNotice gets the one-time warning that
+	// the next turn may pass a limit; budgetWarned records that it was given.
+	budgets      func(ctx context.Context) ([]Budget, error)
+	budgetNotice func(string)
+	budgetWarned bool
+	// lastTurnUSD is what the last turn cost; it estimates the next one.
+	lastTurnUSD float64
 }
 
 // Model returns the model used for the next call.
@@ -69,6 +77,9 @@ func (c *Conversation) Send(ctx context.Context, prompt string) (string, error) 
 
 // send runs one turn. The caller holds the busy flag.
 func (c *Conversation) send(ctx context.Context, prompt string) (string, error) {
+	if err := c.checkBudget(ctx, c.lastTurnUSD); err != nil {
+		return "", err
+	}
 	if c.ctl != nil {
 		c.ctl.StartTurn()
 		c.Agent.System = withBlock(c.ctl.ContextBlock(ctx), c.baseSystem)
@@ -77,11 +88,13 @@ func (c *Conversation) send(ctx context.Context, prompt string) (string, error) 
 	if prompt == "" {
 		return "", nil
 	}
+	before := c.Agent.SessionCost()
 	resp, err := c.Agent.Send(ctx, prompt)
 	if err != nil && provider.IsModelNotFound(err) && c.revertModel() {
 		// The failed attempt left the prompt in the history; the retry answers it.
-		return c.Agent.Send(ctx, prompt)
+		resp, err = c.Agent.Send(ctx, prompt)
 	}
+	c.lastTurnUSD = c.Agent.SessionCost() - before
 	return resp, err
 }
 

@@ -55,6 +55,9 @@ type Agent struct {
 	OnToolCall func(name, input string)
 	// OnWarning receives non-fatal persistence or compaction problems. May be nil.
 	OnWarning func(msg string)
+	// Limit is checked before each model call of a turn. A non-nil error ends
+	// the turn without calling the model. May be nil.
+	Limit func(ctx context.Context) error
 
 	mu        sync.Mutex
 	history   []api.Message
@@ -62,6 +65,10 @@ type Agent struct {
 	turn      int
 	// synthetic are results added by Resume that the next Send stores.
 	synthetic []api.Message
+	// costBase makes the provider's running total start at the session's own
+	// spend: the total at its start, negated, or the stored spend of a resumed
+	// session minus the total then. See SessionCost.
+	costBase float64
 }
 
 // SessionID returns the current session id, or "" before Start or the first Send.
@@ -95,6 +102,11 @@ func (a *Agent) Send(ctx context.Context, prompt string) (string, error) {
 	defs := a.registry().Definitions()
 	for step := 0; step < a.maxTurns(); step++ {
 		a.autoCompact(ctx)
+		if a.Limit != nil {
+			if err := a.Limit(ctx); err != nil {
+				return "", err
+			}
+		}
 
 		turn, msgs := a.nextTurn()
 		resp, err := a.Provider.Send(ctx, provider.Request{
@@ -148,10 +160,12 @@ func (a *Agent) Reset() {
 
 // Resume continues an existing session: the agent keeps its id, starts from the
 // given history and continues numbering turns after turns. No session is opened.
-func (a *Agent) Resume(id string, history []api.Message, turns int) {
+// costUSD is the spend already stored for the session.
+func (a *Agent) Resume(id string, history []api.Message, turns int, costUSD float64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.sessionID = id
+	a.costBase = costUSD - a.CostUSD()
 	// A dangling tool_use in the stored history gets its cancelled result now;
 	// the next Send stores it, ahead of the new prompt.
 	repaired, inserted, _ := api.Repair(history)
@@ -172,7 +186,7 @@ func (a *Agent) Detach() (id, transcript string, messages int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	id, transcript, messages = a.sessionID, api.RenderTranscript(a.history), len(a.history)
-	a.sessionID, a.history, a.turn = "", nil, 0
+	a.sessionID, a.history, a.turn, a.costBase = "", nil, 0, 0
 	return id, transcript, messages
 }
 
@@ -192,13 +206,34 @@ func (a *Agent) CostUSD() float64 {
 	return 0
 }
 
+// SessionCost returns the spend of the current session: what it had already
+// cost when it was resumed, plus what the provider has spent since.
+func (a *Agent) SessionCost() float64 {
+	a.mu.Lock()
+	base := a.costBase
+	a.mu.Unlock()
+	return base + a.CostUSD()
+}
+
 // End marks the session finished in memory, recording its cost.
 func (a *Agent) End(ctx context.Context) error {
 	id := a.SessionID()
 	if id == "" {
 		return nil
 	}
-	return a.store().EndSession(ctx, id, a.CostUSD())
+	return a.store().EndSession(ctx, id, a.SessionCost())
+}
+
+// persistCost stores the spend of the current session. It runs after every
+// model answer, so a crash loses at most the answer in flight.
+func (a *Agent) persistCost(ctx context.Context) {
+	a.mu.Lock()
+	id := a.sessionID
+	a.mu.Unlock()
+	if id == "" {
+		return
+	}
+	a.warn(a.store().SetSessionCost(context.WithoutCancel(ctx), id, a.SessionCost()))
 }
 
 func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
@@ -258,6 +293,7 @@ func (a *Agent) ensureSession(ctx context.Context) {
 		return
 	}
 	a.sessionID = newSessionID()
+	a.costBase = -a.CostUSD()
 	id := a.sessionID
 	a.mu.Unlock()
 
@@ -340,6 +376,7 @@ func (a *Agent) appendWithTurn(ctx context.Context, turn int, m api.Message, u a
 	id := a.sessionID
 	a.mu.Unlock()
 	a.warn(a.store().AppendMessage(ctx, id, turn, m, u))
+	a.persistCost(ctx)
 }
 
 // nextTurn advances the turn counter and returns it with a copy of the history,

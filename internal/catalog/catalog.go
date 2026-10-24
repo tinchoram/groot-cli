@@ -26,6 +26,9 @@ type AgentDef struct {
 	Model    string
 	Tools    []string
 	MaxTurns int
+	// BudgetUSD caps the cumulative spend of this agent in each space. Zero
+	// means no budget.
+	BudgetUSD float64
 	// Author and Collection say who published the definition and which
 	// collection it belongs to. Both are optional and kept on save.
 	Author     string
@@ -38,7 +41,7 @@ type AgentDef struct {
 var KnownTools = []string{
 	"read_file", "write_file", "bash", "kubectl", "remember", "recall",
 	"list_spaces", "create_space", "assign_agent", "unassign_agent", "list_agents", "create_agent",
-	"import_agent", "list_library", "install_agent", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "feedback_report", "feedback_list", "feedback_update", "fetch_url", "list_models", "set_agent_model", "set_space_route", "set_space_model", "grant_tool", "revoke_tool", "set_default_model",
+	"import_agent", "list_library", "install_agent", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "feedback_report", "feedback_list", "feedback_update", "fetch_url", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_budget", "set_agent_budget", "grant_tool", "revoke_tool", "set_default_model",
 }
 
 // DefaultTools is the tool set given to agents created with /agent new.
@@ -85,6 +88,9 @@ func Validate(d AgentDef) error {
 	if d.MaxTurns < 0 {
 		return fmt.Errorf("agent %q: max_turns cannot be negative", d.Name)
 	}
+	if d.BudgetUSD < 0 {
+		return fmt.Errorf("agent %q: budget cannot be negative", d.Name)
+	}
 	return nil
 }
 
@@ -95,6 +101,7 @@ type frontmatter struct {
 	Model       string    `yaml:"model"`
 	Tools       yaml.Node `yaml:"tools"`
 	MaxTurns    int       `yaml:"max_turns"`
+	BudgetUSD   float64   `yaml:"budget_usd"`
 	Author      string    `yaml:"author"`
 	Collection  string    `yaml:"collection"`
 }
@@ -140,6 +147,7 @@ func ParseAgentFile(data []byte) (AgentDef, error) {
 		Model:       resolveModel(fm.Model),
 		Tools:       tools,
 		MaxTurns:    fm.MaxTurns,
+		BudgetUSD:   fm.BudgetUSD,
 		Author:      strings.TrimSpace(fm.Author),
 		Collection:  strings.TrimSpace(fm.Collection),
 		Prompt:      strings.TrimSpace(body),
@@ -204,6 +212,7 @@ type renderFrontmatter struct {
 	Model       string   `yaml:"model,omitempty"`
 	Tools       []string `yaml:"tools"`
 	MaxTurns    int      `yaml:"max_turns,omitempty"`
+	BudgetUSD   float64  `yaml:"budget_usd,omitempty"`
 	Author      string   `yaml:"author,omitempty"`
 	Collection  string   `yaml:"collection,omitempty"`
 }
@@ -216,6 +225,7 @@ func RenderAgentFile(d AgentDef) ([]byte, error) {
 		Model:       d.Model,
 		Tools:       d.Tools,
 		MaxTurns:    d.MaxTurns,
+		BudgetUSD:   d.BudgetUSD,
 		Author:      d.Author,
 		Collection:  d.Collection,
 	})

@@ -66,13 +66,13 @@ func (s *SQLite) LatestSession(ctx context.Context, agent string) (Session, bool
 		messages, turns int
 	)
 	err := s.db.QueryRowContext(ctx, `
-		SELECT ss.id, ss.agent, ss.model, ss.started_at, ss.ended_at, ss.cleared_at,
+		SELECT ss.id, ss.agent, ss.model, ss.started_at, ss.ended_at, ss.cleared_at, ss.cost_usd,
 		       (SELECT COUNT(*) FROM messages m WHERE m.session_id = ss.id),
 		       (SELECT COALESCE(MAX(m.turn), 0) FROM messages m WHERE m.session_id = ss.id)
 		FROM sessions ss
 		WHERE ss.agent = ?
 		ORDER BY ss.started_at DESC, ss.rowid DESC
-		LIMIT 1`, agent).Scan(&sess.ID, &sess.Agent, &sess.Model, &sess.StartedAt, &ended, &cleared, &messages, &turns)
+		LIMIT 1`, agent).Scan(&sess.ID, &sess.Agent, &sess.Model, &sess.StartedAt, &ended, &cleared, &sess.CostUSD, &messages, &turns)
 	if err == sql.ErrNoRows {
 		return Session{}, false, nil
 	}

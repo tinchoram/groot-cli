@@ -133,8 +133,13 @@ type fakeWorkspace struct {
 	savedModels  map[string]string
 	agentTools   map[string][]string
 	toolEdits    []string
-	inbox        []inbox.Message
-	handSent     []string
+	// spend is what Spend answers; budgetSet records SetSpaceBudget and
+	// SetAgentBudget as "space:<name>" and "agent:<name>".
+	spend     workspace.SpendView
+	budgetSet map[string]float64
+	budgetErr error
+	inbox     []inbox.Message
+	handSent  []string
 	// flow is what SpaceFlow reports; flowErr makes it fail.
 	flow    workspace.FlowView
 	flowErr error

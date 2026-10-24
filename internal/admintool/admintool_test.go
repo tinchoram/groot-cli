@@ -93,6 +93,8 @@ func TestToolsAreNamedAndRiskClassed(t *testing.T) {
 		"set_default_model": tool.RiskWrite,
 		"set_space_route":   tool.RiskWrite,
 		"set_space_model":   tool.RiskWrite,
+		"set_space_budget":  tool.RiskWrite,
+		"set_agent_budget":  tool.RiskWrite,
 	}
 	for _, tl := range All(m, "/home/sre") {
 		risk, ok := want[tl.Definition().Name]
