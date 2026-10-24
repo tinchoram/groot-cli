@@ -91,9 +91,22 @@ built in one day of live testing, so they are grouped by what shipped.
   strategy `none` groot warns once at 90%.
 - Overflow recovery: a "prompt is too long" refusal compacts once and retries
   once, with a transcript line.
+- `/clear` resets the context gauge: the header and the sidebar show no context
+  for the agent until its next answer.
 - `models.context_window` in `groot.yaml` overrides the window per model or
   prefix; `/context`, `/context all`, `/context window <model> <tokens>`.
 - Admin tools `get_context` (read-only) and `set_context_window`, granted to `groot`.
+
+### Tools
+- `list_dir {path?, recursive?, max_depth?, include_hidden?}` lists a directory:
+  `d <path>` and `f <path> <bytes>`, directories first. One level by default; with
+  `recursive`, `max_depth` defaults to 3 and is capped at 8. Read-only, confined to
+  the space root, never follows symlinked directories out of it.
+- `glob {pattern, path?, max_results?}` finds files with `**` (any number of
+  directories) and `*` (within one name). Results are relative to the space root,
+  at most 500. Dotfiles only when the pattern starts with a dot.
+- Both skip `.git`, `node_modules`, `vendor`, `.groot`, `target`, `dist` and
+  `build`, have a 10-second budget and are in the base set that `/agent upgrade` adds.
 
 ### Cost visibility
 - `ui.show_cost` (default false) controls the cost in the status line and the

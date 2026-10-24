@@ -10,6 +10,7 @@ func ManagedTools() []string {
 		"send_message", "read_inbox",
 		"task_classify", "task_open", "task_advance", "task_status",
 		"recall", "remember",
+		"list_dir", "glob",
 	}
 }
 

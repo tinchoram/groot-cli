@@ -12,7 +12,7 @@ under `internal/`:
 |---|---|
 | `agent` | Conversation loop. Knows only the ports: calls the provider, runs tools through the gate, persists messages, writes the audit log. |
 | `provider` | Model port (`provider.go`) and adapters: `anthropic.go`, `mock.go` for tests. Also pricing and the model list. |
-| `tool` | Tool port and registry (`tool.go`), builtin tools: `files.go`, `exec.go`, `fetch.go`, `memory_tools.go`, `flow_tools.go`, `messaging_tools.go`, `feedback_tools.go`, `readonly.go`. |
+| `tool` | Tool port and registry (`tool.go`), builtin tools: `files.go`, `exec.go`, `fetch.go`, `memory_tools.go`, `flow_tools.go`, `messaging_tools.go`, `feedback_tools.go`, `readonly.go`, `listdir.go` and `glob.go` (read-only, confined to the space root). |
 | `gate` | Permission decisions: `Interactive`, `ReadOnly`, `AutoApprove` (`gate.go`), work mode (`work.go`), session grants (`grants.go`). |
 | `flowgate` | Puts the ODD flow rules in front of the user's gate (`gate.go`). |
 | `flow` | ODD task engine: sizes, phases, evidence, transitions (`flow.go`) and the per-conversation `Controller`. |

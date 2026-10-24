@@ -111,7 +111,12 @@ func (w *Workspace) contextRows(ctx context.Context, spaces []space.Space, want 
 				return nil, fmt.Errorf("space %s: %w", sp.Name, err)
 			}
 			if ok {
-				row.Model, row.Tokens = sess.Model, sess.ContextTokens
+				row.Model = sess.Model
+				// A cleared session keeps the size of the conversation that
+				// /clear dropped: it is no context of the agent any more.
+				if !sess.Cleared {
+					row.Tokens = sess.ContextTokens
+				}
 			}
 			if live, ok := w.liveConversation(sp.Name, agent); ok {
 				row.Model, row.Tokens = live.Model(), live.ContextTokens()

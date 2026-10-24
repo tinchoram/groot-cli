@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -54,9 +55,14 @@ func TestSplitToolsAcceptsCommasAndSpaces(t *testing.T) {
 }
 
 func TestBaseSetIsTheManagedToolsWithoutFetch(t *testing.T) {
-	want := []string{"send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "recall", "remember"}
+	want := []string{"send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "recall", "remember", "list_dir", "glob"}
 	if got := ManagedTools(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("base set = %v", got)
+	}
+	for _, name := range []string{"list_dir", "glob"} {
+		if !slices.Contains(KnownTools, name) {
+			t.Fatalf("%s must be a known tool", name)
+		}
 	}
 	for _, name := range DefaultTools() {
 		if name == "fetch_url" {

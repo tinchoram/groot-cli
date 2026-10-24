@@ -717,6 +717,9 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		done := m.session.Clear()
 		m.lines = nil
 		m.partial = ""
+		// The gauge of the sidebar was read before the clear: re-read it so
+		// the badge of this agent drops with the header.
+		m.refreshContext()
 		m.refresh()
 		// Ending the old session writes its summary, which calls the model,
 		// so it runs off the UI loop.

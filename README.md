@@ -146,6 +146,12 @@ Never put API keys in `groot.yaml`. The key comes from `ANTHROPIC_API_KEY`, expo
   `interactive` policy still asks for every such command, and `readonly` refuses
   them. The classification is conservative: when in doubt, it asks. File tools resolve symlinks and
   refuse anything that escapes.
+- **Listing and search are read-only and confined.** `list_dir` and `glob` only
+  read names, and they stay inside the space root like `read_file`: `..`,
+  absolute paths outside the root and symlinks that leave it are refused, and
+  symlinked directories are not followed. `.git`, `node_modules`, `vendor`,
+  `.groot`, `target`, `dist` and `build` are always skipped, and dotfiles only
+  when asked. Each call has a 10-second budget and returns at most 500 entries.
 - **kubectl is read-only.** Allowed verbs: `get`, `describe`, `logs`, `top`,
   `version`, `api-resources`, `explain`. Credential and cluster overrides
   (`--kubeconfig`, `--token`, `--as`, `--server`, ...) are refused. With an
@@ -346,8 +352,8 @@ You are Groot, the administrator of this CLI.
 - Model aliases: `opus` is `claude-opus-5-5`, `sonnet` is `claude-sonnet-5-5`,
   `haiku` is `claude-haiku-5-5`. `inherit` or an empty value uses the default
   model from `groot.yaml`.
-- Tools must be groot tool names: `read_file`, `write_file`, `bash`, `kubectl`,
-  `recall`, `remember`, and the admin tools. Files that predate this format
+- Tools must be groot tool names: `read_file`, `list_dir`, `glob`, `write_file`,
+  `bash`, `kubectl`, `recall`, `remember`, and the admin tools. Files that predate this format
   (`agents/<name>/agent.yaml` and `prompt.md`) are converted on the next start,
   and their folder is removed once the new file is written and read back.
 
@@ -355,7 +361,7 @@ You are Groot, the administrator of this CLI.
 
 Agents get tools explicitly, one at a time. New agents get the default set.
 `/agent upgrade` adds only the base set (`send_message`, `read_inbox`, the task
-tools, `recall` and `remember`). Every other tool, including `fetch_url`, is
+tools, `recall`, `remember`, and the read-only `list_dir` and `glob`). Every other tool, including `fetch_url`, is
 granted on purpose:
 
 - `/agent tools <name> add <tool>[,<tool>…]` adds tools, and

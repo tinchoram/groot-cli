@@ -242,6 +242,10 @@ func (w *Workspace) newTool(name, root string, mem memory.Store, msg tool.Messen
 		return tool.NewReadInbox(msg), nil
 	case "read_file":
 		return tool.NewReadFile(root), nil
+	case "list_dir":
+		return tool.NewListDir(root), nil
+	case "glob":
+		return tool.NewGlob(root), nil
 	case "write_file":
 		if files == nil {
 			return tool.NewWriteFile(root), nil

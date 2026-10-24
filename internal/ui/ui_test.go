@@ -41,6 +41,8 @@ type fakeSession struct {
 	// ctxTokens and window answer ContextTokens and ContextWindow.
 	ctxTokens int64
 	window    int
+	// onClear runs inside Clear, to mirror what the workspace changes on /clear.
+	onClear func()
 }
 
 func (f *fakeSession) Task() (flow.Task, bool) {
@@ -106,6 +108,9 @@ func (f *fakeSession) TaskReject(_ context.Context, reason string) (string, erro
 
 func (f *fakeSession) Clear() func(context.Context) error {
 	f.cleared = true
+	if f.onClear != nil {
+		f.onClear()
+	}
 	return func(context.Context) error { return nil }
 }
 func (f *fakeSession) SessionID() string { return "s-test" }

@@ -179,6 +179,16 @@ func (a *Agent) Reset() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.history = nil
+	a.resetContextLocked()
+}
+
+// resetContextLocked forgets the context of the history just dropped: the
+// gauge reads zero until the next answer, and the one-time flags re-arm.
+// The caller holds a.mu.
+func (a *Agent) resetContextLocked() {
+	a.contextTokens = 0
+	a.contextCompacted = false
+	a.pressureWarned = false
 }
 
 // Resume continues an existing session: the agent keeps its id, starts from the
@@ -210,6 +220,7 @@ func (a *Agent) Detach() (id, transcript string, messages int) {
 	defer a.mu.Unlock()
 	id, transcript, messages = a.sessionID, api.RenderTranscript(a.history), len(a.history)
 	a.sessionID, a.history, a.turn, a.costBase = "", nil, 0, 0
+	a.resetContextLocked()
 	return id, transcript, messages
 }
 
