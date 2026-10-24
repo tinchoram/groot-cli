@@ -38,7 +38,7 @@ type AgentDef struct {
 var KnownTools = []string{
 	"read_file", "write_file", "bash", "kubectl", "remember", "recall",
 	"list_spaces", "create_space", "assign_agent", "unassign_agent", "list_agents", "create_agent",
-	"import_agent", "list_library", "install_agent", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "feedback_report", "feedback_list", "feedback_update", "fetch_url", "list_models", "set_agent_model", "grant_tool", "revoke_tool", "set_default_model",
+	"import_agent", "list_library", "install_agent", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "feedback_report", "feedback_list", "feedback_update", "fetch_url", "list_models", "set_agent_model", "set_space_route", "set_space_model", "grant_tool", "revoke_tool", "set_default_model",
 }
 
 // DefaultTools is the tool set given to agents created with /agent new.

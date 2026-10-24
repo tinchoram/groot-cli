@@ -228,7 +228,7 @@ func (w *Workspace) applyAgentModel(agent, model string) {
 		}
 		target := model
 		if target == "" {
-			target = w.defaultModelLocked()
+			target = w.inheritedModelLocked(c.space)
 		}
 		_ = c.SetModel(target)
 	}

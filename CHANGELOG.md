@@ -3,6 +3,21 @@
 All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
+## 0.4.0-dev (unreleased)
+
+### Spaces, routes and models
+- Routes and models per space. A space in `spaces.yaml` can set `flow.mode`,
+  `flow.routes.{small,medium,large}` (`model`, `agent`) and a default `model`.
+  Each field falls back to `groot.yaml`, then to the built-in default.
+- Model of a conversation: the agent's own model, then the space's, then
+  `provider.model`.
+- `set_space_route` and `set_space_model` admin tools, granted to `groot` and
+  listed with the other admin changes that work mode still asks about.
+- `/space routes [name]` shows the effective mode, default model and routes of a
+  space, and where each value comes from (`space`, `global` or `default`).
+- The override is read when a conversation opens. Running conversations keep the
+  settings they started with; restart groot to apply a change to them.
+
 ## 0.3.0 — 2026-10-24
 
 Coordination, control and day-to-day ergonomics.

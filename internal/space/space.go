@@ -15,12 +15,56 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Space is one working context.
+// Space is one working context. Model and Flow are optional overrides of the
+// global configuration; an empty value means "use the global one".
 type Space struct {
 	Name      string    `yaml:"name"`
 	Path      string    `yaml:"path"`
 	Agents    []string  `yaml:"agents"`
 	CreatedAt time.Time `yaml:"created_at"`
+	// Model is the default model of agents in this space that set none.
+	Model string    `yaml:"model,omitempty"`
+	Flow  SpaceFlow `yaml:"flow,omitempty"`
+}
+
+// SpaceFlow overrides the ODD flow settings of a space.
+type SpaceFlow struct {
+	Mode   string      `yaml:"mode,omitempty"` // strict | advisory
+	Routes SpaceRoutes `yaml:"routes,omitempty"`
+}
+
+// SpaceRoutes overrides the route of each size.
+type SpaceRoutes struct {
+	Small  SpaceRoute `yaml:"small,omitempty"`
+	Medium SpaceRoute `yaml:"medium,omitempty"`
+	Large  SpaceRoute `yaml:"large,omitempty"`
+}
+
+// SpaceRoute is the model and agent of one size in a space.
+type SpaceRoute struct {
+	Model string `yaml:"model,omitempty"`
+	Agent string `yaml:"agent,omitempty"`
+}
+
+// Sizes are the task sizes that have a route, in order.
+var Sizes = []string{"small", "medium", "large"}
+
+// ValidSize reports whether s names a task size.
+func ValidSize(s string) bool {
+	return slices.Contains(Sizes, s)
+}
+
+// route returns the route of a size, or nil for an unknown size.
+func (r *SpaceRoutes) route(size string) *SpaceRoute {
+	switch size {
+	case "small":
+		return &r.Small
+	case "medium":
+		return &r.Medium
+	case "large":
+		return &r.Large
+	}
+	return nil
 }
 
 type file struct {
@@ -129,6 +173,42 @@ func (s *Store) Unassign(spaceName, agent string) error {
 		return fmt.Errorf("agent %q is not assigned to space %q", agent, spaceName)
 	}
 	s.data.Spaces[i].Agents = slices.DeleteFunc(s.data.Spaces[i].Agents, func(a string) bool { return a == agent })
+	return s.save()
+}
+
+// SetFlowMode sets the flow mode of a space. An empty mode clears it, so the
+// global mode applies again. The mode is validated where the flow is built.
+func (s *Store) SetFlowMode(spaceName, mode string) error {
+	i := s.index(spaceName)
+	if i < 0 {
+		return fmt.Errorf("no space named %q", spaceName)
+	}
+	s.data.Spaces[i].Flow.Mode = mode
+	return s.save()
+}
+
+// SetModel sets the space's default model. An empty model clears it.
+func (s *Store) SetModel(spaceName, model string) error {
+	i := s.index(spaceName)
+	if i < 0 {
+		return fmt.Errorf("no space named %q", spaceName)
+	}
+	s.data.Spaces[i].Model = model
+	return s.save()
+}
+
+// SetRoute sets the model and agent a size runs on in a space. An empty model
+// or agent clears that field, so the global value applies again.
+func (s *Store) SetRoute(spaceName, size, model, agent string) error {
+	i := s.index(spaceName)
+	if i < 0 {
+		return fmt.Errorf("no space named %q", spaceName)
+	}
+	route := s.data.Spaces[i].Flow.Routes.route(size)
+	if route == nil {
+		return fmt.Errorf("size %q is invalid (use small, medium or large)", size)
+	}
+	route.Model, route.Agent = model, agent
 	return s.save()
 }
 

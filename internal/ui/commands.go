@@ -48,6 +48,7 @@ var helpEntries = []helpEntry{
 	{"/space use <name>", "switch to a space and select its first agent"},
 	{"/space assign <agent>", "add a catalog agent to the active space"},
 	{"/space unassign <agent>", "remove an agent from the active space"},
+	{"/space routes [name]", "show the mode and routes of a space, and where each value comes from"},
 	{"/agent list", "list agents in the catalog"},
 	{"/agent new <name> [desc]", "create agents/<name>.md with a starter prompt"},
 	{"/agent show [name]", "show an agent's settings and prompt"},

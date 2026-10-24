@@ -4,7 +4,7 @@ Groot is a terminal agent for developers and platform engineering. It works with
 Kubernetes, logs, files and the shell. Every tool call passes a permission gate,
 memory lives in SQLite, and the model layer is a port with an Anthropic adapter.
 
-- Binary: `groot`. Module: `github.com/tinchoram/groot-cli`. Go 1.26. Version 0.3.0-dev.
+- Binary: `groot`. Module: `github.com/tinchoram/groot-cli`. Go 1.26. Version 0.4.0-dev.
 - Terminal UI with a green theme, built on Bubble Tea.
 
 ## Getting started
@@ -213,6 +213,31 @@ Since 0.2.0 groot works in **spaces**, and inside a space you talk to **agents**
 the space `root` at your home directory and the agent `groot`, and assigns
 `groot` to `root`. Existing files are never overwritten.
 
+A space can override two global settings in `spaces.yaml`. Both are optional,
+and a file without them works as before:
+
+- `model`: the default model of the space's agents that set no model of their own.
+- `flow`: `mode` (`strict` or `advisory`) and `routes` for `small`, `medium` and
+  `large`, each with `model` and `agent`. Each field falls back to the global
+  value in `groot.yaml`, then to the built-in default.
+
+```yaml
+spaces:
+  - name: payments
+    path: /work/payments
+    agents: [reviewer]
+    model: claude-sonnet-5-5
+    flow:
+      mode: advisory
+      routes:
+        large:
+          model: claude-opus-5-5
+```
+
+Groot's admin agent can set these with `set_space_route` and `set_space_model`,
+and `/space routes [name]` shows the effective values and where each one comes
+from.
+
 ### Layout and keys
 
 The sidebar on the left lists **SPACES** (active marked ▸) and **AGENTS**
@@ -253,6 +278,7 @@ and backslashes escaped).
 /space use <name>                switch to a space and select its first agent
 /space assign <agent>            add a catalog agent to the active space
 /space unassign <agent>          remove an agent from the active space
+/space routes [name]             show the mode, default model and routes of a space, with where each value comes from
 /agent list                      list the catalog (✓ = assigned to the active space)
 /agent new <name> [description]  create agents/<name>.md with a starter prompt
 /agent import <path-or-url> [--force]  import an agent file (see below)
@@ -557,6 +583,17 @@ Configuration (`flow` in `groot.yaml`):
   when it closes. `agent` is recorded on the task as a hint; nothing delegates to
   it automatically yet.
 
+Per space: `mode`, the routes and the default model can be overridden in a space's
+entry in `spaces.yaml` (see [Spaces and agents](#spaces-and-agents)). Each field is
+resolved on its own, in this order: the space, then `groot.yaml`, then the built-in
+default. The model of a conversation follows the same idea, but with the agent's
+own model first: agent `model`, then the space `model`, then `provider.model`.
+
+The override is read when a conversation is opened: the first time a space and agent
+pair is used in a process. Conversations already open keep the controller and model
+they started with, so restart groot to apply a change to a pair you have used. The
+route model still applies while a task is open and is restored when the task closes.
+
 What the rules leave alone: reads, the task tools, `send_message`, and the admin
 tools that change the catalog and the spaces (`create_space`, `create_agent`,
 `import_agent`, `install_agent` and the assign tools). A classification lasts until
@@ -652,7 +689,7 @@ Work mode decides by tool:
 | `write_file` inside the space | `write_file` outside the space |
 | `bash`, unless it matches `work.always_ask` | `bash` matching `work.always_ask` (defaults: `rm -rf` outside the space, `sudo`, `git push --force`, `git reset --hard`, `git clean`, `kubectl apply/delete/patch/edit/scale/rollout`, `docker rm/rmi/system prune`, `terraform apply/destroy`, `curl`/`wget` writing a file) |
 | `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent` |
-| `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_work_mode` |
+| `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_work_mode` |
 | `task_classify`, `task_open`, `task_advance`, `task_status` | `set_work_mode` |
 
 Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.

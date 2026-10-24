@@ -14,11 +14,14 @@ import (
 	"github.com/tinchoram/groot-cli/internal/tool"
 )
 
-// newFlow builds the ODD controller of one conversation. Its tasks live in the
-// space database. Opening a task switches the conversation's model to the
-// route's model, and the switch is undone when the task closes.
+// newFlow builds the ODD controller of one conversation from the flow of its
+// space, merged over the global settings (see ResolveFlow). Its tasks live in
+// the space database. Opening a task switches the conversation's model to the
+// route's model, and the switch is undone when the task closes. A running
+// conversation keeps the controller it was built with.
 func (w *Workspace) newFlow(ctx context.Context, sp space.Space, agentName string, tasks flow.Store, prov provider.Provider, onOpen, onDeliver func(flow.Task)) (*flow.Controller, error) {
-	mode, err := flow.ParseMode(w.opts.Config.Flow.Mode)
+	flowCfg := ResolveFlow(sp, w.opts.Config.Flow).FlowConfig()
+	mode, err := flow.ParseMode(flowCfg.Mode)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +30,7 @@ func (w *Workspace) newFlow(ctx context.Context, sp space.Space, agentName strin
 		Agent:     agentName,
 		Store:     tasks,
 		Mode:      mode,
-		Routes:    routesFrom(w.opts.Config.Flow),
+		Routes:    routesFrom(flowCfg),
 		OnOpen:    onOpen,
 		OnDeliver: onDeliver,
 		PlanExists: func(path string) bool {

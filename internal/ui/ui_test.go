@@ -135,6 +135,9 @@ type fakeWorkspace struct {
 	toolEdits    []string
 	inbox        []inbox.Message
 	handSent     []string
+	// flow is what SpaceFlow reports; flowErr makes it fail.
+	flow    workspace.FlowView
+	flowErr error
 }
 
 func newFakeWorkspace(chat *fakeSession) *fakeWorkspace {

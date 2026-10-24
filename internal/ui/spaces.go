@@ -158,7 +158,7 @@ func (m *Model) syncConversation() {
 // runSpaceCommand handles /space and its subcommands.
 func (m *Model) runSpaceCommand(arg string) {
 	fields := strings.Fields(arg)
-	usage := "usage: /space list | new <name> [path] | use <name> | assign <agent> | unassign <agent>"
+	usage := "usage: /space list | new <name> [path] | use <name> | assign <agent> | unassign <agent> | routes [name]"
 	if len(fields) == 0 {
 		m.append(styleError.Render(usage))
 		return
@@ -167,6 +167,24 @@ func (m *Model) runSpaceCommand(arg string) {
 	switch sub {
 	case "list":
 		m.append(spaceListBlock(m.ws.Spaces()))
+	case "routes":
+		name := ""
+		if len(rest) >= 1 {
+			name = rest[0]
+		} else {
+			active, ok := m.ws.ActiveSpace()
+			if !ok {
+				m.append(styleError.Render("no space selected: use /space use <name>"))
+				return
+			}
+			name = active.Name
+		}
+		view, err := m.ws.SpaceFlow(name)
+		if err != nil {
+			m.append(styleError.Render("error: " + err.Error()))
+			return
+		}
+		m.append(spaceRoutesBlock(view))
 	case "new":
 		if len(rest) < 1 {
 			m.append(styleError.Render("usage: /space new <name> [path]"))
@@ -379,6 +397,28 @@ func spaceListBlock(spaces []workspace.SpaceInfo) string {
 		fmt.Fprintf(&sb, "%s%-14s %s  %s\n", mark, sp.Name, styleDim.Render(sp.Path), styleDim.Render("("+agents+")"))
 	}
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+// spaceRoutesBlock renders the merged flow of a space. Each value shows the
+// layer it came from: space, global or default.
+func spaceRoutesBlock(v workspace.FlowView) string {
+	var sb strings.Builder
+	sb.WriteString(styleDim.Render("routes of space "+v.Space+":") + "\n")
+	fmt.Fprintf(&sb, "%-8s %s\n", "mode", originOf(v.Mode))
+	fmt.Fprintf(&sb, "%-8s model %s\n", "agents", originOf(v.Model))
+	for _, r := range v.Routes {
+		fmt.Fprintf(&sb, "%-8s model %s · agent %s\n", r.Size, originOf(r.Model), originOf(r.Agent))
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+// originOf shows a value with its origin, such as "claude-haiku-5-5 (space)".
+func originOf(s workspace.Setting) string {
+	value := s.Value
+	if value == "" {
+		value = "none"
+	}
+	return fmt.Sprintf("%s (%s)", value, s.From)
 }
 
 func agentListBlock(agents []workspace.AgentInfo) string {

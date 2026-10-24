@@ -308,10 +308,8 @@ func (w *Workspace) Agent(name string) (AgentInfo, error) {
 }
 
 func (w *Workspace) info(d catalog.AgentDef, assigned bool) AgentInfo {
-	model := d.Model
-	if model == "" {
-		model = w.opts.Config.Provider.Model
-	}
+	cur, _ := w.opts.Spaces.Current()
+	model := ResolveModel(d.Model, cur, w.opts.Config.Provider.Model).Value
 	return AgentInfo{
 		Name:        d.Name,
 		Description: d.Description,
@@ -457,10 +455,8 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	if !ok {
 		return nil, fmt.Errorf("agent %q is not in the catalog", agentName)
 	}
-	model := def.Model
-	if model == "" {
-		model = w.opts.Config.Provider.Model
-	}
+	// The model is the agent's own, else the space's, else the global one.
+	model := ResolveModel(def.Model, sp, w.opts.Config.Provider.Model).Value
 	prov := w.opts.NewProvider(model)
 	st, err := w.storesFor(sp.Path)
 	if err != nil {

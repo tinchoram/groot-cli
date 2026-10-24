@@ -79,6 +79,11 @@ type Manager interface {
 	// SetAgentModel saves the model of an agent. It returns a warning when the
 	// model could not be checked against the provider's list.
 	SetAgentModel(ctx context.Context, agent, model string) (string, error)
+	// SetSpaceRoute sets the model and agent of a task size in a space; empty
+	// values clear them. It returns a warning when the model could not be checked.
+	SetSpaceRoute(ctx context.Context, space, size, model, agent string) (string, error)
+	// SetSpaceModel sets the default model of a space's agents; empty clears it.
+	SetSpaceModel(ctx context.Context, space, model string) (string, error)
 	// AgentTools lists the tools of an agent.
 	AgentTools(name string) ([]string, error)
 	// EditAgentTools adds and removes tools of an agent. The managed agents keep
@@ -109,6 +114,8 @@ func All(m Manager, home string) []tool.Tool {
 		NewSetWorkMode(m),
 		NewListModels(m),
 		NewSetAgentModel(m),
+		NewSetSpaceRoute(m),
+		NewSetSpaceModel(m),
 		NewGrantTool(m),
 		NewRevokeTool(m),
 		NewSetDefaultModel(m),

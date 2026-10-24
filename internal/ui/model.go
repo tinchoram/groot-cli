@@ -64,6 +64,7 @@ type Workspace interface {
 	SaveAgentModel(agent, model string) error
 	DefaultModel() string
 	SetDefaultModel(ctx context.Context, model string, force bool) (string, error)
+	SpaceFlow(name string) (workspace.FlowView, error)
 	ConfigFile() string
 	AgentTools(name string) ([]string, error)
 	EditAgentTools(name string, add, remove []string) error
