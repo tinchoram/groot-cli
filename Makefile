@@ -1,6 +1,6 @@
 BINARY  := groot
 PKG     := ./cmd/groot
-VERSION ?= 0.4.0
+VERSION ?= 0.5.0-dev
 LDFLAGS := -X main.version=$(VERSION)
 
 .PHONY: all build test e2e lint vet fmt run clean
