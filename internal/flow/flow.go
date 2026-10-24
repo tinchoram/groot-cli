@@ -70,8 +70,12 @@ type Task struct {
 	Scope    string
 	DoneWhen string
 	PlanPath string
-	Evidence []Evidence
-	OpenedAt time.Time
+	// Delegation is set on the origin of a handover; Parent on the task that
+	// another agent opened to take a handed-over task.
+	Delegation Delegation
+	Parent     Parent
+	Evidence   []Evidence
+	OpenedAt   time.Time
 	// PhaseAt is when the current phase began. Entering implement starts a
 	// cycle; verify only accepts commands run since then.
 	PhaseAt   time.Time

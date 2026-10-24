@@ -34,6 +34,10 @@ type Space struct {
 type SpaceFlow struct {
 	Mode   string      `yaml:"mode,omitempty"` // strict | advisory
 	Routes SpaceRoutes `yaml:"routes,omitempty"`
+	// Delegation is auto, hint or off; Manager is the agent that tracks the
+	// handovers, or "none". Empty values use the global settings.
+	Delegation string `yaml:"delegation,omitempty"`
+	Manager    string `yaml:"manager,omitempty"`
 }
 
 // SpaceRoutes overrides the route of each size.
@@ -222,6 +226,19 @@ func (s *Store) SetRoute(spaceName, size, model, agent string) error {
 		return fmt.Errorf("size %q is invalid (use small, medium or large)", size)
 	}
 	route.Model, route.Agent = model, agent
+	return s.save()
+}
+
+// SetDelegation sets the delegation mode and the manager of a space. Empty
+// values clear them, so the global settings apply again. The values are
+// validated where the flow is built and by the workspace.
+func (s *Store) SetDelegation(spaceName, mode, manager string) error {
+	i := s.index(spaceName)
+	if i < 0 {
+		return fmt.Errorf("no space named %q", spaceName)
+	}
+	s.data.Spaces[i].Flow.Delegation = mode
+	s.data.Spaces[i].Flow.Manager = manager
 	return s.save()
 }
 

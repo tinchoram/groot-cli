@@ -80,6 +80,13 @@ type Options struct {
 	// Exempt names tools the rules never gate, such as admin tools that change
 	// the catalog and not the code.
 	Exempt []string
+	// Delegation is what a route that names another agent does (see
+	// DelegationMode). Manager is the tracking agent of the space; empty is none.
+	Delegation DelegationMode
+	Manager    string
+	// CanDelegate reports whether an agent can take a handover, which means it is
+	// assigned to the space. Nil means no agent can.
+	CanDelegate func(agent string) bool
 }
 
 // Controller enforces the flow for one conversation. It keeps the current
@@ -94,6 +101,38 @@ type Controller struct {
 	released   bool // a task reached deliver; writes are allowed until the next classification
 	active     *Task
 	restore    func()
+	// pending is the origin of the handover this conversation received; the next
+	// task it opens is linked to it.
+	pending *Parent
+}
+
+// Address is the conversation as an inbox address, "<space>/<agent>".
+func (c *Controller) Address() string {
+	return c.opts.Space + "/" + c.opts.Agent
+}
+
+// Expect records the origin of a handover this conversation received. The next
+// task it opens is linked to that origin.
+func (c *Controller) Expect(p Parent) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pending = &p
+}
+
+// Refresh reloads the open task from the store. Callers use it after another
+// conversation changed the task, such as a delivery report.
+func (c *Controller) Refresh(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	tk, ok, err := c.opts.Store.Active(ctx, c.opts.Space, c.opts.Agent)
+	if err != nil {
+		return fmt.Errorf("reload open task: %w", err)
+	}
+	c.active = nil
+	if ok {
+		c.active = &tk
+	}
+	return nil
 }
 
 // NewController builds a controller and loads the open task of the agent, if any.
@@ -188,43 +227,101 @@ func describeRoute(r Route) string {
 	return strings.Join(parts, ", ")
 }
 
-// Open opens a task for the current classification. It applies the route's
-// model, and returns the route and a hint when the route names an agent.
-func (c *Controller) Open(ctx context.Context, goal, scope, doneWhen string) (Task, string, error) {
+// Open opens a task for the current classification. A route that names another
+// agent is handed over when delegation is auto and the agent can take it: the
+// task is then recorded as handed over, the route model is not applied, and
+// the caller sends the handover. Otherwise the route model applies, and the
+// opening carries a hint when the route names an agent (unless delegation is
+// off).
+func (c *Controller) Open(ctx context.Context, goal, scope, doneWhen string) (Task, Opening, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.classified == "" {
-		return Task{}, "", errors.New("classify first (task_classify)")
+		return Task{}, Opening{}, errors.New("classify first (task_classify)")
 	}
 	if c.active != nil {
-		return Task{}, "", fmt.Errorf("task #%d is still open (%s): finish it with task_advance or fail it with /task fail", c.active.ID, c.active.Phase)
+		return Task{}, Opening{}, fmt.Errorf("task #%d is still open (%s): finish it with task_advance or fail it with /task fail", c.active.ID, c.active.Phase)
 	}
-	t, err := NewTask(c.classified, goal, scope, doneWhen, c.opts.Now())
+	now := c.opts.Now()
+	t, err := NewTask(c.classified, goal, scope, doneWhen, now)
 	if err != nil {
-		return Task{}, "", err
+		return Task{}, Opening{}, err
 	}
 	t.Space, t.Agent = c.opts.Space, c.opts.Agent
+	route := c.opts.Routes.For(c.classified)
+	handover := c.handsOver(route)
+	if c.pending != nil {
+		t.Parent = *c.pending
+	}
+	if handover {
+		t.Delegation = Delegation{
+			Delegate: route.Agent, Manager: c.managerFor(route.Agent),
+			Status: DelegationHandedOver, HandedAt: now, StatusAt: now,
+		}
+	}
 	saved, err := c.opts.Store.Open(ctx, t)
 	if err != nil {
-		return Task{}, "", fmt.Errorf("save task: %w", err)
+		return Task{}, Opening{}, fmt.Errorf("save task: %w", err)
 	}
+	c.pending = nil
 	c.active = &saved
 	if c.opts.OnOpen != nil {
 		c.opts.OnOpen(saved)
 	}
-
-	route := c.opts.Routes.For(c.classified)
+	if handover {
+		ev := Evidence{Phase: saved.Phase, Kind: KindNote, Text: "handed over to " + route.Agent, At: now}
+		if err := c.record(ctx, ev); err != nil {
+			return saved, Opening{}, err
+		}
+		return saved, Opening{Handover: &Handover{Delegate: route.Agent, Manager: saved.Delegation.Manager}}, nil
+	}
 	if route.Model != "" && c.opts.ApplyRoute != nil {
 		c.restore = c.opts.ApplyRoute(route)
 	}
-	hint := ""
-	if route.Agent != "" {
-		hint = fmt.Sprintf("route for %s is agent %s: hand over with send_message", c.classified, route.Agent)
-		if err := c.record(ctx, Evidence{Phase: saved.Phase, Kind: KindNote, Text: hint, At: c.opts.Now()}); err != nil {
-			return saved, hint, err
+	op := Opening{}
+	if route.Agent != "" && c.hintsRoute(route) {
+		op.Hint = fmt.Sprintf("route for %s is agent %s: hand over with send_message", c.classified, route.Agent)
+		if err := c.record(ctx, Evidence{Phase: saved.Phase, Kind: KindNote, Text: op.Hint, At: now}); err != nil {
+			return saved, op, err
 		}
 	}
-	return saved, hint, nil
+	return saved, op, nil
+}
+
+// handsOver reports whether a route hands the task over: delegation is auto,
+// the route names another agent that is assigned to the space, and the task
+// does not go back to the agent it came from.
+func (c *Controller) handsOver(route Route) bool {
+	if c.opts.Delegation != DelegationAuto || route.Agent == "" || route.Agent == c.opts.Agent {
+		return false
+	}
+	if c.pending != nil && c.pending.Agent == route.Agent {
+		return false
+	}
+	return c.opts.CanDelegate != nil && c.opts.CanDelegate(route.Agent)
+}
+
+// hintsRoute reports whether an opening names the route's agent. Off never
+// does. Auto names it only when it cannot hand over: an agent working on its
+// own route has nothing to be told.
+func (c *Controller) hintsRoute(route Route) bool {
+	switch c.opts.Delegation {
+	case DelegationOff:
+		return false
+	case DelegationAuto:
+		return route.Agent != c.opts.Agent
+	}
+	return true
+}
+
+// managerFor is the manager that tracks a handover to delegate. A manager that
+// is the origin or the delegate tracks nothing.
+func (c *Controller) managerFor(delegate string) string {
+	m := c.opts.Manager
+	if m == "" || m == c.opts.Agent || m == delegate {
+		return ""
+	}
+	return m
 }
 
 // Advance moves the open task to phase to. The text is the evidence of the move:
@@ -234,6 +331,9 @@ func (c *Controller) Advance(ctx context.Context, to Phase, text string) (Task, 
 	defer c.mu.Unlock()
 	if c.active == nil {
 		return Task{}, errors.New("no open task: open one with task_open")
+	}
+	if c.active.Delegation.Active() && to != PhaseFailed {
+		return Task{}, fmt.Errorf("task #%d is handed over to %s: wait for the delivery report, or fail it with a reason", c.active.ID, c.active.Delegation.Delegate)
 	}
 	if to == PhasePlanned {
 		path := strings.TrimSpace(text)
@@ -344,7 +444,7 @@ func (c *Controller) Status(context.Context) string {
 	}
 	t := c.active
 	return fmt.Sprintf("task #%d · %s · %s\ngoal: %s\nscope: %s\ndone when: %s\nevidence: %d",
-		t.ID, t.Size, t.Phase, t.Goal, t.Scope, t.DoneWhen, len(t.Evidence))
+		t.ID, t.Size, t.Phase, t.Goal, t.Scope, t.DoneWhen, len(t.Evidence)) + statusSuffix(*t)
 }
 
 // ContextBlock is the line prepended to the system prompt on every turn.
@@ -353,8 +453,8 @@ func (c *Controller) ContextBlock(context.Context) string {
 	defer c.mu.Unlock()
 	if c.active != nil {
 		t := c.active
-		return fmt.Sprintf("[task #%d · %s · %s] goal: %s · done when: %s · evidence so far: %d",
-			t.ID, t.Size, t.Phase, t.Goal, t.DoneWhen, len(t.Evidence))
+		return fmt.Sprintf("[task #%d · %s · %s] goal: %s · done when: %s · evidence so far: %d%s",
+			t.ID, t.Size, t.Phase, t.Goal, t.DoneWhen, len(t.Evidence), delegatedSuffix(*t))
 	}
 	if c.classified != "" {
 		return fmt.Sprintf("[classified %s]", c.classified)
@@ -371,6 +471,17 @@ func (c *Controller) Check(ctx context.Context, tool, input string, risky bool) 
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// A handed-over task is with its delegate: the origin must not implement
+	// it itself. Reads, task tools and messaging passed above, so the origin
+	// can still answer the user and wait for the report.
+	if c.active != nil && c.active.Delegation.Active() {
+		reason = fmt.Sprintf("task #%d is handed over to %s: wait for its report (task:#%d delivered) or fail the task",
+			c.active.ID, c.active.Delegation.Delegate, c.active.ID)
+		if c.opts.Mode == ModeAdvisory {
+			return false, "", reason
+		}
+		return true, reason, ""
+	}
 	if c.released {
 		return false, "", ""
 	}

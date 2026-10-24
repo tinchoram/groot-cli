@@ -23,10 +23,10 @@ indicators, resumable sessions, the agent library with validated public
 sources, model listing and validation, `fetch_url`, and the feedback backlog
 handled by the `debug` agent.
 
-## 0.4.0: coordination
+## 0.4.0 (done): coordination
 
 - Automatic delegation: a `large` task routed to an agent is handed over
-  through the inbox, with the space's project-manager as the channel.
+  through the inbox, with the space's project-manager as the channel (done).
 - Routes and models per space (today they are global) (done).
 - Budgets per space and per agent (`budget_usd`), spend shown in the sidebar,
   stop before overrun (done).

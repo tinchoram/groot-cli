@@ -49,6 +49,7 @@ func (m *messenger) Send(ctx context.Context, to, subject, body string) (string,
 	if h := m.w.opts.Hooks.OnInbox; h != nil {
 		h()
 	}
+	m.w.onTaskMessage(ctx, m.space, m.agent, space, agent, subject, body)
 	m.w.afterDelivery(space+"/"+agent, deliveredAt(id, m.space, m.agent, space, agent, subject, body))
 	return space + "/" + agent, id, nil
 }

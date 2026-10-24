@@ -406,6 +406,11 @@ func spaceRoutesBlock(v workspace.FlowView) string {
 	sb.WriteString(styleDim.Render("routes of space "+v.Space+":") + "\n")
 	fmt.Fprintf(&sb, "%-8s %s\n", "mode", originOf(v.Mode))
 	fmt.Fprintf(&sb, "%-8s model %s\n", "agents", originOf(v.Model))
+	fmt.Fprintf(&sb, "%-8s %s\n", "delegate", originOf(v.Delegation))
+	fmt.Fprintf(&sb, "%-8s %s\n", "manager", originOf(v.Manager))
+	if v.ManagerNote != "" {
+		fmt.Fprintf(&sb, "%-8s %s\n", "", v.ManagerNote)
+	}
 	for _, r := range v.Routes {
 		fmt.Fprintf(&sb, "%-8s model %s · agent %s\n", r.Size, originOf(r.Model), originOf(r.Agent))
 	}

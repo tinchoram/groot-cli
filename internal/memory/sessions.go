@@ -18,6 +18,17 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("apply task schema: %w", err)
 		}
 	}
+	for _, c := range taskAddedColumns {
+		has, err := hasColumn(db, "tasks", c.name)
+		if err != nil {
+			return fmt.Errorf("migrate tasks: %w", err)
+		}
+		if !has {
+			if _, err := db.Exec(c.ddl); err != nil {
+				return fmt.Errorf("migrate tasks: add %s: %w", c.name, err)
+			}
+		}
+	}
 	hasAt, err := hasColumn(db, "messages", "created_at")
 	if err != nil {
 		return fmt.Errorf("migrate messages: %w", err)

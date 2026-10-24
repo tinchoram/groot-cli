@@ -228,11 +228,11 @@ func TestBashEvidenceOnlyDuringImplementAndVerify(t *testing.T) {
 func TestAgentHintIsRecordedAsANote(t *testing.T) {
 	h := newRig(t, ModeStrict)
 	_, _ = h.ctl.Classify(SizeLarge, "design")
-	_, hint, err := h.ctl.Open(ctx, "build it", "s", "d")
+	_, op, err := h.ctl.Open(ctx, "build it", "s", "d")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(hint, "developer") || !strings.Contains(hint, "send_message") {
+	if hint := op.Hint; !strings.Contains(hint, "developer") || !strings.Contains(hint, "send_message") {
 		t.Fatalf("hint = %q", hint)
 	}
 	tk, _ := h.ctl.Active()

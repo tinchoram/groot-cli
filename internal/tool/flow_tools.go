@@ -57,10 +57,14 @@ func (t *TaskClassify) Execute(ctx context.Context, input string) (string, bool)
 }
 
 // TaskOpen opens the task for the last classification.
-type TaskOpen struct{ ctl *flow.Controller }
+type TaskOpen struct {
+	ctl *flow.Controller
+	msg Messenger
+}
 
-// NewTaskOpen returns the task_open tool.
-func NewTaskOpen(ctl *flow.Controller) *TaskOpen { return &TaskOpen{ctl: ctl} }
+// NewTaskOpen returns the task_open tool. msg sends the handover when the
+// route hands the task over.
+func NewTaskOpen(ctl *flow.Controller, msg Messenger) *TaskOpen { return &TaskOpen{ctl: ctl, msg: msg} }
 
 type taskOpenInput struct {
 	Goal     string `json:"goal"`
@@ -94,22 +98,51 @@ func (t *TaskOpen) Execute(ctx context.Context, input string) (string, bool) {
 	if err := json.Unmarshal([]byte(input), &in); err != nil {
 		return "invalid input: " + err.Error(), true
 	}
-	task, hint, err := t.ctl.Open(ctx, in.Goal, in.Scope, in.DoneWhen)
+	task, op, err := t.ctl.Open(ctx, in.Goal, in.Scope, in.DoneWhen)
 	if err != nil {
 		return err.Error(), true
 	}
 	out := fmt.Sprintf("task #%d opened (%s): phase %s", task.ID, task.Size, task.Phase)
-	if hint != "" {
-		out += "\n" + hint
+	if h := op.Handover; h != nil {
+		return t.handOver(ctx, out, task, *h)
+	}
+	if op.Hint != "" {
+		out += "\n" + op.Hint
+	}
+	return out, false
+}
+
+// handOver sends the handover to the delegate and the tracking copy to the
+// manager. The origin keeps its task open and waits for the report.
+func (t *TaskOpen) handOver(ctx context.Context, out string, task flow.Task, h flow.Handover) (string, bool) {
+	if t.msg == nil {
+		return out + "\nhanded over to " + h.Delegate + " but no messenger is wired: the handover was not sent", true
+	}
+	origin := t.ctl.Address()
+	if _, _, err := t.msg.Send(ctx, h.Delegate, flow.SubjectFor(flow.SignalHandover, task.ID), flow.HandoverBody(task, origin)); err != nil {
+		return out + "\nhanded over to " + h.Delegate + " but the handover could not be sent: " + err.Error() + "\nfail the task with task_advance failed and a reason", true
+	}
+	out += "\nhanded over to " + h.Delegate + "; wait for the delivery report in your inbox, do not implement it yourself"
+	if h.Manager != "" {
+		body := fmt.Sprintf("Task #%d (%s) of %s is handed over to %s. Goal: %s", task.ID, task.Size, origin, h.Delegate, task.Goal)
+		if _, _, err := t.msg.Send(ctx, h.Manager, flow.SubjectFor(flow.SignalTracking, task.ID), body); err != nil {
+			out += "\ntracking copy to " + h.Manager + " not sent: " + err.Error()
+		}
 	}
 	return out, false
 }
 
 // TaskAdvance moves the open task to its next phase.
-type TaskAdvance struct{ ctl *flow.Controller }
+type TaskAdvance struct {
+	ctl *flow.Controller
+	msg Messenger
+}
 
-// NewTaskAdvance returns the task_advance tool.
-func NewTaskAdvance(ctl *flow.Controller) *TaskAdvance { return &TaskAdvance{ctl: ctl} }
+// NewTaskAdvance returns the task_advance tool. msg reports a delivery to the
+// origin of a handed-over task.
+func NewTaskAdvance(ctl *flow.Controller, msg Messenger) *TaskAdvance {
+	return &TaskAdvance{ctl: ctl, msg: msg}
+}
 
 type taskAdvanceInput struct {
 	Phase    string `json:"phase"`
@@ -148,7 +181,26 @@ func (t *TaskAdvance) Execute(ctx context.Context, input string) (string, bool) 
 	if next.Closed() {
 		return fmt.Sprintf("task #%d closed as %s", before.ID, next.Phase), false
 	}
-	return fmt.Sprintf("task #%d: %s → %s", next.ID, before.Phase, next.Phase), false
+	out := fmt.Sprintf("task #%d: %s → %s", next.ID, before.Phase, next.Phase)
+	if next.Phase == flow.PhaseDeliver && next.Parent.Set() {
+		out += t.report(ctx, next, in.Evidence)
+	}
+	return out, false
+}
+
+// report sends the delivery of a task that another agent handed over to its
+// origin. The deliver note is the body. A failed send is reported, not hidden:
+// the delivery itself already happened.
+func (t *TaskAdvance) report(ctx context.Context, next flow.Task, note string) string {
+	origin := next.Parent.Space + "/" + next.Parent.Agent
+	subject := flow.SubjectFor(flow.SignalDelivered, next.Parent.Task)
+	if t.msg == nil {
+		return "\nnot reported to " + origin + ": no messenger is wired"
+	}
+	if _, _, err := t.msg.Send(ctx, origin, subject, note); err != nil {
+		return "\nnot reported to " + origin + ": " + err.Error()
+	}
+	return "\nreported to " + origin + " as " + subject
 }
 
 // TaskStatus reports the classification and the open task.

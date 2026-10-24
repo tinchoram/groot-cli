@@ -84,6 +84,9 @@ type Manager interface {
 	SetSpaceRoute(ctx context.Context, space, size, model, agent string) (string, error)
 	// SetSpaceModel sets the default model of a space's agents; empty clears it.
 	SetSpaceModel(ctx context.Context, space, model string) (string, error)
+	// SetSpaceDelegation sets the delegation mode and the tracking manager of a
+	// space; empty values keep the current ones.
+	SetSpaceDelegation(ctx context.Context, space, mode, manager string) error
 	// SetSpaceBudget sets the budget of all agents of a space; 0 clears it.
 	SetSpaceBudget(space string, usd float64) error
 	// SetAgentBudget sets the budget of an agent; 0 clears it.
@@ -131,6 +134,7 @@ func All(m Manager, home string) []tool.Tool {
 		NewSetAgentModel(m),
 		NewSetSpaceRoute(m),
 		NewSetSpaceModel(m),
+		NewSetSpaceDelegation(m),
 		NewSetSpaceBudget(m),
 		NewSetAgentBudget(m),
 		NewGetContext(m),

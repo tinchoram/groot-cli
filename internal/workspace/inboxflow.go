@@ -58,6 +58,7 @@ func (c *Conversation) injectInbox(ctx context.Context, prompt string) string {
 		}
 		blocks = append(blocks, block)
 		ids = append(ids, m.ID)
+		c.expectHandover(m)
 		used += len(block)
 	}
 	if err := c.inbox.MarkRead(ctx, ids); err != nil {

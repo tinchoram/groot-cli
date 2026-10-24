@@ -32,6 +32,10 @@ type TaskRow struct {
 	Evidence  int
 	OpenedAt  time.Time
 	UpdatedAt time.Time
+	// Delegate is the agent the task was handed over to, and Parent the origin
+	// "<space>/<agent> #<id>" of a task another agent opened to take over.
+	Delegate string
+	Parent   string
 	// Active is true while the agent's open conversation runs a turn in this
 	// process. A task whose conversation is idle, or not open, is not active.
 	Active bool
@@ -81,6 +85,7 @@ func (w *Workspace) ListTasks(ctx context.Context, name string, includeClosed bo
 			rows = append(rows, TaskRow{
 				Space: t.Space, Agent: t.Agent, ID: t.ID, Size: t.Size, Phase: t.Phase,
 				Goal: shortGoal(t.Goal), Evidence: t.Evidence, OpenedAt: t.OpenedAt, UpdatedAt: t.UpdatedAt,
+				Delegate: t.Delegation.Delegate, Parent: parentLabel(t.Parent),
 				Active: w.runningTurn(sp.Name, t.Agent),
 			})
 		}
@@ -110,6 +115,26 @@ func (w *Workspace) runningTurn(spaceName, agent string) bool {
 	return ok && c.busy.Load()
 }
 
+// parentLabel names the origin of a task as "<space>/<agent> #<id>".
+func parentLabel(p flow.Parent) string {
+	if !p.Set() {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s #%d", p.Space, p.Agent, p.Task)
+}
+
+// agentCell is the agent column of the listing: "reader → developer" for a task
+// handed over, "developer ← space/reader #1" for a task taken over.
+func agentCell(r TaskRow) string {
+	switch {
+	case r.Delegate != "":
+		return r.Agent + " → " + r.Delegate
+	case r.Parent != "":
+		return r.Agent + " ← " + r.Parent
+	}
+	return r.Agent
+}
+
 // shortGoal cuts a goal to taskGoalRunes runes, ending it with an ellipsis.
 func shortGoal(goal string) string {
 	if utf8.RuneCountInString(goal) <= taskGoalRunes {
@@ -131,7 +156,7 @@ func FormatTasks(rows []TaskRow) string {
 		if r.Active {
 			active = "yes"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t#%d\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n", r.Space, r.Agent, r.ID, r.Size, r.Phase,
+		fmt.Fprintf(tw, "%s\t%s\t#%d\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n", r.Space, agentCell(r), r.ID, r.Size, r.Phase,
 			r.Evidence, r.OpenedAt.Local().Format("2006-01-02 15:04"), r.UpdatedAt.Local().Format("2006-01-02 15:04"),
 			active, r.Goal)
 	}

@@ -254,7 +254,8 @@ spaces:
           model: claude-opus-5-5
 ```
 
-Groot's admin agent can set these with `set_space_route` and `set_space_model`,
+Groot's admin agent can set these with `set_space_route`, `set_space_model` and
+`set_space_delegation` (see [Delegation](#delegation)),
 and `/space routes [name]` shows the effective values and where each one comes
 from.
 
@@ -616,8 +617,9 @@ Configuration (`flow` in `groot.yaml`):
 - `mode: advisory`. The same rules, but the call runs and a warning is shown.
 - `routes.small`, `routes.medium`, `routes.large`: `model` and `agent`. The defaults
   are haiku, sonnet and opus. The model is applied when the task opens and restored
-  when it closes. `agent` is recorded on the task as a hint; nothing delegates to
-  it automatically yet.
+  when it closes. A route's `agent` takes the task over when `delegation` is `auto`
+  (the default), with the model not applied to the origin; see
+  [Delegation](#delegation). With `hint` it is only named in the result.
 
 Per space: `mode`, the routes and the default model can be overridden in a space's
 entry in `spaces.yaml` (see [Spaces and agents](#spaces-and-agents)). Each field is
@@ -645,6 +647,67 @@ a task opens or until a new user request starts without one.
 
 The flow shapes the agent's work and records what it did. It is not a sandbox.
 The permission gate still decides every call that the flow allows.
+
+### Delegation
+
+A route can name an agent (`routes.<size>.agent`). With `delegation: auto`, the
+default, a task opened on that route is handed over to the agent through the
+inbox. The space's manager gets a tracking copy.
+
+- The origin keeps its task open and marks it as handed over. While the task is
+  with the delegate the origin cannot write or run commands (the gate names the
+  delegate and the report it waits for) and cannot advance the task: it reads,
+  answers, waits for the report, or fails the task with a reason.
+- The delegate gets `task:#N handover` with the goal, scope, done-when, plan path,
+  the origin address (`<space>/<agent>`) and the instructions. It works the task
+  through its own flow, and its task records the origin, so `/tasks` shows the chain
+  (`reader → developer`, `developer ← payments/reader #12`).
+- When the delegate delivers, its deliver note goes back as `task:#N delivered`.
+  The origin records it as evidence and moves to `verify`, where it checks the work
+  and delivers to you as usual.
+- If the delegate cannot finish, it fails its task and sends `task:#N returned
+  <reason>`. The origin records the reason and goes back to `implement`.
+- The manager gets `task:#N tracking` when a task is handed over, and a copy of
+  each `delivered` and `returned`. It does not implement handed-over tasks.
+
+The subject is the contract: `task:#<id>`, a space, then the signal (`handover`,
+`delivered`, `returned` or `tracking`). A leading `Re:` is ignored, and the text
+after `returned` is the reason. The body is the deliver note or the reason
+of a return that has no reason in the subject.
+
+Configuration, in `flow` of `groot.yaml` or of a space's entry in `spaces.yaml`.
+Each field falls back to the global value, then to the built-in default:
+
+- `delegation: auto | hint | off`. `auto` hands over; `hint` only names the agent
+  in the result, as before; `off` does neither.
+- `manager: <agent>`. The default is `project-manager` when that agent is assigned
+  to the space; `none` means no manager. The manager must be assigned to the space.
+
+```yaml
+spaces:
+  - name: payments
+    flow:
+      delegation: auto
+      manager: lead
+```
+
+The admin agent sets both with `set_space_delegation {space, mode?, manager?}`.
+`/space routes` shows the values and their origins, and says when the manager lacks
+`list_tasks`, which it needs to answer status questions. Groot does not grant it to
+agents you own: add it to their `tools:` line.
+
+Limits:
+
+- A handover needs the delegate assigned to the space; otherwise the hint is shown.
+- A task is not handed back to the agent it came from. Longer cycles (A to B to C
+  to A) are not detected.
+- A report is applied when it arrives. An origin whose conversation is not open is
+  updated in the store, and it reads the new state when it opens.
+- In work mode the delegate's report is sent at deliver, before you accept the
+  review of its work.
+- The return path depends on the delegate following its rule. A delivery is sent by
+  groot when the delegate delivers.
+- Delegation runs in the same space only.
 
 ## Memory
 
@@ -770,7 +833,7 @@ Work mode decides by tool:
 | `write_file` inside the space | `write_file` outside the space |
 | `bash`, unless it matches `work.always_ask` | `bash` matching `work.always_ask` (defaults: `rm -rf` outside the space, `sudo`, `git push --force`, `git reset --hard`, `git clean`, `kubectl apply/delete/patch/edit/scale/rollout`, `docker rm/rmi/system prune`, `terraform apply/destroy`, `curl`/`wget` writing a file) |
 | `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent` |
-| `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_budget`, `set_agent_budget`, `set_context_window`, `set_work_mode` |
+| `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_delegation`, `set_space_budget`, `set_agent_budget`, `set_context_window`, `set_work_mode` |
 | `get_context`, `get_cost`, `list_tasks` (read-only, not asked) | none; they answer as text |
 | `task_classify`, `task_open`, `task_advance`, `task_status` | `set_work_mode` |
 
@@ -910,7 +973,9 @@ capped at 16 KB and subjects at 200 characters.
   because you wrote it.
 
 Every `send_message` call is in the audit log of the sending space. Messages do
-not start turns by themselves.
+not start turns by themselves. The task messages of delegation (`task:#<id>
+handover`, `delivered`, `returned`, `tracking`) follow a subject contract; see
+[Delegation](#delegation).
 
 Agents created before this version keep their tool list. To give one messaging,
 add `send_message` and `read_inbox` to its `tools:` line in `agents/<name>.md`.

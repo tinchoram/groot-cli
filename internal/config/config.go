@@ -59,6 +59,12 @@ type FetchConfig struct {
 type FlowConfig struct {
 	Mode   string     `yaml:"mode"` // strict | advisory
 	Routes FlowRoutes `yaml:"routes"`
+	// Delegation says what a route that names another agent does: auto hands
+	// the task over through the inbox, hint only names the agent, off does
+	// nothing. Manager is the agent that tracks the handovers of a space; "none"
+	// means no manager.
+	Delegation string `yaml:"delegation"` // auto | hint | off
+	Manager    string `yaml:"manager"`
 }
 
 // FlowRoutes holds the route of each size.
@@ -141,7 +147,7 @@ func Default() Config {
 		Audit:      PathConfig{Path: ".groot/audit.jsonl"},
 		Gate:       GateConfig{Policy: "interactive"},
 		Work:       WorkConfig{MaxTurns: 50, MaxAutoTurns: 10, MaxUSD: 5.0, AlwaysAsk: DefaultAlwaysAsk()},
-		Flow: FlowConfig{Mode: "strict", Routes: FlowRoutes{
+		Flow: FlowConfig{Mode: "strict", Delegation: "auto", Manager: "project-manager", Routes: FlowRoutes{
 			Small:  FlowRoute{Model: "claude-haiku-5-5"},
 			Medium: FlowRoute{Model: "claude-sonnet-5-5"},
 			Large:  FlowRoute{Model: "claude-opus-5-5"},
@@ -209,6 +215,11 @@ func (c Config) Validate() error {
 	case "", "strict", "advisory":
 	default:
 		return fmt.Errorf("flow.mode %q is invalid (use strict or advisory)", c.Flow.Mode)
+	}
+	switch c.Flow.Delegation {
+	case "", "auto", "hint", "off":
+	default:
+		return fmt.Errorf("flow.delegation %q is invalid (use auto, hint or off)", c.Flow.Delegation)
 	}
 	if c.MaxTurns <= 0 {
 		return fmt.Errorf("max_turns must be positive, got %d", c.MaxTurns)

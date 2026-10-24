@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/tinchoram/groot-cli/internal/config"
@@ -46,6 +47,10 @@ func (w *Workspace) newFlow(ctx context.Context, sp space.Space, agentName strin
 		// Admin tools change the catalog and the spaces, not the code, so the
 		// flow does not gate them.
 		Exempt: []string{"create_space", "assign_agent", "unassign_agent", "create_agent", "import_agent", "install_agent"},
+		// Delegation: auto hands a route's agent the task, when it is assigned.
+		Delegation:  flow.DelegationMode(flowCfg.Delegation),
+		Manager:     flowCfg.Manager,
+		CanDelegate: func(agent string) bool { return slices.Contains(sp.Agents, agent) },
 	})
 }
 

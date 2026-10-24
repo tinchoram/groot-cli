@@ -37,11 +37,11 @@ func TestTaskToolsRunTheFlowRoundTrip(t *testing.T) {
 	if isErr || !strings.Contains(out, "sonnet") {
 		t.Fatalf("classify = %q (err %v)", out, isErr)
 	}
-	out, isErr = NewTaskOpen(ctl).Execute(ctx, `{"goal":"ship","scope":"api","done_when":"tests pass"}`)
+	out, isErr = NewTaskOpen(ctl, nil).Execute(ctx, `{"goal":"ship","scope":"api","done_when":"tests pass"}`)
 	if isErr || !strings.Contains(out, "task #1 opened (medium): phase implement") {
 		t.Fatalf("open = %q (err %v)", out, isErr)
 	}
-	if out, isErr = NewTaskAdvance(ctl).Execute(ctx, `{"phase":"verify"}`); !isErr || !strings.Contains(out, "command") {
+	if out, isErr = NewTaskAdvance(ctl, nil).Execute(ctx, `{"phase":"verify"}`); !isErr || !strings.Contains(out, "command") {
 		t.Fatalf("verify without a command must be refused, got %q", out)
 	}
 	if out, _ = NewTaskStatus(ctl).Execute(ctx, `{}`); !strings.Contains(out, "task #1 · medium · implement") {
@@ -52,7 +52,7 @@ func TestTaskToolsRunTheFlowRoundTrip(t *testing.T) {
 func TestTaskOpenNeedsAClassificationAndPreviewShowsTheThree(t *testing.T) {
 	ctx := context.Background()
 	ctl := flowController(t)
-	open := NewTaskOpen(ctl)
+	open := NewTaskOpen(ctl, nil)
 	if out, isErr := open.Execute(ctx, `{"goal":"g","done_when":"d"}`); !isErr || !strings.Contains(out, "classify first") {
 		t.Fatalf("open without classify = %q (err %v)", out, isErr)
 	}
@@ -66,10 +66,10 @@ func TestTaskOpenNeedsAClassificationAndPreviewShowsTheThree(t *testing.T) {
 
 func TestTaskToolRisks(t *testing.T) {
 	ctl := flowController(t)
-	if NewTaskOpen(ctl).Risk() != RiskWrite {
+	if NewTaskOpen(ctl, nil).Risk() != RiskWrite {
 		t.Fatal("task_open switches the model: it is a write")
 	}
-	for _, tl := range []Tool{NewTaskClassify(ctl), NewTaskAdvance(ctl), NewTaskStatus(ctl)} {
+	for _, tl := range []Tool{NewTaskClassify(ctl), NewTaskAdvance(ctl, nil), NewTaskStatus(ctl)} {
 		if tl.Risk() != RiskRead {
 			t.Fatalf("%s should be RiskRead", tl.Definition().Name)
 		}

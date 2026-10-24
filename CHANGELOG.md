@@ -5,6 +5,24 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.4.0-dev (unreleased)
 
+### Delegation
+- A route's `agent` takes the task over. With `delegation: auto` (the default) the
+  task is handed to the agent through the inbox, as `task:#<id> handover`, and the
+  origin keeps it open as handed over. The delegate's deliver note comes back as
+  `task:#<id> delivered`: the origin records it and moves to `verify`. `returned`
+  moves it back to `implement`, with the reason as evidence.
+- A manager (`project-manager` when assigned, by default) gets `tracking` copies and
+  every delivery and return. It does not implement handed-over tasks.
+- `delegation` (`auto`, `hint` or `off`) and `manager` in `flow`, per space with the
+  usual fallbacks. `/space routes` shows both with their origins and warns when the
+  manager lacks `list_tasks`.
+- `set_space_delegation {space, mode?, manager?}` admin tool; work mode asks before it.
+- Tasks keep their delegation and origin. `/task` shows the delegation, `/tasks`
+  shows `reader → developer` and `developer ← space/reader #12`. Existing databases
+  gain the columns on open.
+- The built-in rules tell the delegate how to answer a handover, and the manager how
+  to track one.
+
 ### Command completion
 - Typing `/` at the start of the input shows up to six matching commands above it,
   with their help; a command word followed by a space lists its sub-commands. `tab`

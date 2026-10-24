@@ -94,6 +94,11 @@ need the `implement` phase, with one exception: a large task may write a
 `write_file` under `docs/tasks/` while it is `classified` or `planned`. Small
 tasks need no task at all (`Controller.Check` in `internal/flow/controller.go`).
 
+Delegation: `Controller.Open` decides a handover (`internal/flow/controller.go`). The
+task messages `task:#<id> handover|delivered|returned|tracking` are the contract
+between agents (`internal/flow/delegation.go`), applied by `messenger.Send` through
+`internal/workspace/delegation.go`.
+
 ## Storage
 
 Global state, under `~/.groot` (or `GROOT_HOME`):
@@ -114,7 +119,7 @@ Per space, `<space>/.groot/`, at the paths set by `memory.path` and `audit.path`
   - `sessions`, `messages`: one row per conversation and per stored message.
   - `memories`: long-term entries (`kind`, `scope`, `agent`, `text`).
   - `memories_fts`: FTS5 index over `memories.text`, kept in sync by triggers.
-  - `tasks`, `task_evidence`: ODD flow tasks and their evidence.
+  - `tasks`, `task_evidence`: ODD flow tasks and their evidence. A handed-over task keeps its delegation record (`delegate`, `manager`, `delegation_status`), and a task taken over keeps its origin (`parent_space`, `parent_agent`, `parent_task`); `migrate` adds these columns to older databases.
   - The spend ledger is `sessions.cost_usd`, written after every model answer;
     budgets sum it (`memory.SpendUSD`, `SpendByAgent`; checks in `internal/workspace/budget.go`).
 - `audit.jsonl`: one JSON line per tool call.

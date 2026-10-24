@@ -212,9 +212,9 @@ func (w *Workspace) newTool(name, root string, mem memory.Store, msg tool.Messen
 		case "task_classify":
 			return tool.NewTaskClassify(ctl), nil
 		case "task_open":
-			return tool.NewTaskOpen(ctl), nil
+			return tool.NewTaskOpen(ctl, msg), nil
 		case "task_advance":
-			return tool.NewTaskAdvance(ctl), nil
+			return tool.NewTaskAdvance(ctl, msg), nil
 		}
 		return tool.NewTaskStatus(ctl), nil
 	case "feedback_report":

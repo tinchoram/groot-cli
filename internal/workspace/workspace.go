@@ -474,7 +474,13 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		return nil, err
 	}
 	ctl, err := w.newFlow(context.Background(), sp, agentName, st.mem.Tasks(), prov,
-		func(flow.Task) { work.ResetTurns(); files.reset() },
+		func(t flow.Task) {
+			work.ResetTurns()
+			files.reset()
+			if t.Parent.Set() {
+				w.acceptDelegation(context.Background(), t)
+			}
+		},
 		func(t flow.Task) {
 			if work.On() {
 				work.Set(false)
@@ -500,6 +506,10 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	base := def.Prompt
 	if strings.TrimSpace(base) == "" {
 		base = w.opts.Config.EffectiveSystemPrompt()
+	}
+	base += "\n\n" + delegateRule
+	if ResolveFlow(sp, w.opts.Config.Flow).Manager.Value == agentName {
+		base += "\n\n" + managerRule
 	}
 	if agentName == debugAgent {
 		base += "\n\n" + debugRules(w.opts.Config.Feedback.Confirm)

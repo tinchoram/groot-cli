@@ -37,7 +37,13 @@ type FlowView struct {
 	Space  string
 	Mode   Setting
 	Routes []SizeRoute // small, medium, large
-	Model  Setting
+	// Delegation is what a route naming another agent does. Manager tracks the
+	// handovers of the space; its value is empty when none is assigned.
+	Delegation Setting
+	Manager    Setting
+	// ManagerNote says what the manager lacks, when something is missing.
+	ManagerNote string
+	Model       Setting
 }
 
 // ResolveFlow merges the flow overrides of a space over the global flow and the
@@ -47,8 +53,10 @@ type FlowView struct {
 func ResolveFlow(sp space.Space, global config.FlowConfig) FlowView {
 	builtin := config.Default().Flow
 	v := FlowView{
-		Space: sp.Name,
-		Mode:  pick(sp.Flow.Mode, global.Mode, builtin.Mode),
+		Space:      sp.Name,
+		Mode:       pick(sp.Flow.Mode, global.Mode, builtin.Mode),
+		Delegation: pick(sp.Flow.Delegation, global.Delegation, builtin.Delegation),
+		Manager:    resolveManager(sp, pick(sp.Flow.Manager, global.Manager, builtin.Manager)),
 	}
 	ownRoutes := []space.SpaceRoute{sp.Flow.Routes.Small, sp.Flow.Routes.Medium, sp.Flow.Routes.Large}
 	globalRoutes := []config.FlowRoute{global.Routes.Small, global.Routes.Medium, global.Routes.Large}
@@ -79,6 +87,8 @@ func pick(own, global, def string) Setting {
 func (v FlowView) FlowConfig() config.FlowConfig {
 	var c config.FlowConfig
 	c.Mode = v.Mode.Value
+	c.Delegation = v.Delegation.Value
+	c.Manager = v.Manager.Value
 	for _, r := range v.Routes {
 		route := config.FlowRoute{Model: r.Model.Value, Agent: r.Agent.Value}
 		switch r.Size {
@@ -119,6 +129,7 @@ func (w *Workspace) SpaceFlow(name string) (FlowView, error) {
 	defer w.mu.Unlock()
 	v := ResolveFlow(sp, w.opts.Config.Flow)
 	v.Model = ResolveModel("", sp, w.opts.Config.Provider.Model)
+	v.ManagerNote = w.managerNoteLocked(v.Manager.Value)
 	return v, nil
 }
 
