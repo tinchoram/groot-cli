@@ -132,8 +132,9 @@ Never put API keys in `groot.yaml`. The key comes from `ANTHROPIC_API_KEY`, expo
 
 ## Safety model
 
-- **Gate on every call.** `interactive` allows reads and asks you about writes
-  and commands. The preview (a diff or the command) is shown first. `readonly`
+- **Gate on every call, sandbox on every command.** The gate decides which calls
+  run; the [sandbox](#sandbox) limits what an approved bash command can touch.
+  `interactive` allows reads and asks you about writes and commands. The preview (a diff or the command) is shown first. `readonly`
   allows reads only. `auto` allows everything, so use it only in trusted scripts.
 - **Read-only shell commands run without asking.** The bash tool classifies each
   command before it runs. A command is read-only only when every segment of its
@@ -155,13 +156,72 @@ Never put API keys in `groot.yaml`. The key comes from `ANTHROPIC_API_KEY`, expo
 - **kubectl is read-only.** Allowed verbs: `get`, `describe`, `logs`, `top`,
   `version`, `api-resources`, `explain`. Credential and cluster overrides
   (`--kubeconfig`, `--token`, `--as`, `--server`, ...) are refused. With an
-  allowlist, `-A` is refused and a namespace is required.
+  allowlist, `-A` is refused and a namespace is required. The kubectl tool runs
+  outside the sandbox, since it needs your kubeconfig and the network.
 - **Limits.** Commands time out after 60 seconds. Output is capped (32 KB for
   bash, 64 KB for reads and kubectl).
 - **Redaction.** Obvious secrets (`password=`, `token:`, `api_key=`, `Bearer`)
   are masked in tool output, previews and the audit log.
 - **Audit.** One JSON line per tool call: time, session, tool, risk, decision,
-  a redacted 200-character input preview, error flag and duration.
+  a redacted 200-character input preview, error flag and duration. A bash call
+  also records the sandbox backend that confined it (`sandbox`).
+
+### Sandbox
+
+Every `bash` command runs inside an operating-system sandbox, whether the gate
+approved it or read-only classification allowed it.
+
+| OS | Backend | Notes |
+|---|---|---|
+| macOS | `sandbox-exec` | `/usr/bin/sandbox-exec`, present on every macOS. Apple deprecated it; the profile is generated per command. |
+| Linux | `bwrap` (bubblewrap) | `apt install bubblewrap`. Needs unprivileged user namespaces. |
+| other | none | Commands run directly, with a warning. |
+
+What a sandboxed command cannot do:
+
+- write outside the space directory, the temp directories (`$TMPDIR`, `/tmp`)
+  and `bash.sandbox.extra_writable`;
+- write to `<space>/.groot`, where the memory database and the audit log live;
+- read or write these credential paths under the home directory, with or without
+  network: `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.groot`, `~/.kube`, `~/.netrc`,
+  `~/.docker`, `~/.config/gh`, `~/.config/gcloud` and `~/.azure`. The list is
+  `sandbox.SecretDirs` in `internal/sandbox/sandbox.go`;
+- open network connections, unless `bash.sandbox.network` is `true`.
+
+Everything else stays readable, including the macOS keychains and environment
+variables.
+
+```yaml
+bash:
+  sandbox:
+    mode: auto            # auto | strict | off; the scalar form `sandbox: strict` also works
+    network: false        # let bash reach the network (kubectl, aws, curl, git push)
+    extra_writable: []    # absolute paths only; "~" is not expanded
+```
+
+- `auto` (default) uses the best backend. Without one, commands run unrestricted:
+  each bash result starts with `[sandbox: none]`, the transcript shows a notice
+  once, and the header shows `sandbox: none`.
+- `strict` refuses to run bash without a backend, and the error names what to install.
+- `off` never wraps commands and shows no warning.
+
+Limits to plan for:
+
+- With `network: false`, anything that talks to a server fails from bash:
+  `kubectl`, `aws`, `curl`, `git push`, `go mod download`. Set `network: true`,
+  or run those commands outside groot.
+- `go build` and `go test` need a writable build cache. Add it, for example
+  `extra_writable: [/Users/you/Library/Caches/go-build]` on macOS (run
+  `go env GOCACHE` to find it).
+- The sandbox is not a VM. A command can still run any program it finds and read
+  credential files outside the list above. Because `~/.kube` is denied, a bash
+  `kubectl` cannot read your kubeconfig; use the kubectl tool for cluster reads.
+- The terminal column is not sandboxed (see [Terminal column](#terminal-column)).
+- Apple may remove `sandbox-exec` in a later macOS. Then `auto` falls back to `none`
+  and `strict` refuses.
+
+To check it, run `echo test > /tmp/x` (it works) and `echo test > ~/x` (it fails;
+on macOS the error is `Operation not permitted`).
 
 ## Adding a tool
 
@@ -555,6 +615,9 @@ library to its prompt. Nothing else changes.
 directory. It runs `$SHELL` (or `/bin/sh`) on a pseudo-terminal, and the screen
 is drawn with a VT emulator, so colours, cursor movement and full-screen tools
 work as they do in a normal terminal.
+
+This is your own shell, not a groot tool: the [sandbox](#sandbox) does not apply
+to it, and nothing it runs is audited.
 
 | Key | Action |
 |---|---|

@@ -12,6 +12,7 @@ under `internal/`:
 |---|---|
 | `agent` | Conversation loop. Knows only the ports: calls the provider, runs tools through the gate, persists messages, writes the audit log. |
 | `provider` | Model port (`provider.go`) and adapters: `anthropic.go`, `mock.go` for tests. Also pricing and the model list. |
+| `sandbox` | Runner port for bash (`sandbox.go`): `Detect` picks the backend for the platform. Adapters: `seatbelt.go` (macOS `sandbox-exec`, SBPL profile) and `bwrap.go` (Linux bubblewrap). Without a backend, `none` runs commands directly and `strict` refuses. Imported by `tool` (bash) and wired in `cmd/groot`. |
 | `tool` | Tool port and registry (`tool.go`), builtin tools: `files.go`, `exec.go`, `fetch.go`, `memory_tools.go`, `flow_tools.go`, `messaging_tools.go`, `feedback_tools.go`, `readonly.go`, `listdir.go` and `glob.go` (read-only, confined to the space root). |
 | `gate` | Permission decisions: `Interactive`, `ReadOnly`, `AutoApprove` (`gate.go`), work mode (`work.go`), session grants (`grants.go`). |
 | `flowgate` | Puts the ODD flow rules in front of the user's gate (`gate.go`). |
@@ -37,6 +38,7 @@ strategies), `messaging`, `admintool`, `agentimport`, `clipboard`.
 |---|---|---|
 | `provider.Provider` | `internal/provider/provider.go` | `anthropic.go`, `mock.go` |
 | `tool.Tool` | `internal/tool/tool.go` | the builtin tools listed above |
+| `sandbox.Runner` | `internal/sandbox/sandbox.go` | `seatbelt.go` (sandbox-exec), `bwrap.go` (bubblewrap), `noneRunner` and `offRunner` (direct) |
 | `memory.Store` | `internal/memory/store.go` | `sqlite.go`, `NoMemory` |
 | `gate.Gate` | `internal/gate/gate.go` | `Interactive`, `ReadOnly`, `AutoApprove`, wrapped by `Work` and `Session` |
 

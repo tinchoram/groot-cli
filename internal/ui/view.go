@@ -49,8 +49,17 @@ func (m Model) header() string {
 		agent = "no agent"
 	}
 	head := "  " + styleAccentBold.Render(spaceName) + styleDim.Render(" ▸ ") +
-		styleAccentBold.Render(agent) + styleDim.Render(" · "+m.session.Model()) + m.taskLabel() + m.workLabel()
+		styleAccentBold.Render(agent) + styleDim.Render(" · "+m.session.Model()) + m.taskLabel() + m.workLabel() + m.sandboxLabel()
 	return head + m.contextLabel(head)
+}
+
+// sandboxLabel warns, dimmed, in the header when bash runs without a sandbox.
+// A working backend is not shown: the default should stay quiet.
+func (m Model) sandboxLabel() string {
+	if m.sandbox != "none" {
+		return ""
+	}
+	return styleDim.Render(" · sandbox: none")
 }
 
 // viewSidebar draws the bordered sidebar at the given outer size.

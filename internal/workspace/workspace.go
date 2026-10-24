@@ -28,6 +28,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/inbox"
 	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/provider"
+	"github.com/tinchoram/groot-cli/internal/sandbox"
 	"github.com/tinchoram/groot-cli/internal/space"
 )
 
@@ -98,7 +99,9 @@ type Options struct {
 	ConfigPath string
 	Spaces     *space.Store
 	Gate       gate.Gate
-	Hooks      Hooks
+	// Sandbox confines the bash tool. Nil runs commands unwrapped.
+	Sandbox sandbox.Runner
+	Hooks   Hooks
 	// DisablePublic leaves the public library sources out, so that nothing
 	// reaches the network. Tests and offline use set it.
 	DisablePublic bool

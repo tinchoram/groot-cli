@@ -24,6 +24,9 @@ type Record struct {
 	InputPreview string    `json:"input_preview"`
 	IsError      bool      `json:"is_error"`
 	DurationMS   int64     `json:"duration_ms"`
+	// Sandbox is the backend that confined the call (sandbox-exec, bwrap, none,
+	// off). Empty for tools that run no process.
+	Sandbox string `json:"sandbox,omitempty"`
 }
 
 // Log is an append-only JSONL file. A nil *Log discards records.

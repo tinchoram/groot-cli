@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/tinchoram/groot-cli/internal/api"
+	shellsandbox "github.com/tinchoram/groot-cli/internal/sandbox"
 )
 
 const (
@@ -60,11 +62,24 @@ type runResult struct {
 // runCapped runs a process with a timeout, capped output, and a process group
 // kill so that children (for example `sleep` under `sh -c`) die with it.
 func runCapped(ctx context.Context, timeout time.Duration, outLimit int, dir, name string, args ...string) runResult {
+	return runCmd(ctx, timeout, outLimit, func(c context.Context) (*exec.Cmd, error) {
+		cmd := exec.CommandContext(c, name, args...)
+		cmd.Dir = dir
+		return cmd, nil
+	})
+}
+
+// runCmd runs the command that build returns, with the limits of runCapped.
+// build receives the context that carries the timeout, so a sandbox wrapper
+// can bind the command to it.
+func runCmd(ctx context.Context, timeout time.Duration, outLimit int, build func(context.Context) (*exec.Cmd, error)) runResult {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
+	cmd, err := build(ctx)
+	if err != nil {
+		return runResult{startErr: err}
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
@@ -78,7 +93,7 @@ func runCapped(ctx context.Context, timeout time.Duration, outLimit int, dir, na
 	cmd.Stdout = out
 	cmd.Stderr = out
 
-	err := cmd.Run()
+	err = cmd.Run()
 	res := runResult{output: out.String()}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		res.timedOut = true
@@ -95,10 +110,26 @@ func runCapped(ctx context.Context, timeout time.Duration, outLimit int, dir, na
 	return res
 }
 
-// Bash runs a shell command with `sh -c`.
+// Bash runs a shell command with `sh -c`, inside Runner when one is set.
+// Network and ExtraWritable are the bash.sandbox settings that the runner
+// applies to every command. A nil Runner runs commands unwrapped.
 type Bash struct {
-	Dir     string
-	Timeout time.Duration
+	Dir           string
+	Timeout       time.Duration
+	Runner        shellsandbox.Runner
+	Network       bool
+	ExtraWritable []string
+}
+
+// noSandboxNotice is prefixed to the output of a command that ran without a sandbox.
+const noSandboxNotice = "[sandbox: none] this command ran with your full permissions"
+
+// SandboxName reports the backend that confines the commands, for the audit log.
+func (b *Bash) SandboxName() string {
+	if b.Runner == nil {
+		return shellsandbox.BackendOff
+	}
+	return b.Runner.Name()
 }
 
 // NewBash returns the bash tool. Commands run in dir (empty means the process cwd).
@@ -142,8 +173,29 @@ func (b *Bash) execute(ctx context.Context, input string) (string, bool) {
 	if timeout <= 0 {
 		timeout = defaultExecTimeout
 	}
-	res := runCapped(ctx, timeout, bashOutputLimit, b.Dir, "sh", "-c", in.Command)
-	return describeResult(res, timeout, "command")
+	argv := []string{"sh", "-c", in.Command}
+	if b.Runner == nil {
+		res := runCapped(ctx, timeout, bashOutputLimit, b.Dir, argv[0], argv[1:]...)
+		return describeResult(res, timeout, "command")
+	}
+	dir := b.Dir
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+	spec := shellsandbox.Spec{
+		Dir:           dir,
+		Command:       argv,
+		AllowNetwork:  b.Network,
+		WritablePaths: append([]string{dir}, b.ExtraWritable...),
+	}
+	res := runCmd(ctx, timeout, bashOutputLimit, func(c context.Context) (*exec.Cmd, error) {
+		return b.Runner.Wrap(c, spec)
+	})
+	out, isErr := describeResult(res, timeout, "command")
+	if b.Runner.Name() == shellsandbox.BackendNone && res.startErr == nil {
+		out = noSandboxNotice + "\n" + out
+	}
+	return out, isErr
 }
 
 func describeResult(res runResult, timeout time.Duration, what string) (string, bool) {

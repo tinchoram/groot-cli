@@ -90,6 +90,14 @@ func (r recordingTool) Execute(ctx context.Context, input string) (string, bool)
 	return out, isErr
 }
 
+// SandboxName forwards the sandbox of the wrapped tool, so the audit log still sees it.
+func (r recordingTool) SandboxName() string {
+	if s, ok := r.Tool.(interface{ SandboxName() string }); ok {
+		return s.SandboxName()
+	}
+	return ""
+}
+
 // withBlock puts the flow block in front of the system prompt of a turn.
 func withBlock(block, base string) string {
 	if block == "" {

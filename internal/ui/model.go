@@ -99,6 +99,12 @@ type Options struct {
 	// ShowCost shows the estimated session cost in the status line and the spend
 	// of each agent in the sidebar. Off by default: /cost and /tokens show it on demand.
 	ShowCost bool
+	// SandboxName is the backend that confines bash ("sandbox-exec", "bwrap",
+	// "none" or "off"). "none" is shown in the header.
+	SandboxName string
+	// SandboxNotice is the one-time transcript line that explains why there is
+	// no sandbox. Empty when there is nothing to say.
+	SandboxNotice string
 	// NewTerminal makes the shell for the terminal column. Nil uses a real
 	// pseudo-terminal running $SHELL.
 	NewTerminal func() term.Terminal
@@ -211,6 +217,7 @@ type Model struct {
 	contexts      map[string]workspace.ContextRow // context of each agent of the active space, by name
 	openTasks     map[string]int                  // open tasks per space, for the sidebar ⚑ badges
 	showCost      bool                            // ui.show_cost: cost in the status line and spend in the sidebar
+	sandbox       string                          // backend that confines bash; "none" is shown in the header
 	ticking       bool                            // the spinner tick chain runs
 	lastPoll      time.Time                       // when the badges were last re-read     // unread counts per "space/agent", for the sidebar badges
 
@@ -285,6 +292,7 @@ func NewModel(o Options) Model {
 		historyPath: o.HistoryPath,
 		ws:          o.Workspace,
 		showCost:    o.ShowCost,
+		sandbox:     o.SandboxName,
 		bridge:      o.Bridge,
 		version:     o.Version,
 		transcripts: map[string][]string{},
@@ -316,6 +324,9 @@ func NewModel(o Options) Model {
 		for _, l := range welcomeLines {
 			m.lines = append(m.lines, styleDim.Render(l))
 		}
+	}
+	if o.SandboxNotice != "" {
+		m.lines = append(m.lines, styleDim.Render(o.SandboxNotice))
 	}
 	m.resize()
 	if o.Layout != nil && o.Layout.TerminalVisible {

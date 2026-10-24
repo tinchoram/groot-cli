@@ -37,6 +37,7 @@ type Config struct {
 	Feedback     FeedbackConfig   `yaml:"feedback"`
 	Models       ModelsConfig     `yaml:"models"`
 	UI           UIConfig         `yaml:"ui"`
+	Bash         BashConfig       `yaml:"bash"`
 }
 
 // FeedbackConfig shapes how debug answers reports. By default it records them
@@ -147,6 +148,7 @@ func Default() Config {
 		Audit:      PathConfig{Path: ".groot/audit.jsonl"},
 		Gate:       GateConfig{Policy: "interactive"},
 		Work:       WorkConfig{MaxTurns: 50, MaxAutoTurns: 10, MaxUSD: 5.0, AlwaysAsk: DefaultAlwaysAsk()},
+		Bash:       BashConfig{Sandbox: SandboxConfig{Mode: "auto"}},
 		Flow: FlowConfig{Mode: "strict", Delegation: "auto", Manager: "project-manager", Routes: FlowRoutes{
 			Small:  FlowRoute{Model: "claude-haiku-5-5"},
 			Medium: FlowRoute{Model: "claude-sonnet-5-5"},
@@ -199,6 +201,9 @@ func (c Config) Validate() error {
 		if strings.TrimSpace(model) == "" || window <= 0 {
 			return fmt.Errorf("models.context_window: %q needs a positive token count, got %d", model, window)
 		}
+	}
+	if err := validateBash(c.Bash); err != nil {
+		return err
 	}
 	if c.Provider.Name != "anthropic" {
 		return fmt.Errorf("provider.name %q is not supported (MVP supports: anthropic)", c.Provider.Name)

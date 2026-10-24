@@ -291,17 +291,25 @@ func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
 	req := gate.Request{Tool: use.Name, Input: input, Risk: risk, Detail: detail}
 	decision := a.gate().Decide(ctx, req)
 	if decision == gate.Deny {
-		a.audit(use.Name, risk, decision, input, true, 0)
+		a.audit(use.Name, risk, decision, input, true, 0, "")
 		return api.Block{Type: api.BlockToolResult, ToolUseID: use.ID, Content: a.denial(req), IsError: true}
 	}
 
 	start := time.Now()
 	out, isErr := t.Execute(ctx, input)
-	a.audit(use.Name, risk, decision, input, isErr, time.Since(start))
+	a.audit(use.Name, risk, decision, input, isErr, time.Since(start), sandboxOf(t))
 	return api.Block{Type: api.BlockToolResult, ToolUseID: use.ID, Content: out, IsError: isErr}
 }
 
-func (a *Agent) audit(name string, risk tool.Risk, decision gate.Decision, input string, isErr bool, d time.Duration) {
+// sandboxOf returns the sandbox backend of a tool that runs processes, or "".
+func sandboxOf(t tool.Tool) string {
+	if s, ok := t.(interface{ SandboxName() string }); ok {
+		return s.SandboxName()
+	}
+	return ""
+}
+
+func (a *Agent) audit(name string, risk tool.Risk, decision gate.Decision, input string, isErr bool, d time.Duration, sandbox string) {
 	if a.Audit == nil {
 		return
 	}
@@ -314,6 +322,7 @@ func (a *Agent) audit(name string, risk tool.Risk, decision gate.Decision, input
 		InputPreview: input,
 		IsError:      isErr,
 		DurationMS:   d.Milliseconds(),
+		Sandbox:      sandbox,
 	})
 	a.warn(err)
 }

@@ -252,10 +252,14 @@ func (w *Workspace) newTool(name, root string, mem memory.Store, msg tool.Messen
 		}
 		return trackedTool{Tool: tool.NewWriteFile(root), log: files}, nil
 	case "bash":
+		b := tool.NewBash(root)
+		b.Runner = w.opts.Sandbox
+		b.Network = w.opts.Config.Bash.Sandbox.Network
+		b.ExtraWritable = w.opts.Config.Bash.Sandbox.ExtraWritable
 		if ctl == nil {
-			return tool.NewBash(root), nil
+			return b, nil
 		}
-		return recordingTool{Tool: tool.NewBash(root), ctl: ctl}, nil
+		return recordingTool{Tool: b, ctl: ctl}, nil
 	case "kubectl":
 		return tool.NewKubectl("kubectl", w.opts.Config.Kubectl.Namespaces), nil
 	case "remember":

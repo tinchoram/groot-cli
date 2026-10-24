@@ -5,6 +5,19 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.5.0-dev (unreleased)
 
+### Sandbox
+- Every `bash` command runs inside an OS sandbox: `sandbox-exec` on macOS, `bwrap`
+  on Linux. It can write only the space directory, the temp directories and
+  `bash.sandbox.extra_writable`; it cannot read or write the credential paths
+  `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.groot`, `~/.kube`, `~/.netrc`, `~/.docker`,
+  `~/.config/gh`, `~/.config/gcloud` and `~/.azure`, nor write `<space>/.groot`; and it has no network
+  unless `bash.sandbox.network: true`.
+- `bash.sandbox.mode`: `auto` (default; without a backend, commands run unrestricted
+  with a notice and `sandbox: none` in the header), `strict` (refuse without a
+  backend, naming what to install) or `off`. The scalar form `sandbox: strict` works too.
+- The audit record of a bash call carries `sandbox: <backend>`.
+- The kubectl tool and the terminal column run outside the sandbox; see the README.
+
 ## 0.4.0 — 2026-10-24
 
 ### Delegation

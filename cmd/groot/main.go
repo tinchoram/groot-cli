@@ -15,6 +15,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/home"
 	"github.com/tinchoram/groot-cli/internal/provider"
+	"github.com/tinchoram/groot-cli/internal/sandbox"
 	"github.com/tinchoram/groot-cli/internal/space"
 	"github.com/tinchoram/groot-cli/internal/ui"
 	"github.com/tinchoram/groot-cli/internal/workspace"
@@ -136,10 +137,12 @@ func runApp(cfg config.Config, cfgPath string, getenv func(string) string) error
 	if err != nil {
 		return err
 	}
+	runner, sandboxWarning := sandbox.Detect(sandbox.Config{Mode: cfg.Bash.Sandbox.Mode})
 	ws, err := workspace.New(workspace.Options{
 		Home:       groot,
 		UserHome:   userHome,
 		Version:    version,
+		Sandbox:    runner,
 		Config:     cfg,
 		ConfigPath: cfgPath,
 		Spaces:     spaces,
@@ -187,5 +190,8 @@ func runApp(cfg config.Config, cfgPath string, getenv func(string) string) error
 		HistoryPath: historyPath,
 		ShowWelcome: fresh,
 		ShowCost:    cfg.UI.ShowCost,
+		// The sandbox state is shown in the header; the notice explains it once.
+		SandboxName:   runner.Name(),
+		SandboxNotice: string(sandboxWarning),
 	})
 }
