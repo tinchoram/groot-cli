@@ -3,7 +3,7 @@
 All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
-## 0.4.0-dev (unreleased)
+## 0.4.0 — 2026-10-24
 
 ### Delegation
 - A route's `agent` takes the task over. With `delegation: auto` (the default) the
