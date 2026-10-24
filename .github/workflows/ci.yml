@@ -47,4 +47,4 @@ jobs:
       - name: Sandbox integration (verbose)
         env:
           GROOT_REQUIRE_SANDBOX: "1"
-        run: go test ./internal/sandbox/... -run 'Linux|Secret' -count=1 -v
+        run: go test ./internal/sandbox/... -run 'Bwrap|Secret' -count=1 -v
