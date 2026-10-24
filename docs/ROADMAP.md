@@ -34,13 +34,13 @@ handled by the `debug` agent.
 - `/tasks`: every open task across spaces (done).
 - End-to-end tests against the real API, opt-in with a key (done).
 
-## 0.5.0: safety
+## 0.5.0 (done): safety
 
 - A real sandbox for `bash` (today the gate decides, but the command runs with
   the user's full permissions) (done).
 - Prompt-injection guard for `fetch_url` and tool results: external content is
   data, not instructions (done).
-- `/audit` in the UI and export of audit records to an external sink.
+- `/audit` in the UI and export of audit records to an external sink (done).
 
 ## 0.6.0: connectivity
 

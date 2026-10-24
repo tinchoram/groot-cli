@@ -15,7 +15,7 @@ type Command struct {
 
 var knownCommands = map[string]bool{
 	"help": true, "model": true, "compact": true, "tokens": true, "clear": true, "exit": true,
-	"space": true, "agent": true, "inbox": true, "task": true, "tasks": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true,
+	"space": true, "agent": true, "inbox": true, "task": true, "tasks": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true, "audit": true,
 }
 
 // ParseCommand reports whether line is a slash command and splits it into name and argument.
@@ -76,6 +76,13 @@ var helpEntries = []helpEntry{
 	{"/task fail <reason>", "fail the task, with the reason"},
 	{"/tasks [space]", "open tasks of every space, or of one space"},
 	{"/tasks all", "also the done and failed tasks of the last 7 days"},
+	{"/audit [n]", "last audit records of the active space (20 by default)"},
+	{"/audit denied|guard|errors", "only denied calls, calls with guard findings, or failed calls"},
+	{"/audit tool <name> | agent <name>", "only one tool, or the calls of one agent"},
+	{"/audit since <2h|1d|time>", "only records from that time on (until <time> ends it)"},
+	{"/audit find <text>", "records whose input preview contains the text"},
+	{"/audit all [filters]", "the same across every space, with a SPACE column"},
+	{"/audit stats [filters]", "counts by decision and risk, and the export sinks"},
 	{"/work [on|off]", "show, turn on or turn off work mode"},
 	{"/work on", "turn work mode on"},
 	{"/work off", "turn work mode off"},

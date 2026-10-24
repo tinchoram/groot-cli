@@ -41,7 +41,7 @@ func TestAuditPathFor(t *testing.T) {
 func TestStoresForUsesConfiguredPaths(t *testing.T) {
 	f := newFixture(t)
 	f.ws.opts.Config.Memory = config.PathConfig{Path: "data/memory.db"}
-	f.ws.opts.Config.Audit = config.PathConfig{Path: "logs/audit.jsonl"}
+	f.ws.opts.Config.Audit = config.AuditConfig{Path: "logs/audit.jsonl"}
 
 	if _, err := f.ws.storesFor(f.dir); err != nil {
 		t.Fatalf("storesFor: %v", err)

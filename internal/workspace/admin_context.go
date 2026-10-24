@@ -1,6 +1,15 @@
 package workspace
 
-import "context"
+import (
+	"context"
+
+	"github.com/tinchoram/groot-cli/internal/audit"
+)
+
+// AuditReport lets the administrator agent read the audit records of a space.
+func (a adminManager) AuditReport(ctx context.Context, space string, q audit.Query) (string, error) {
+	return a.w.AuditReport(ctx, space, q)
+}
 
 // ContextReport and SetContextWindow let the administrator agent read the
 // context table and set model windows through the admin manager.

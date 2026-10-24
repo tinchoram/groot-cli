@@ -44,7 +44,9 @@ const (
 // must not run twice at once; the UI serializes prompts. The lock is never held
 // across a provider call, so readers are not blocked by a slow model.
 type Agent struct {
-	Name      string
+	Name string
+	// Space is the space the agent works in; the audit records carry it.
+	Space     string
 	Provider  provider.Provider
 	Tools     *tool.Registry
 	Gate      gate.Gate
@@ -363,6 +365,8 @@ func (a *Agent) audit(name string, risk tool.Risk, decision gate.Decision, input
 	}
 	err := a.Audit.Write(audit.Record{
 		Time:         time.Now().UTC(),
+		Space:        a.Space,
+		Agent:        a.Name,
 		Session:      a.SessionID(),
 		Tool:         name,
 		Risk:         risk.String(),

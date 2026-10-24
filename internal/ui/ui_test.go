@@ -137,6 +137,7 @@ type fakeWorkspace struct {
 	modelErr      error
 	modelWarn     string
 	checkErr      error
+	audit         auditFake // the audit records and sink warnings of the /audit tests
 	// defaultModel is the configured default; defaultSet records --default.
 	defaultModel string
 	defaultSet   string

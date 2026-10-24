@@ -30,7 +30,8 @@ under `internal/`:
 | `config` | `groot.yaml` schema, defaults, `${VAR}` expansion, system prompt composition, `AGENTS.md`. |
 
 Supporting packages: `api` (provider-neutral messages and blocks), `audit` (JSONL
-log of tool calls), `catalog` (agent definitions on disk), `compact` (history
+log of tool calls; `reader.go` filters it from the end of the file and `Summarize`
+counts it), `catalog` (agent definitions on disk), `compact` (history
 strategies), `messaging`, `admintool`, `agentimport`, `clipboard`.
 
 ## Ports and adapters
@@ -125,7 +126,9 @@ Per space, `<space>/.groot/`, at the paths set by `memory.path` and `audit.path`
   - `tasks`, `task_evidence`: ODD flow tasks and their evidence. A handed-over task keeps its delegation record (`delegate`, `manager`, `delegation_status`), and a task taken over keeps its origin (`parent_space`, `parent_agent`, `parent_task`); `migrate` adds these columns to older databases.
   - The spend ledger is `sessions.cost_usd`, written after every model answer;
     budgets sum it (`memory.SpendUSD`, `SpendByAgent`; checks in `internal/workspace/budget.go`).
-- `audit.jsonl`: one JSON line per tool call.
+- `audit.jsonl`: one JSON line per tool call. `audit.Fanout` (`sink.go`) copies each record
+  to the sinks of `audit.sinks` (`sink_file.go`, `sink_http.go`, `sink_syslog.go`) through
+  bounded queues; the workspace owns the fanout and flushes it on close (`internal/workspace/audit.go`).
 - Open tasks across spaces (`/tasks`, `list_tasks`, sidebar `⚑ N`): `workspace.ListTasks` reads each space's `tasks` through `memory.SQLite.TaskSummaries`, with the directory guard of `internal/workspace/context.go` (`internal/workspace/tasks.go`).
 
 Relative `memory.path` and `audit.path` values resolve against the space

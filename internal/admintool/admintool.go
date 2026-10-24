@@ -14,6 +14,7 @@ import (
 
 	"github.com/tinchoram/groot-cli/internal/agentimport"
 	"github.com/tinchoram/groot-cli/internal/api"
+	"github.com/tinchoram/groot-cli/internal/audit"
 	"github.com/tinchoram/groot-cli/internal/provider"
 	"github.com/tinchoram/groot-cli/internal/tool"
 )
@@ -104,6 +105,9 @@ type Manager interface {
 	// EditAgentTools adds and removes tools of an agent. The managed agents keep
 	// their required tools.
 	EditAgentTools(name string, add, remove []string) error
+	// AuditReport is the audit records of a space that match q, as text; empty
+	// means the active space.
+	AuditReport(ctx context.Context, space string, q audit.Query) (string, error)
 	// TaskReport is the open tasks of a space, or of every space when empty, as
 	// text; includeClosed adds the done and failed tasks of the last seven days.
 	TaskReport(ctx context.Context, space string, includeClosed bool) (string, error)
@@ -140,6 +144,7 @@ func All(m Manager, home string) []tool.Tool {
 		NewGetContext(m),
 		NewGetCost(m),
 		NewListTasks(m),
+		NewAuditQuery(m),
 		NewSetContextWindow(m),
 		NewGrantTool(m),
 		NewRevokeTool(m),

@@ -124,6 +124,7 @@ directory, Groot adds it to the system prompt under "Project context".
 | `ui.show_cost` | `false` | Show the estimated session cost in the status line and the spend of each agent in the sidebar. `/cost` and `/tokens` show it either way |
 | `memory.path` | `.groot/groot.db` | SQLite database. A relative path is under each space's directory; an absolute path is shared by all spaces |
 | `audit.path` | `.groot/audit.jsonl` | Audit log. Same rules as `memory.path` |
+| `audit.sinks` | empty | Export sinks: `file`, `http` or `syslog`. See Audit |
 | `gate.policy` | `interactive` | `interactive`, `readonly` or `auto` |
 | `kubectl.namespaces` | empty (any) | Namespace allowlist |
 | `system_prompt` | built in | Replaces the base SRE prompt |
@@ -162,9 +163,60 @@ Never put API keys in `groot.yaml`. The key comes from `ANTHROPIC_API_KEY`, expo
   bash, 64 KB for reads and kubectl).
 - **Redaction.** Obvious secrets (`password=`, `token:`, `api_key=`, `Bearer`)
   are masked in tool output, previews and the audit log.
-- **Audit.** One JSON line per tool call: time, session, tool, risk, decision,
-  a redacted 200-character input preview, error flag and duration. A bash call
-  also records the sandbox backend that confined it (`sandbox`).
+- **Audit.** Every tool call is logged in a JSON line, readable with `/audit` and
+  optionally exported to a file, an HTTP collector or syslog. See [Audit](#audit).
+
+### Audit
+
+Each space writes one JSON line per tool call to its audit log (`audit.path`, by
+default `<space>/.groot/audit.jsonl`). The local file is the source of truth: it
+is written before the call returns.
+
+Each line has `ts`, `space`, `agent`, `session`, `tool`, `risk`, `decision`
+(`allow` or `deny`), `input_preview` (redacted, 200 characters), `is_error` and
+`duration_ms`. A bash call also has `sandbox`, and a call whose result had
+guard findings has `guard` (the kinds found).
+
+```
+/audit                          the last 20 records of the active space
+/audit denied since 1d tool bash
+/audit guard   /audit errors   /audit agent developer   /audit find "rm -rf"
+/audit all errors               every space, with a SPACE column
+/audit stats                    counts by decision and risk, and the export sinks
+```
+
+Filters combine, and a bare number sets the count (at most 200). The flags are
+`⚠` guard findings, `⛔` denied, `✗` error and `∅` no sandbox. The administrator
+agent reads the same table with the `audit_query` tool.
+
+Export is optional. Configure sinks under `audit.sinks`:
+
+```yaml
+audit:
+  path: .groot/audit.jsonl
+  sinks:
+    - type: file                  # append JSON lines to another file
+      path: ~/groot-audit/all.jsonl
+    - type: http                  # POST JSON Lines batches
+      url: https://collector.example/ingest
+      headers: {Authorization: "Bearer ${AUDIT_TOKEN}"}   # AUDIT_TOKEN is read from the environment, never stored
+      batch: 50
+      flush_seconds: 5
+    - type: syslog                # local syslog, unix only
+      tag: groot
+```
+
+- The sink receives the same fields as the local file. It does not receive tool
+  output, prompts or model answers, and the API key never appears in the log.
+- A sink works in the background. Each has a queue of 1000 records; when the
+  queue is full, records are dropped and counted, and a tool call never waits
+  for a sink or fails because of one.
+- The http sink retries a batch 3 times with backoff, then drops it and counts it.
+- After 3 failures a sink shows one warning in the console, and its counters
+  appear in `/audit stats`.
+- Header values are expanded from the environment when groot starts. They are
+  not written to the audit log, to errors or to `/audit`.
+- Quitting flushes the sinks for at most 3 seconds.
 
 ### Sandbox
 
@@ -430,6 +482,7 @@ while a long paste is collapsed, and when the sidebar or the terminal has focus.
 /cost                            session cost, spend and budgets (see Budgets)
 /context [all|window <model> <tokens>]  context fill per agent (see Context)
 /tasks [space] [all]             open tasks across spaces; all adds done and failed of the last 7 days (see ODD flow)
+/audit [n|all|stats] [filters]   the audit records of the active space, or of all spaces (see Audit)
 /agent list                      list the catalog (✓ = assigned to the active space)
 /agent new <name> [description]  create agents/<name>.md with a starter prompt
 /agent import <path-or-url> [--force]  import an agent file (see below)

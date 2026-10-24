@@ -88,6 +88,10 @@ func (w *Workspace) shutdown(ctx context.Context, graceful bool) error {
 	}
 	wg.Wait()
 
+	// The export sinks get the last records before the logs close; the flush is
+	// capped, so quitting never waits on a dead collector.
+	note(w.closeSinks())
+
 	for _, s := range stores {
 		if s.aud != nil {
 			note(s.aud.Close())

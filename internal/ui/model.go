@@ -16,6 +16,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/tinchoram/groot-cli/internal/audit"
 	"github.com/tinchoram/groot-cli/internal/clipboard"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
@@ -68,6 +69,13 @@ type Workspace interface {
 	ConfigFile() string
 	AgentTools(name string) ([]string, error)
 	EditAgentTools(name string, add, remove []string) error
+	// AuditRecords, Audit and AuditAll read the audit log: one space (the active
+	// one when the name is empty) or every space; Audit and AuditAll add stats.
+	AuditRecords(ctx context.Context, name string, q audit.Query) ([]audit.Record, error)
+	Audit(ctx context.Context, name string, q audit.Query) ([]audit.Record, audit.Stats, error)
+	AuditAll(ctx context.Context, q audit.Query) ([]audit.Record, audit.Stats, error)
+	// SinkWarnings returns the export sink warnings raised since the last call.
+	SinkWarnings() []string
 	Close(ctx context.Context) error
 	CloseFast() error
 	// Spend reads the spend of every space and of the agents of the active one.
@@ -760,6 +768,8 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		m.runTaskCommand(cmd.Arg)
 	case "tasks":
 		m.runTasksCommand(cmd.Arg)
+	case "audit":
+		m.runAuditCommand(cmd.Arg)
 	case "exit":
 		return m.quit()
 	}

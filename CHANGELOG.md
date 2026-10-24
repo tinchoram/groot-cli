@@ -5,6 +5,23 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.5.0-dev (unreleased)
 
+### Audit
+- `/audit` shows the last records of the active space as a table: time, agent,
+  tool, risk, decision, duration and flags (`⚠` guard, `⛔` denied, `✗` error,
+  `∅` no sandbox). Filters combine: a count, `denied`, `guard`, `errors`, `tool`,
+  `agent`, `risk`, `decision`, `since`/`until` (`2h`, `1d` or a time), `find`, and
+  `all` for every space. `/audit stats` prints the counts and the export sinks.
+- The audit reader walks the file from the end, so a small limit on a large log
+  stays cheap, and it skips malformed lines.
+- The `audit_query` admin tool returns the same table.
+- Records carry `space` and `agent`. The local file keeps its format; the fields
+  are added and omitted when empty.
+- `audit.sinks` exports a copy of each record to a `file`, an `http` collector
+  (JSON Lines batches, 3 retries) or `syslog`. The local file is written first;
+  sinks run asynchronously with a queue of 1000 and never block or fail a tool call.
+  Sink failures warn once in the console and are counted in `/audit stats`.
+  Header values come from the environment and are never logged.
+
 ### Prompt-injection guard
 - Output from `fetch_url`, `read_file`, `list_dir`, `glob`, `bash`, `kubectl` and
   `recall`, and message bodies from other agents, are wrapped in an envelope with

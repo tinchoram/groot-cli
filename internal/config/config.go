@@ -28,7 +28,7 @@ type Config struct {
 	MaxTurns     int              `yaml:"max_turns"`
 	Compaction   CompactionConfig `yaml:"compaction"`
 	Memory       PathConfig       `yaml:"memory"`
-	Audit        PathConfig       `yaml:"audit"`
+	Audit        AuditConfig      `yaml:"audit"`
 	Gate         GateConfig       `yaml:"gate"`
 	Kubectl      KubectlConfig    `yaml:"kubectl"`
 	Library      LibraryConfig    `yaml:"library"`
@@ -137,6 +137,55 @@ type PathConfig struct {
 	Path string `yaml:"path"`
 }
 
+// AuditConfig is the local audit log and the sinks that receive a copy of each
+// record. Path is the local JSONL file of each space (the source of truth).
+// Sinks are optional exports; see SinkConfig.
+type AuditConfig struct {
+	Path  string       `yaml:"path"`
+	Sinks []SinkConfig `yaml:"sinks"`
+}
+
+// SinkConfig is one export sink. Type is file, http or syslog. File uses Path;
+// http uses URL, Headers (values may use ${VAR}, expanded at load and never
+// stored or logged), Batch (records per POST, default 50) and FlushSeconds
+// (default 5); syslog uses Tag (default groot).
+type SinkConfig struct {
+	Type         string            `yaml:"type"`
+	Path         string            `yaml:"path"`
+	URL          string            `yaml:"url"`
+	Headers      map[string]string `yaml:"headers"`
+	Batch        int               `yaml:"batch"`
+	FlushSeconds int               `yaml:"flush_seconds"`
+	Tag          string            `yaml:"tag"`
+}
+
+// validateSink checks one sink. Its errors never include header values.
+func validateSink(s SinkConfig) error {
+	switch s.Type {
+	case "file":
+		if strings.TrimSpace(s.Path) == "" {
+			return errors.New("file sink: path is empty")
+		}
+	case "http":
+		if strings.TrimSpace(s.URL) == "" {
+			return errors.New("http sink: needs a url")
+		}
+		if !strings.HasPrefix(s.URL, "https://") && !strings.HasPrefix(s.URL, "http://") {
+			return errors.New("http sink: needs an http(s) url")
+		}
+		if s.Batch < 0 {
+			return errors.New("http sink: batch must not be negative")
+		}
+		if s.FlushSeconds < 0 {
+			return errors.New("http sink: flush_seconds must not be negative")
+		}
+	case "syslog":
+	default:
+		return fmt.Errorf("unknown type %q (use file, http or syslog)", s.Type)
+	}
+	return nil
+}
+
 // GateConfig selects the permission policy.
 type GateConfig struct {
 	Policy string `yaml:"policy"` // interactive | readonly | auto
@@ -155,7 +204,7 @@ func Default() Config {
 		MaxTurns:   20,
 		Compaction: CompactionConfig{Strategy: "none", Keep: 40, Threshold: 60, MaxContextPercent: 80},
 		Memory:     PathConfig{Path: ".groot/groot.db"},
-		Audit:      PathConfig{Path: ".groot/audit.jsonl"},
+		Audit:      AuditConfig{Path: ".groot/audit.jsonl"},
 		Gate:       GateConfig{Policy: "interactive"},
 		Work:       WorkConfig{MaxTurns: 50, MaxAutoTurns: 10, MaxUSD: 5.0, AlwaysAsk: DefaultAlwaysAsk()},
 		Bash:       BashConfig{Sandbox: SandboxConfig{Mode: "auto"}},
@@ -215,6 +264,11 @@ func (c Config) Validate() error {
 	}
 	if err := validateBash(c.Bash); err != nil {
 		return err
+	}
+	for i, s := range c.Audit.Sinks {
+		if err := validateSink(s); err != nil {
+			return fmt.Errorf("audit.sinks[%d]: %w", i, err)
+		}
 	}
 	if c.Provider.Name != "anthropic" {
 		return fmt.Errorf("provider.name %q is not supported (MVP supports: anthropic)", c.Provider.Name)

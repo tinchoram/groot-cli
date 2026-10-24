@@ -150,6 +150,11 @@ type Workspace struct {
 	// modelCache is the provider's model list, reused for modelCacheTTL.
 	modelCache modelCache
 	feedback   *feedback.Store // the backlog of bugs and feature requests about groot
+	// sinks exports a copy of every audit record; sinkMu guards sinkWarns, the
+	// one-time warnings the UI reads.
+	sinks     *audit.Fanout
+	sinkMu    sync.Mutex
+	sinkWarns []string
 }
 
 type spaceStores struct {
@@ -188,7 +193,14 @@ func New(opts Options) (*Workspace, error) {
 		grants:   map[string]*gate.Grants{},
 		feedback: fb,
 	}
+	w.sinks = audit.NewFanout(w.noteSinkWarning)
+	if err := buildSinks(opts.Config.Audit.Sinks, w.sinks); err != nil {
+		_ = w.sinks.Close(context.Background())
+		_ = ib.Close()
+		return nil, err
+	}
 	if err := w.reload(); err != nil {
+		_ = w.sinks.Close(context.Background())
 		_ = ib.Close()
 		return nil, err
 	}
@@ -538,6 +550,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		WindowFor:         w.windowFor,
 		Memory:            st.mem,
 		Audit:             st.aud,
+		Space:             sp.Name,
 		Guard:             g,
 		System:            config.ComposeSystemPrompt(base, preamble, projectCtx),
 		MaxTurns:          maxTurns,
@@ -592,6 +605,7 @@ func (w *Workspace) storesFor(path string) (*spaceStores, error) {
 		_ = mem.Close()
 		return nil, fmt.Errorf("open audit log for %s: %w", path, err)
 	}
+	aud.SetFanout(w.sinks)
 	s := &spaceStores{mem: mem, aud: aud}
 	w.stores[path] = s
 	return s, nil

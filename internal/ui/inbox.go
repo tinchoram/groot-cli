@@ -26,6 +26,7 @@ func (m *Model) refreshUnread() {
 	m.refreshSpend()
 	m.refreshContext()
 	m.refreshTasks()
+	m.showSinkWarnings()
 	counts, err := m.ws.UnreadCounts(context.Background())
 	if err != nil {
 		m.unread = nil
