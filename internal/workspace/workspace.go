@@ -528,17 +528,38 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key)}, nil
 }
 
-// storesFor returns the memory and audit handles of a space, opening them
-// under <space>/.groot on first use. Callers hold w.mu.
+// memoryPathFor resolves memory.path for a space. A relative path is taken
+// from the space directory; an absolute one is used as is.
+func memoryPathFor(spacePath, cfgPath string) string {
+	return spacePathFor(spacePath, cfgPath, ".groot/groot.db")
+}
+
+// auditPathFor resolves audit.path for a space, with the same rules as memoryPathFor.
+func auditPathFor(spacePath, cfgPath string) string {
+	return spacePathFor(spacePath, cfgPath, ".groot/audit.jsonl")
+}
+
+func spacePathFor(spacePath, cfgPath, fallback string) string {
+	if cfgPath == "" {
+		cfgPath = fallback
+	}
+	if filepath.IsAbs(cfgPath) {
+		return cfgPath
+	}
+	return filepath.Join(spacePath, cfgPath)
+}
+
+// storesFor returns the memory and audit handles of a space, opening them at
+// the paths set by memory.path and audit.path on first use. Callers hold w.mu.
 func (w *Workspace) storesFor(path string) (*spaceStores, error) {
 	if s, ok := w.stores[path]; ok {
 		return s, nil
 	}
-	mem, err := memory.OpenSQLite(filepath.Join(path, ".groot", "groot.db"))
+	mem, err := memory.OpenSQLite(memoryPathFor(path, w.opts.Config.Memory.Path))
 	if err != nil {
 		return nil, fmt.Errorf("open memory for %s: %w", path, err)
 	}
-	aud, err := audit.Open(filepath.Join(path, ".groot", "audit.jsonl"))
+	aud, err := audit.Open(auditPathFor(path, w.opts.Config.Audit.Path))
 	if err != nil {
 		_ = mem.Close()
 		return nil, fmt.Errorf("open audit log for %s: %w", path, err)

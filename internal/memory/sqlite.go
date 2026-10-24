@@ -177,7 +177,7 @@ func (s *SQLite) Recall(ctx context.Context, query, agent string, limit int) ([]
 		JOIN memories m ON m.id = memories_fts.rowid
 		WHERE memories_fts MATCH ? AND `+Visible+`
 		ORDER BY memories_fts.rank
-		LIMIT ?`, match, agent, limit)
+		LIMIT ?`, match, agent, agent, limit)
 	if err != nil {
 		return nil, fmt.Errorf("recall: %w", err)
 	}
@@ -194,7 +194,7 @@ func (s *SQLite) Preamble(ctx context.Context, agent string, limit int) (string,
 		FROM memories m
 		WHERE `+Visible+`
 		ORDER BY m.id DESC
-		LIMIT ?`, agent, limit)
+		LIMIT ?`, agent, agent, limit)
 	if err != nil {
 		return "", fmt.Errorf("preamble: %w", err)
 	}

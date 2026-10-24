@@ -121,7 +121,8 @@ func (NoMemory) SessionTimes(context.Context, string) ([]time.Time, error) { ret
 func (NoMemory) MarkCleared(context.Context, string) error { return nil }
 
 // Visible is the SQL condition that selects the entries an agent may read:
-// global entries, project entries written by that agent, and project rows
-// without an agent (written before per-agent memory existed). Project entries
-// of other agents stay private. Parameters: agent.
-const Visible = "(m.scope = 'global' OR (m.scope = 'project' AND (m.agent = ? OR m.agent = '')))"
+// global entries; project entries written by that agent, plus project rows
+// without an agent (written before per-agent memory existed); and agent entries
+// written for that agent. Entries of other agents stay private, and an empty
+// agent name matches no agent-scoped entry. Parameters: agent, agent.
+const Visible = "(m.scope = 'global' OR (m.scope = 'project' AND (m.agent = ? OR m.agent = '')) OR (m.scope = 'agent' AND m.agent <> '' AND m.agent = ?))"

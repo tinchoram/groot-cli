@@ -196,3 +196,37 @@ func TestAgentsOnlySeeTheirOwnProjectFacts(t *testing.T) {
 		t.Fatalf("preamble for reviewer wrong:\n%s", pre)
 	}
 }
+
+func TestAgentScopedEntriesAreVisibleOnlyToTheirAgent(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	if err := s.Remember(ctx, Entry{Kind: KindRunbook, Scope: ScopeAgent, Agent: "a", Text: "agent a runbook about quota"}); err != nil {
+		t.Fatalf("Remember: %v", err)
+	}
+
+	got, err := s.Recall(ctx, "quota", "a", 10)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("agent a must recall its own agent-scoped entry, got %d (err %v)", len(got), err)
+	}
+	if got[0].Scope != ScopeAgent || got[0].Agent != "a" {
+		t.Fatalf("scope/agent not persisted: %+v", got[0])
+	}
+
+	pre, err := s.Preamble(ctx, "a", 10)
+	if err != nil || !strings.Contains(pre, "agent a runbook about quota") {
+		t.Fatalf("agent a preamble must include its agent-scoped entry (err %v):\n%s", err, pre)
+	}
+
+	other, err := s.Recall(ctx, "quota", "b", 10)
+	if err != nil || len(other) != 0 {
+		t.Fatalf("agent b must not recall agent a's entry, got %d (err %v)", len(other), err)
+	}
+	pre, err = s.Preamble(ctx, "b", 10)
+	if err != nil || strings.Contains(pre, "quota") {
+		t.Fatalf("agent b preamble must not include agent a's entry (err %v):\n%s", err, pre)
+	}
+	anon, err := s.Preamble(ctx, "", 10)
+	if err != nil || strings.Contains(pre, "quota") || strings.Contains(anon, "quota") {
+		t.Fatalf("an empty agent must not see agent-scoped entries (err %v):\n%s", err, anon)
+	}
+}

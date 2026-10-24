@@ -65,6 +65,9 @@ Otherwise return a `tool_result` marked `denied by user`. Persist every message,
 and audit every call. Repeat until the model stops asking for tools or
 `max_turns` is reached.
 
+The package map, the per-turn wiring, the gate chain and the storage layout are
+in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Setup
 
 Requirements: Go 1.26 (the toolchain downloads automatically with
@@ -116,8 +119,8 @@ directory, Groot adds it to the system prompt under "Project context".
 | `provider.model` | `claude-sonnet-5-5` | Model id |
 | `max_turns` | `20` | Model calls allowed per request |
 | `compaction.strategy` | `none` | `none`, `window` (keep N) or `summarize` |
-| `memory.path` | `.groot/groot.db` | SQLite database |
-| `audit.path` | `.groot/audit.jsonl` | Audit log |
+| `memory.path` | `.groot/groot.db` | SQLite database. A relative path is under each space's directory; an absolute path is shared by all spaces |
+| `audit.path` | `.groot/audit.jsonl` | Audit log. Same rules as `memory.path` |
 | `gate.policy` | `interactive` | `interactive`, `readonly` or `auto` |
 | `kubectl.namespaces` | empty (any) | Namespace allowlist |
 | `system_prompt` | built in | Replaces the base SRE prompt |
@@ -184,15 +187,14 @@ Since 0.2.0 groot works in **spaces**, and inside a space you talk to **agents**
 
 - **Space**: a named working directory (`name`, absolute `path`) with the list of
   agents assigned to it. Tools run inside the space path: file tools are confined
-  to it and `bash` starts there. Each space keeps its own memory and audit log in
-  `<path>/.groot/`.
+  to it and `bash` starts there. By default each space keeps its memory and audit
+  log in `<path>/.groot/` (see [Memory](#memory)).
 - **Agent**: a reusable definition in the global catalog: a name, a description,
   an optional model, a tool subset, an optional turn limit, and a system prompt.
   Each (space, agent) pair runs its own conversation with its own history, and
   each conversation writes its own session row.
-- **Memory**: facts saved with `remember` are visible to the agent that saved
-  them, and to every agent when they are global. One agent's project facts stay
-  private to it, even in a shared space.
+- **Memory**: each agent's long-term memory, with scopes that decide who sees
+  what. See [Memory](#memory).
 - **Summary on exit**: when groot quits, every conversation that exchanged
   messages writes a three-line summary to its space's memory.
 
@@ -563,10 +565,38 @@ a task opens or until a new user request starts without one.
 The flow shapes the agent's work and records what it did. It is not a sandbox.
 The permission gate still decides every call that the flow allows.
 
+## Memory
+
+Agents keep long-term memory in their space's database. Two tools use it:
+
+- `remember` saves an entry. `kind` is `fact`, `decision` or `runbook`. `scope`
+  is `project` when omitted, or `global` or `agent`. The `session_summary` kind
+  is reserved for the summary written on exit, so `remember` refuses it.
+- `recall` searches the entries the agent can see. It is a full-text search over
+  the entry text (SQLite FTS5): every word of the query must appear. It returns
+  10 entries by default, at most 50.
+
+Who sees what:
+
+| Scope | Visible to |
+|---|---|
+| `global` | every agent |
+| `project` | the agent that wrote it, and project entries with no agent (written before per-agent memory) |
+| `agent` | only the agent that wrote it |
+
+The 10 newest visible entries are added to the system prompt under "Long-term
+memory", once per conversation, when the conversation is created. Entries saved
+later are found by `recall` and appear in the prompt of the next conversation.
+
+The database path is set by `memory.path` (default `.groot/groot.db`). A relative
+path is taken from the space directory, so each space has its own memory. An
+absolute path is shared by every space that uses it. `audit.path` works the same
+way for the audit log.
+
 ## Sessions and history
 
-Each conversation is one session stored in its space's database at
-`<space>/.groot/groot.db`: every message, tool call and the three-line summary
+Each conversation is one session stored in its space's database (`memory.path`,
+by default `<space>/.groot/groot.db`): every message, tool call and the three-line summary
 written when the session ends. Sessions are per agent in a space.
 
 - Selecting an agent resumes its latest session. The session id stays the same,
@@ -745,3 +775,7 @@ fetch:
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). Phase 2 covers more providers, MCP with
 an allowlist, subagents, embeddings and observability tools.
+
+## License
+
+MIT, see LICENSE.
