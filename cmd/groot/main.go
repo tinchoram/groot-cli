@@ -186,5 +186,6 @@ func runApp(cfg config.Config, cfgPath string, getenv func(string) string) error
 		History:     ui.NewHistory(entries, ui.HistoryCap),
 		HistoryPath: historyPath,
 		ShowWelcome: fresh,
+		ShowCost:    cfg.UI.ShowCost,
 	})
 }

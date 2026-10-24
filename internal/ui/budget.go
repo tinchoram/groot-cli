@@ -41,13 +41,28 @@ func spendBadge(spent, budget float64) string {
 // spaceSpendBadge is the spend badge of a space in the sidebar.
 func (m Model) spaceSpendBadge(space string) string {
 	mo := m.spend.Spaces[space]
-	return spendBadge(mo.Spent, mo.Budget)
+	return m.spendBadgeFor(mo)
 }
 
 // agentSpendBadge is the spend badge of an agent of the active space.
 func (m Model) agentSpendBadge(agent string) string {
 	mo := m.spend.Agents[agent]
+	return m.spendBadgeFor(mo)
+}
+
+// spendBadgeFor shows spend only with a budget set, unless ui.show_cost asks for
+// the spend of every agent and space.
+func (m Model) spendBadgeFor(mo workspace.Money) string {
+	if mo.Budget <= 0 && !m.showCost {
+		return ""
+	}
 	return spendBadge(mo.Spent, mo.Budget)
+}
+
+// costBlock is /cost: the session's estimated cost, then the spend and budgets of
+// the active space and its agents.
+func (m Model) costBlock() string {
+	return styleDim.Render(fmt.Sprintf("session cost $%.4f", m.session.CostUSD())) + "\n" + m.budgetBlock()
 }
 
 // refreshSpend re-reads the spend behind the sidebar badges and /budget.

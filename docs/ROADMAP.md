@@ -30,6 +30,7 @@ handled by the `debug` agent.
 - Routes and models per space (today they are global) (done).
 - Budgets per space and per agent (`budget_usd`), spend shown in the sidebar,
   stop before overrun (done).
+- Context gauge per agent, token-based compaction, overflow recovery (done).
 - `/tasks`: every open task across spaces.
 - End-to-end tests against the real API, opt-in with a key.
 

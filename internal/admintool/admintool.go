@@ -88,6 +88,14 @@ type Manager interface {
 	SetSpaceBudget(space string, usd float64) error
 	// SetAgentBudget sets the budget of an agent; 0 clears it.
 	SetAgentBudget(agent string, usd float64) error
+	// ContextReport is the context table of a space as text; empty means the
+	// active space.
+	ContextReport(ctx context.Context, space string) (string, error)
+	// CostReport is the spend of a space and of its agents as text, with the
+	// budgets; empty means the active space.
+	CostReport(ctx context.Context, space string) (string, error)
+	// SetContextWindow saves the context window of a model or model prefix.
+	SetContextWindow(model string, tokens int) error
 	// AgentTools lists the tools of an agent.
 	AgentTools(name string) ([]string, error)
 	// EditAgentTools adds and removes tools of an agent. The managed agents keep
@@ -122,6 +130,9 @@ func All(m Manager, home string) []tool.Tool {
 		NewSetSpaceModel(m),
 		NewSetSpaceBudget(m),
 		NewSetAgentBudget(m),
+		NewGetContext(m),
+		NewGetCost(m),
+		NewSetContextWindow(m),
 		NewGrantTool(m),
 		NewRevokeTool(m),
 		NewSetDefaultModel(m),

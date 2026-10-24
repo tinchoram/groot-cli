@@ -44,7 +44,8 @@ func (m Model) workOnText() string {
 // warningLine is the transcript text of a warning. Work mode announcements keep
 // their own wording; everything else is a warning.
 func warningLine(text string) string {
-	if strings.HasPrefix(text, "work mode") || strings.HasPrefix(text, "⟶") {
+	// The overflow notice reads as a plain transcript line, not a warning.
+	if strings.HasPrefix(text, "work mode") || strings.HasPrefix(text, "⟶") || strings.HasPrefix(text, "context overflow:") {
 		return text
 	}
 	return "warning: " + text

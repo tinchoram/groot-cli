@@ -23,6 +23,7 @@ var styleInboxBadge = lipgloss.NewStyle().Foreground(lipgloss.Color(colorTan))
 // behind the budget badges is re-read at the same points.
 func (m *Model) refreshUnread() {
 	m.refreshSpend()
+	m.refreshContext()
 	counts, err := m.ws.UnreadCounts(context.Background())
 	if err != nil {
 		m.unread = nil

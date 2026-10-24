@@ -177,7 +177,7 @@ var adminChanges = map[string]bool{
 	"create_space": true, "assign_agent": true, "unassign_agent": true,
 	"create_agent": true, "import_agent": true, "install_agent": true,
 	"upgrade_agent": true, "set_work_mode": true, "set_agent_model": true,
-	"set_space_route": true, "set_space_model": true, "set_space_budget": true, "set_agent_budget": true,
+	"set_space_route": true, "set_space_model": true, "set_space_budget": true, "set_agent_budget": true, "set_context_window": true,
 	"grant_tool": true, "revoke_tool": true, "set_default_model": true,
 }
 

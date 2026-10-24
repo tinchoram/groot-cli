@@ -35,6 +35,8 @@ type Config struct {
 	Work         WorkConfig       `yaml:"work"`
 	Fetch        FetchConfig      `yaml:"fetch"`
 	Feedback     FeedbackConfig   `yaml:"feedback"`
+	Models       ModelsConfig     `yaml:"models"`
+	UI           UIConfig         `yaml:"ui"`
 }
 
 // FeedbackConfig shapes how debug answers reports. By default it records them
@@ -90,11 +92,27 @@ type ProviderConfig struct {
 	Model string `yaml:"model"`
 }
 
-// CompactionConfig selects the history compaction strategy.
+// CompactionConfig selects the history compaction strategy. MaxContextPercent
+// compacts once the last known context fills that share of the window; zero
+// turns the token trigger off.
 type CompactionConfig struct {
-	Strategy  string `yaml:"strategy"` // none | window | summarize
-	Keep      int    `yaml:"keep"`
-	Threshold int    `yaml:"threshold"`
+	Strategy          string `yaml:"strategy"` // none | window | summarize
+	Keep              int    `yaml:"keep"`
+	Threshold         int    `yaml:"threshold"`
+	MaxContextPercent int    `yaml:"max_context_percent"`
+}
+
+// UIConfig shapes what the console shows. ShowCost adds the estimated session
+// cost to the status line and the spend of each agent to the sidebar; it is
+// off by default, and /cost and /tokens show the cost on demand.
+type UIConfig struct {
+	ShowCost bool `yaml:"show_cost"`
+}
+
+// ModelsConfig holds per-model settings. ContextWindow maps a model id or a
+// prefix of it to its context window in tokens; it overrides the built-in table.
+type ModelsConfig struct {
+	ContextWindow map[string]int `yaml:"context_window"`
 }
 
 // PathConfig holds a file path.
@@ -118,7 +136,7 @@ func Default() Config {
 	return Config{
 		Provider:   ProviderConfig{Name: "anthropic"},
 		MaxTurns:   20,
-		Compaction: CompactionConfig{Strategy: "none", Keep: 40, Threshold: 60},
+		Compaction: CompactionConfig{Strategy: "none", Keep: 40, Threshold: 60, MaxContextPercent: 80},
 		Memory:     PathConfig{Path: ".groot/groot.db"},
 		Audit:      PathConfig{Path: ".groot/audit.jsonl"},
 		Gate:       GateConfig{Policy: "interactive"},
@@ -168,6 +186,14 @@ func dropEmpty(in []string) []string {
 
 // Validate checks enumerated fields and numeric bounds.
 func (c Config) Validate() error {
+	if c.Compaction.MaxContextPercent < 0 || c.Compaction.MaxContextPercent > 100 {
+		return fmt.Errorf("compaction.max_context_percent must be between 0 and 100, got %d", c.Compaction.MaxContextPercent)
+	}
+	for model, window := range c.Models.ContextWindow {
+		if strings.TrimSpace(model) == "" || window <= 0 {
+			return fmt.Errorf("models.context_window: %q needs a positive token count, got %d", model, window)
+		}
+	}
 	if c.Provider.Name != "anthropic" {
 		return fmt.Errorf("provider.name %q is not supported (MVP supports: anthropic)", c.Provider.Name)
 	}

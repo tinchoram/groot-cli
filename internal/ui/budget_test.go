@@ -72,7 +72,7 @@ func TestSidebarShowsSpendNextToSpaceAndAgent(t *testing.T) {
 	}
 	m.spend = ws.spend
 	out := stripANSI(strings.Join(m.sidebarLines(40, false), "\n"))
-	for _, want := range []string{active.Name + " $1.30", agent + " $0.90/$2.00"} {
+	for _, want := range []string{agent + " $0.90/$2.00"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("sidebar lacks %q:\n%s", want, out)
 		}

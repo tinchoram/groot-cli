@@ -38,6 +38,9 @@ type fakeSession struct {
 	review    string
 	accepted  []string
 	rejected  []string
+	// ctxTokens and window answer ContextTokens and ContextWindow.
+	ctxTokens int64
+	window    int
 }
 
 func (f *fakeSession) Task() (flow.Task, bool) {
@@ -138,8 +141,14 @@ type fakeWorkspace struct {
 	spend     workspace.SpendView
 	budgetSet map[string]float64
 	budgetErr error
-	inbox     []inbox.Message
-	handSent  []string
+	// contexts answers Contexts; contextAll records the all flag of each call;
+	// windowSet records SetContextWindow.
+	contexts   []workspace.ContextRow
+	contextAll []bool
+	windowSet  map[string]int
+	windowErr  error
+	inbox      []inbox.Message
+	handSent   []string
 	// flow is what SpaceFlow reports; flowErr makes it fail.
 	flow    workspace.FlowView
 	flowErr error
@@ -640,6 +649,7 @@ func TestSlashTokensShowsUsageAndCost(t *testing.T) {
 func TestIdleStatusLineShowsModelAndUsage(t *testing.T) {
 	chat := &fakeSession{model: "claude-sonnet-5-5", usage: api.Usage{InputTokens: 1234, OutputTokens: 56}, cost: 0.0012}
 	m, _ := newTestModel(t, chat)
+	m.showCost = true // ui.show_cost: the cost is hidden by default
 	for _, want := range []string{"claude-sonnet-5-5", "1,234 in", "56 out", "~$0.0012"} {
 		if !strings.Contains(m.View(), want) {
 			t.Errorf("status line missing %q:\n%s", want, m.View())

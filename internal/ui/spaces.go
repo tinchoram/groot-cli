@@ -542,7 +542,7 @@ func (m Model) sidebarRows(inner int, full bool) []sidebarRow {
 	add(rowHeading, 0, styleSectionHeading(m.section == sectionAgents && m.focusSidebar).Render("AGENTS"))
 	activeSpace, _ := m.ws.ActiveSpace()
 	for i, a := range m.ws.Agents() {
-		row(rowAgent, i, sectionAgents, a.Active, m.marker(i, a.Active, m.section == sectionAgents)+nameStyle(a.Active).Render(a.Name)+m.unreadBadge(activeSpace.Name, a.Name)+m.stateBadge(activeSpace.Name, a.Name)+m.workBadge(activeSpace.Name, a.Name)+m.agentSpendBadge(a.Name))
+		row(rowAgent, i, sectionAgents, a.Active, m.marker(i, a.Active, m.section == sectionAgents)+nameStyle(a.Active).Render(a.Name)+m.unreadBadge(activeSpace.Name, a.Name)+m.stateBadge(activeSpace.Name, a.Name)+m.workBadge(activeSpace.Name, a.Name)+m.agentBadges(a.Name))
 		add(rowAgent, i, "    "+styleDim.Render(a.Description))
 		if full {
 			add(rowAgent, i, "    "+styleDim.Render("model "+a.Model))

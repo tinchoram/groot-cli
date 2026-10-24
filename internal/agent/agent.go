@@ -28,6 +28,10 @@ var ErrMaxTurns = errors.New("agent reached max turns without a final answer")
 const (
 	defaultMaxTurns = 20
 	deniedMessage   = "denied by user"
+	// defaultEmergencyKeep matches the default compaction.keep.
+	defaultEmergencyKeep = 40
+	// contextWarnPercent is the context fill from which strategy none warns.
+	contextWarnPercent = 90
 )
 
 // Agent is one conversation with a model, with tools and persistence.
@@ -58,6 +62,15 @@ type Agent struct {
 	// Limit is checked before each model call of a turn. A non-nil error ends
 	// the turn without calling the model. May be nil.
 	Limit func(ctx context.Context) error
+	// ContextMaxPercent compacts the history before a model call once the last
+	// known context fills this share of the window. Zero turns the trigger off.
+	ContextMaxPercent int
+	// WindowFor returns the context window of a model in tokens. Nil, or a
+	// model it answers 0 for, uses the built-in table.
+	WindowFor func(model string) int
+	// EmergencyKeep is how many messages the overflow fallback keeps when the
+	// strategy is none. Zero means defaultEmergencyKeep.
+	EmergencyKeep int
 
 	mu        sync.Mutex
 	history   []api.Message
@@ -69,6 +82,13 @@ type Agent struct {
 	// spend: the total at its start, negated, or the stored spend of a resumed
 	// session minus the total then. See SessionCost.
 	costBase float64
+	// contextTokens is the context size of the last model answer.
+	// contextCompacted is set once the history was compacted for that size and
+	// cleared by the next answer, so one answer compacts at most once.
+	// pressureWarned records the one-time warning of strategy none.
+	contextTokens    int64
+	contextCompacted bool
+	pressureWarned   bool
 }
 
 // SessionID returns the current session id, or "" before Start or the first Send.
@@ -100,8 +120,10 @@ func (a *Agent) Send(ctx context.Context, prompt string) (string, error) {
 	}, api.Usage{})
 
 	defs := a.registry().Definitions()
+	retried := false // the overflow retry is made once per Send
 	for step := 0; step < a.maxTurns(); step++ {
 		a.autoCompact(ctx)
+		a.pressureCompact(ctx)
 		if a.Limit != nil {
 			if err := a.Limit(ctx); err != nil {
 				return "", err
@@ -109,16 +131,17 @@ func (a *Agent) Send(ctx context.Context, prompt string) (string, error) {
 		}
 
 		turn, msgs := a.nextTurn()
-		resp, err := a.Provider.Send(ctx, provider.Request{
-			System:   a.System,
-			Messages: msgs,
-			Tools:    defs,
-			OnText:   a.OnText,
-		})
+		resp, err := a.call(ctx, msgs, defs)
+		if err != nil && provider.IsContextOverflow(err) && !retried && a.compactForOverflow(ctx) {
+			retried = true
+			a.notify("context overflow: compacted history and retried")
+			resp, err = a.call(ctx, a.snapshot(), defs)
+		}
 		if err != nil {
 			return "", err
 		}
 		a.appendWithTurn(ctx, turn, api.Message{Role: api.RoleAssistant, Content: resp.Content}, resp.Usage)
+		a.recordContext(ctx, resp.Usage)
 
 		uses := resp.ToolUses()
 		if resp.StopReason != api.StopToolUse || len(uses) == 0 {
@@ -400,6 +423,147 @@ func (a *Agent) snapshot() []api.Message {
 	return slices.Clone(a.history)
 }
 
+// call makes one model call over msgs.
+func (a *Agent) call(ctx context.Context, msgs []api.Message, defs []api.ToolDef) (api.Response, error) {
+	return a.Provider.Send(ctx, provider.Request{
+		System:   a.System,
+		Messages: msgs,
+		Tools:    defs,
+		OnText:   a.OnText,
+	})
+}
+
+// ContextTokens is the context size of the last model answer: the prompt tokens
+// it read, cached or not. Zero before the first answer.
+func (a *Agent) ContextTokens() int64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.contextTokens
+}
+
+// ContextWindow is the context window of the model the next call uses. An open
+// task's route model is the provider's model, so it is the one measured.
+func (a *Agent) ContextWindow() int {
+	if a.Provider == nil {
+		return provider.DefaultContextWindow
+	}
+	return a.windowOf(a.Provider.Model())
+}
+
+func (a *Agent) windowOf(model string) int {
+	if a.WindowFor != nil {
+		if w := a.WindowFor(model); w > 0 {
+			return w
+		}
+	}
+	return provider.ContextWindow(model, nil)
+}
+
+// RestoreContext sets the context size of a resumed session, read from the
+// store, so the gauge shows it before the next turn.
+func (a *Agent) RestoreContext(tokens int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.contextTokens = tokens
+	a.contextCompacted = false
+}
+
+// recordContext keeps the context size of the answer just received. It is
+// stored with the session and arms the token trigger for the next call.
+func (a *Agent) recordContext(ctx context.Context, u api.Usage) {
+	tokens := u.InputTokens + u.CacheCreationTokens + u.CacheReadTokens
+	if tokens <= 0 {
+		return
+	}
+	a.mu.Lock()
+	a.contextTokens = tokens
+	a.contextCompacted = false
+	id := a.sessionID
+	a.mu.Unlock()
+	if id == "" {
+		return
+	}
+	a.warn(a.store().SetContextTokens(context.WithoutCancel(ctx), id, tokens))
+}
+
+// compactsHistory reports whether a compaction strategy is configured.
+func (a *Agent) compactsHistory() bool {
+	if a.Compactor == nil {
+		return false
+	}
+	_, none := a.Compactor.(compact.None)
+	return !none
+}
+
+// pressureCompact runs the strategy before a model call when the last known
+// context fills ContextMaxPercent of the window, even if the message-count rule
+// has not fired. Under strategy none it only warns, once, at 90 percent.
+func (a *Agent) pressureCompact(ctx context.Context) {
+	// The window is read before the lock: WindowFor may take other locks.
+	window := a.ContextWindow()
+	a.mu.Lock()
+	tokens, done, warned := a.contextTokens, a.contextCompacted, a.pressureWarned
+	a.mu.Unlock()
+	if tokens <= 0 || window <= 0 {
+		return
+	}
+	pct := provider.ContextPercent(tokens, window)
+
+	if !a.compactsHistory() {
+		if pct >= contextWarnPercent && !warned {
+			a.mu.Lock()
+			a.pressureWarned = true
+			a.mu.Unlock()
+			a.notify(fmt.Sprintf("context at %d%%, set compaction.strategy to window or summarize", pct))
+		}
+		return
+	}
+	if a.ContextMaxPercent <= 0 || pct < a.ContextMaxPercent || done {
+		return
+	}
+
+	a.mu.Lock()
+	compacted, err := compact.Shrink(ctx, a.Compactor, a.history)
+	if err == nil {
+		a.history = compacted
+	}
+	a.contextCompacted = true
+	a.mu.Unlock()
+	if err != nil {
+		a.warn(fmt.Errorf("history compaction skipped: %w", err))
+	}
+}
+
+// compactForOverflow shortens the history after the provider refused a prompt
+// as too long. It uses the configured strategy, or a sliding window of
+// EmergencyKeep messages when none is set. It reports whether the history shrank.
+func (a *Agent) compactForOverflow(ctx context.Context) bool {
+	a.mu.Lock()
+	strategy := a.Compactor
+	if !a.compactsHistory() {
+		strategy = compact.SlidingWindow{Keep: a.emergencyKeep()}
+	}
+	before := len(a.history)
+	compacted, err := compact.Shrink(ctx, strategy, a.history)
+	shrank := err == nil && len(compacted) < before
+	if shrank {
+		a.history = compacted
+		a.contextCompacted = true
+	}
+	a.mu.Unlock()
+	if err != nil {
+		a.warn(fmt.Errorf("history compaction skipped: %w", err))
+	}
+	return shrank
+}
+
+func (a *Agent) emergencyKeep() int {
+	if a.EmergencyKeep > 0 {
+		return a.EmergencyKeep
+	}
+	return defaultEmergencyKeep
+}
+
 // autoCompact runs the strategy before a model call. A failure is reported as
 // a warning and the history is left unchanged.
 func (a *Agent) autoCompact(ctx context.Context) {
@@ -429,8 +593,15 @@ func (a *Agent) denial(req gate.Request) string {
 }
 
 func (a *Agent) warn(err error) {
-	if err != nil && a.OnWarning != nil {
-		a.OnWarning(err.Error())
+	if err != nil {
+		a.notify(err.Error())
+	}
+}
+
+// notify sends a message to the transcript through OnWarning.
+func (a *Agent) notify(msg string) {
+	if a.OnWarning != nil {
+		a.OnWarning(msg)
 	}
 }
 

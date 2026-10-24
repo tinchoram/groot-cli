@@ -75,6 +75,10 @@ type Workspace interface {
 	// SetSpaceBudget and SetAgentBudget set a budget in dollars; 0 clears it.
 	SetSpaceBudget(space string, usd float64) error
 	SetAgentBudget(agent string, usd float64) error
+	// Contexts reads the context of the agents of the active space, or of every
+	// space when all is set. SetContextWindow saves a model's window.
+	Contexts(ctx context.Context, all bool) ([]workspace.ContextRow, error)
+	SetContextWindow(model string, tokens int) error
 }
 
 // Options wires a Model.
@@ -88,6 +92,9 @@ type Options struct {
 	HistoryPath string
 	// ShowWelcome adds the first-run welcome to the admin agent's chat.
 	ShowWelcome bool
+	// ShowCost shows the estimated session cost in the status line and the spend
+	// of each agent in the sidebar. Off by default: /cost and /tokens show it on demand.
+	ShowCost bool
 	// NewTerminal makes the shell for the terminal column. Nil uses a real
 	// pseudo-terminal running $SHELL.
 	NewTerminal func() term.Terminal
@@ -196,9 +203,11 @@ type Model struct {
 	closing       bool               // the session is closing: summaries are running
 	closeCancel   context.CancelFunc // skips the summaries still running
 	unread        map[string]int
-	spend         workspace.SpendView // spend and budgets behind the sidebar badges
-	ticking       bool                // the spinner tick chain runs
-	lastPoll      time.Time           // when the badges were last re-read     // unread counts per "space/agent", for the sidebar badges
+	spend         workspace.SpendView             // spend and budgets behind the sidebar badges
+	contexts      map[string]workspace.ContextRow // context of each agent of the active space, by name
+	showCost      bool                            // ui.show_cost: cost in the status line and spend in the sidebar
+	ticking       bool                            // the spinner tick chain runs
+	lastPoll      time.Time                       // when the badges were last re-read     // unread counts per "space/agent", for the sidebar badges
 
 	newTerm   func() term.Terminal
 	tm        term.Terminal // the shell, nil until ctrl-t first opens it
@@ -266,6 +275,7 @@ func NewModel(o Options) Model {
 		hist:        hist,
 		historyPath: o.HistoryPath,
 		ws:          o.Workspace,
+		showCost:    o.ShowCost,
 		bridge:      o.Bridge,
 		version:     o.Version,
 		transcripts: map[string][]string{},
@@ -668,6 +678,8 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		m.runModelsCommand()
 	case "budget":
 		m.runBudgetCommand(cmd.Arg)
+	case "context":
+		m.runContextCommand(cmd.Arg)
 	case "compact":
 		before := m.session.MessageCount()
 		m.busy = true
@@ -679,6 +691,9 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 			}
 			return noteMsg{text: compactionNotice(before, s.MessageCount())}
 		})
+	case "cost":
+		m.refreshSpend()
+		m.append(m.costBlock())
 	case "tokens":
 		m.append(usageBlock(m.session.Usage(), m.session.CostUSD()))
 	case "clear":

@@ -36,6 +36,15 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("migrate sessions: add cleared_at: %w", err)
 		}
 	}
+	hasCtx, err := hasColumn(db, "sessions", "context_tokens")
+	if err != nil {
+		return fmt.Errorf("migrate sessions: %w", err)
+	}
+	if !hasCtx {
+		if _, err := db.Exec(`ALTER TABLE sessions ADD COLUMN context_tokens INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("migrate sessions: add context_tokens: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -66,13 +75,13 @@ func (s *SQLite) LatestSession(ctx context.Context, agent string) (Session, bool
 		messages, turns int
 	)
 	err := s.db.QueryRowContext(ctx, `
-		SELECT ss.id, ss.agent, ss.model, ss.started_at, ss.ended_at, ss.cleared_at, ss.cost_usd,
+		SELECT ss.id, ss.agent, ss.model, ss.started_at, ss.ended_at, ss.cleared_at, ss.cost_usd, ss.context_tokens,
 		       (SELECT COUNT(*) FROM messages m WHERE m.session_id = ss.id),
 		       (SELECT COALESCE(MAX(m.turn), 0) FROM messages m WHERE m.session_id = ss.id)
 		FROM sessions ss
 		WHERE ss.agent = ?
 		ORDER BY ss.started_at DESC, ss.rowid DESC
-		LIMIT 1`, agent).Scan(&sess.ID, &sess.Agent, &sess.Model, &sess.StartedAt, &ended, &cleared, &sess.CostUSD, &messages, &turns)
+		LIMIT 1`, agent).Scan(&sess.ID, &sess.Agent, &sess.Model, &sess.StartedAt, &ended, &cleared, &sess.CostUSD, &sess.ContextTokens, &messages, &turns)
 	if err == sql.ErrNoRows {
 		return Session{}, false, nil
 	}

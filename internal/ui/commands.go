@@ -15,7 +15,7 @@ type Command struct {
 
 var knownCommands = map[string]bool{
 	"help": true, "model": true, "compact": true, "tokens": true, "clear": true, "exit": true,
-	"space": true, "agent": true, "inbox": true, "task": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "bug": true, "feat": true, "backlog": true,
+	"space": true, "agent": true, "inbox": true, "task": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true,
 }
 
 // ParseCommand reports whether line is a slash command and splits it into name and argument.
@@ -61,6 +61,9 @@ var helpEntries = []helpEntry{
 	{"/budget", "show the spend and budgets of the space and its agents"},
 	{"/budget space <usd>", "set the budget of the active space (0 clears it)"},
 	{"/budget agent <name> <usd>", "set the budget of an agent (0 clears it)"},
+	{"/context", "context fill of each agent in the active space"},
+	{"/context all", "context fill of the agents of every space"},
+	{"/context window <model> <tokens>", "context window of a model, saved in groot.yaml"},
 	{"/compact", "summarize older history now"},
 	{"/tokens", "token usage and estimated cost"},
 	{"/clear", "clear the conversation (memory keeps its records)"},
@@ -107,7 +110,7 @@ func compactionNotice(before, after int) string {
 
 // statusUsage formats the idle footer's usage part. It returns "" before the
 // first model call.
-func statusUsage(u api.Usage, costUSD float64) string {
+func statusUsage(u api.Usage, costUSD float64, showCost bool) string {
 	if u.InputTokens == 0 && u.OutputTokens == 0 {
 		return ""
 	}
@@ -119,7 +122,9 @@ func statusUsage(u api.Usage, costUSD float64) string {
 		parts = append(parts, fmt.Sprintf("cache %s/%s",
 			formatThousands(int(u.CacheCreationTokens)), formatThousands(int(u.CacheReadTokens))))
 	}
-	parts = append(parts, fmt.Sprintf("~$%.4f", costUSD))
+	if showCost {
+		parts = append(parts, fmt.Sprintf("~$%.4f", costUSD))
+	}
 	return strings.Join(parts, " · ")
 }
 

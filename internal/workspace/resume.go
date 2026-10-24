@@ -59,6 +59,7 @@ func (w *Workspace) resume(ctx context.Context, ag *agent.Agent, store memory.St
 		return nil, err
 	}
 	ag.Resume(sess.ID, restoreHistory(msgs, w.opts.Config.Compaction), sess.Turns, sess.CostUSD)
+	ag.RestoreContext(sess.ContextTokens)
 	last := sess.EndedAt
 	if last.IsZero() {
 		last = sess.StartedAt

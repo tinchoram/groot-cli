@@ -56,6 +56,34 @@ func (s Summarize) Compact(ctx context.Context, msgs []api.Message) ([]api.Messa
 	if tail < 1 {
 		tail = 1
 	}
+	return s.compactTail(ctx, msgs, tail)
+}
+
+// CompactHalf summarizes the older part of the history whatever its length and
+// keeps the newer half verbatim. It is for a context under pressure, where the
+// message-count threshold has not been reached yet.
+func (s Summarize) CompactHalf(ctx context.Context, msgs []api.Message) ([]api.Message, error) {
+	tail := len(msgs) / 2
+	if tail < 1 {
+		return msgs, nil
+	}
+	return s.compactTail(ctx, msgs, tail)
+}
+
+// Shrink applies s to a history whose context is under pressure. Summarize
+// halves the history at once; the other strategies run their own rule.
+func Shrink(ctx context.Context, s Strategy, msgs []api.Message) ([]api.Message, error) {
+	if sum, ok := s.(Summarize); ok {
+		return sum.CompactHalf(ctx, msgs)
+	}
+	if s == nil {
+		return msgs, nil
+	}
+	return s.Compact(ctx, msgs)
+}
+
+// compactTail summarizes every message before the last tail ones, at a safe split point.
+func (s Summarize) compactTail(ctx context.Context, msgs []api.Message, tail int) ([]api.Message, error) {
 	k := SafeSplitPoint(msgs, len(msgs)-tail)
 	if k == 0 {
 		return msgs, nil

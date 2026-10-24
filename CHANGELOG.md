@@ -34,6 +34,26 @@ built in one day of live testing, so they are grouped by what shipped.
   `set_space_budget` and `set_agent_budget`, granted to `groot`.
 - Not yet: a global default in `groot.yaml`.
 
+### Context
+- Context gauge per agent: the size of the last model answer (input plus cache
+  tokens) is stored per session (`sessions.context_tokens`, added on open) and
+  shown as `ctx 84k/200k 42%` in the header and `42%` in the sidebar, dim, then
+  warning from 70% and red from 90%.
+- `compaction.max_context_percent` (default 80, 0 disables): the history is
+  compacted before a call once the context fills that share of the window. With
+  strategy `none` groot warns once at 90%.
+- Overflow recovery: a "prompt is too long" refusal compacts once and retries
+  once, with a transcript line.
+- `models.context_window` in `groot.yaml` overrides the window per model or
+  prefix; `/context`, `/context all`, `/context window <model> <tokens>`.
+- Admin tools `get_context` (read-only) and `set_context_window`, granted to `groot`.
+
+### Cost visibility
+- `ui.show_cost` (default false) controls the cost in the status line and the
+  spend in the sidebar. Sidebar spend shows only next to a budget unless it is on.
+- `/cost` prints the session cost with the spend and budgets of the space.
+- Admin tool `get_cost` (read-only) returns the same as text.
+
 ## 0.3.0 — 2026-10-24
 
 Coordination, control and day-to-day ergonomics.

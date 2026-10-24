@@ -119,6 +119,9 @@ directory, Groot adds it to the system prompt under "Project context".
 | `provider.model` | `claude-sonnet-5-5` | Model id |
 | `max_turns` | `20` | Model calls allowed per request |
 | `compaction.strategy` | `none` | `none`, `window` (keep N) or `summarize` |
+| `compaction.max_context_percent` | `80` | Compact before a call once the last context fills this share of the window; `0` turns it off. See Context |
+| `models.context_window` | empty | Map of model id or prefix to context window in tokens. Overrides the built-in table (200000) |
+| `ui.show_cost` | `false` | Show the estimated session cost in the status line and the spend of each agent in the sidebar. `/cost` and `/tokens` show it either way |
 | `memory.path` | `.groot/groot.db` | SQLite database. A relative path is under each space's directory; an absolute path is shared by all spaces |
 | `audit.path` | `.groot/audit.jsonl` | Audit log. Same rules as `memory.path` |
 | `gate.policy` | `interactive` | `interactive`, `readonly` or `auto` |
@@ -280,6 +283,8 @@ and backslashes escaped).
 /space unassign <agent>          remove an agent from the active space
 /space routes [name]             show the mode, default model and routes of a space, with where each value comes from
 /budget [space|agent ...]        show or set spend budgets (see Budgets)
+/cost                            session cost, spend and budgets (see Budgets)
+/context [all|window <model> <tokens>]  context fill per agent (see Context)
 /agent list                      list the catalog (✓ = assigned to the active space)
 /agent new <name> [description]  create agents/<name>.md with a starter prompt
 /agent import <path-or-url> [--force]  import an agent file (see below)
@@ -652,6 +657,43 @@ written when the session ends. Sessions are per agent in a space.
 - Databases from earlier versions are upgraded on open, with a `cleared_at`
   column added to `sessions`. Nothing is deleted.
 
+## Context
+
+Each model call sends the whole history, so the context of a conversation is
+the size of its last model answer: the input tokens it read, plus the cache
+write and cache read tokens. Groot stores that size per session
+(`sessions.context_tokens`), so a resumed session shows it before its next turn.
+
+- **Where it shows.** The header of the active conversation shows
+  `ctx 84k/200k 42%`, or `ctx 42%` when the line is too narrow. The sidebar
+  shows `42%` after each agent of the active space, only once a size is known.
+- **Colours.** Dim below 70%, the warning colour from 70%, red from 90%.
+- **Window.** The window of the model the next call uses: the built-in table
+  (200000 tokens for the Claude models), or `models.context_window` in
+  `groot.yaml`. A model that is in neither uses 200000.
+- **Compaction.** With `compaction.max_context_percent` (default 80), a model call
+  first runs the configured strategy once the last context reaches that share of
+  the window, even when the message count has not. `summarize` then halves the
+  history. With strategy `none` nothing is dropped; groot warns once when the
+  context reaches 90% and suggests `window` or `summarize`.
+- **Overflow.** If the provider refuses a prompt as too long, groot compacts once
+  (the configured strategy, or the last `compaction.keep` messages when the
+  strategy is `none`), prints `context overflow: compacted history and retried`
+  and retries the call once. A second refusal is shown as an error.
+
+```
+/context                          context of each agent in the active space
+/context all                      the same for every space
+/context window <model> <tokens>  window of a model or prefix, saved in groot.yaml
+```
+
+The table has the model, the window, the last context size, the percentage, the
+compaction strategy and whether a compaction would run on the next call.
+
+The admin agent reads it with `get_context {space?}` and sets windows with
+`set_context_window {model, tokens}`. The window is written to `groot.yaml` under
+`models.context_window`; running conversations pick it up on their next call.
+
 ## Background conversations
 
 Every agent keeps its own conversation. Switching agents or spaces never stops
@@ -690,7 +732,8 @@ Work mode decides by tool:
 | `write_file` inside the space | `write_file` outside the space |
 | `bash`, unless it matches `work.always_ask` | `bash` matching `work.always_ask` (defaults: `rm -rf` outside the space, `sudo`, `git push --force`, `git reset --hard`, `git clean`, `kubectl apply/delete/patch/edit/scale/rollout`, `docker rm/rmi/system prune`, `terraform apply/destroy`, `curl`/`wget` writing a file) |
 | `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent` |
-| `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_budget`, `set_agent_budget`, `set_work_mode` |
+| `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_budget`, `set_agent_budget`, `set_context_window`, `set_work_mode` |
+| `get_context`, `get_cost` (read-only, not asked) | none; they answer as text |
 | `task_classify`, `task_open`, `task_advance`, `task_status` | `set_work_mode` |
 
 Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.
@@ -745,10 +788,18 @@ Zero or no budget means unlimited. Spend is the estimate from the price table
 /budget                      spend and budgets of the active space and its agents
 /budget space <usd>          budget of the active space (0 clears it)
 /budget agent <name> <usd>   budget of an agent (0 clears it)
+/cost                        session cost, then the spend and budgets above
 ```
 
 The admin agent sets budgets with `set_space_budget {space, usd}` and
-`set_agent_budget {agent, usd}`. Work mode still asks before them.
+`set_agent_budget {agent, usd}`. Work mode still asks before them. It reads the
+spend with `get_cost {space?}`, which is read-only.
+
+Spend is hidden by default: the sidebar shows an agent's spend only next to its
+budget (`$0.90/$2.00`), and the status line shows no cost. Set `ui.show_cost:
+true` in `groot.yaml` to show the session cost in the status line and the spend
+of every agent and space in the sidebar. `/cost` and `/tokens` always show the
+cost when asked.
 
 There is no global default yet: a `budget` key in `groot.yaml` is not read.
 

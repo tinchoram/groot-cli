@@ -48,8 +48,9 @@ func (m Model) header() string {
 	if agent == "" {
 		agent = "no agent"
 	}
-	return "  " + styleAccentBold.Render(spaceName) + styleDim.Render(" ▸ ") +
+	head := "  " + styleAccentBold.Render(spaceName) + styleDim.Render(" ▸ ") +
 		styleAccentBold.Render(agent) + styleDim.Render(" · "+m.session.Model()) + m.taskLabel() + m.workLabel()
+	return head + m.contextLabel(head)
 }
 
 // viewSidebar draws the bordered sidebar at the given outer size.
@@ -86,7 +87,7 @@ func (m Model) statusLine() string {
 		return "  " + styleDim.Render(m.note)
 	}
 	parts := []string{m.session.Model()}
-	if usage := statusUsage(m.session.Usage(), m.session.CostUSD()); usage != "" {
+	if usage := statusUsage(m.session.Usage(), m.session.CostUSD(), m.showCost); usage != "" {
 		parts = append(parts, usage)
 	}
 	return "  " + styleDim.Render(strings.Join(parts, " · "))

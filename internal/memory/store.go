@@ -59,6 +59,9 @@ type Session struct {
 	Messages int       // stored messages
 	Turns    int       // highest turn number stored
 	CostUSD  float64   // spend stored for the session so far
+	// ContextTokens is the context size of the last model answer: the prompt
+	// tokens the model read, cached or not. Zero before the first answer.
+	ContextTokens int64
 }
 
 // Entry is one long-term memory.
@@ -79,6 +82,9 @@ type Store interface {
 	// SetSessionCost stores the spend of a session so far. The agent calls it
 	// after every model answer, so a crash loses no spend.
 	SetSessionCost(ctx context.Context, id string, costUSD float64) error
+	// SetContextTokens stores the context size of the last model answer of a
+	// session, so a resumed session shows it before its next turn.
+	SetContextTokens(ctx context.Context, id string, tokens int64) error
 	// SpendUSD is the total spend of agent in this store, over all its sessions.
 	SpendUSD(ctx context.Context, agent string) (float64, error)
 	// SpendByAgent is the total spend of each agent in this store.
@@ -109,6 +115,8 @@ func (NoMemory) StartSession(context.Context, Session) error { return nil }
 func (NoMemory) EndSession(context.Context, string, float64) error { return nil }
 
 func (NoMemory) SetSessionCost(context.Context, string, float64) error { return nil }
+
+func (NoMemory) SetContextTokens(context.Context, string, int64) error { return nil }
 
 func (NoMemory) SpendUSD(context.Context, string) (float64, error) { return 0, nil }
 

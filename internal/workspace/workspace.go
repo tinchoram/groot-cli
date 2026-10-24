@@ -40,6 +40,10 @@ type Chat interface {
 	MessageCount() int
 	Usage() api.Usage
 	CostUSD() float64
+	// ContextTokens is the context size of the last model answer; ContextWindow
+	// is the window of the model the next call uses.
+	ContextTokens() int64
+	ContextWindow() int
 	Reset()
 	SessionID() string
 	// Resumed reports the stored session this conversation continued, if any.
@@ -508,18 +512,22 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	// conv is set below; the limit reads it only once a turn runs.
 	var conv *Conversation
 	ag := &agent.Agent{
-		Name:       agentName,
-		Provider:   prov,
-		Tools:      tools,
-		Gate:       &flowgate.Gate{Inner: gate.Work{Inner: sess, State: work}, Ctl: ctl, Warn: keyedWarn(w.opts.Hooks, key)},
-		Compactor:  compactorFor(w.opts.Config.Compaction, prov),
-		Memory:     st.mem,
-		Audit:      st.aud,
-		System:     config.ComposeSystemPrompt(base, preamble, projectCtx),
-		MaxTurns:   maxTurns,
-		OnText:     keyedText(w.opts.Hooks, key),
-		OnToolCall: autoAwareTool(w.opts.Hooks, key, work, sess),
-		OnWarning:  keyedWarn(w.opts.Hooks, key),
+		Name:      agentName,
+		Provider:  prov,
+		Tools:     tools,
+		Gate:      &flowgate.Gate{Inner: gate.Work{Inner: sess, State: work}, Ctl: ctl, Warn: keyedWarn(w.opts.Hooks, key)},
+		Compactor: compactorFor(w.opts.Config.Compaction, prov),
+		// The token trigger and the overflow fallback read the same settings.
+		ContextMaxPercent: w.opts.Config.Compaction.MaxContextPercent,
+		EmergencyKeep:     w.opts.Config.Compaction.Keep,
+		WindowFor:         w.windowFor,
+		Memory:            st.mem,
+		Audit:             st.aud,
+		System:            config.ComposeSystemPrompt(base, preamble, projectCtx),
+		MaxTurns:          maxTurns,
+		OnText:            keyedText(w.opts.Hooks, key),
+		OnToolCall:        autoAwareTool(w.opts.Hooks, key, work, sess),
+		OnWarning:         keyedWarn(w.opts.Hooks, key),
 		// Checked before every model call, so a turn that goes over its budget
 		// stops between tool rounds.
 		Limit: func(ctx context.Context) error { return conv.checkBudget(ctx, 0) },
@@ -596,6 +604,8 @@ func (c idleChat) Compact(context.Context) error                { return nil }
 func (c idleChat) MessageCount() int                            { return 0 }
 func (c idleChat) Usage() api.Usage                             { return api.Usage{} }
 func (c idleChat) CostUSD() float64                             { return 0 }
+func (c idleChat) ContextTokens() int64                         { return 0 }
+func (c idleChat) ContextWindow() int                           { return provider.DefaultContextWindow }
 func (c idleChat) Reset()                                       {}
 func (c idleChat) Task() (flow.Task, bool)                      { return flow.Task{}, false }
 func (c idleChat) TaskStatus(context.Context) string            { return "" }

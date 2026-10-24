@@ -126,6 +126,12 @@ func (s *SQLite) SetSessionCost(ctx context.Context, id string, costUSD float64)
 	return err
 }
 
+// SetContextTokens stores the context size of the last model answer.
+func (s *SQLite) SetContextTokens(ctx context.Context, id string, tokens int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET context_tokens = ? WHERE id = ?`, tokens, id)
+	return err
+}
+
 // SpendUSD sums the stored cost of every session of agent.
 func (s *SQLite) SpendUSD(ctx context.Context, agent string) (float64, error) {
 	var total float64

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -65,6 +66,72 @@ func SetProviderModel(path, model string) (created bool, err error) {
 		return false, fmt.Errorf("stat %s: %w", path, err)
 	}
 	return false, os.WriteFile(path, buf.Bytes(), info.Mode().Perm())
+}
+
+// SetContextWindow writes models.context_window[model] = tokens into the
+// configuration file at path. A missing file is created from the defaults; an
+// existing file is edited as a YAML tree, so comments and other keys stay.
+func SetContextWindow(path, model string, tokens int) error {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		cfg := Default()
+		cfg.Models.ContextWindow = map[string]int{model: tokens}
+		out, err := yaml.Marshal(cfg)
+		if err != nil {
+			return fmt.Errorf("encode %s: %w", path, err)
+		}
+		return os.WriteFile(path, out, 0o644)
+	}
+	if err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	if doc.Kind == 0 {
+		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return fmt.Errorf("%s: the top level must be a mapping", path)
+	}
+	models := childMapping(doc.Content[0], "models")
+	windows := childMapping(models, "context_window")
+	if m := mappingChild(windows, model); m != nil {
+		m.Kind, m.Tag, m.Value = yaml.ScalarNode, "!!int", strconv.Itoa(tokens)
+	} else {
+		appendPair(windows, model, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(tokens)})
+	}
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&doc); err != nil {
+		return fmt.Errorf("encode %s: %w", path, err)
+	}
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("encode %s: %w", path, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+	return os.WriteFile(path, buf.Bytes(), info.Mode().Perm())
+}
+
+// childMapping returns the mapping under key in m, creating it when absent or
+// when the existing value is not a mapping.
+func childMapping(m *yaml.Node, key string) *yaml.Node {
+	if child := mappingChild(m, key); child != nil {
+		if child.Kind != yaml.MappingNode {
+			*child = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		}
+		return child
+	}
+	child := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	appendPair(m, key, child)
+	return child
 }
 
 // mappingChild returns the value node of key in mapping m, or nil.

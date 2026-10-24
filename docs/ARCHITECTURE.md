@@ -99,6 +99,9 @@ tasks need no task at all (`Controller.Check` in `internal/flow/controller.go`).
 Global state, under `~/.groot` (or `GROOT_HOME`):
 
 - `spaces.yaml`: spaces, the active space, assigned agents (`internal/space`).
+- Context size: measured after each model answer in `Agent.recordContext`
+  (`internal/agent/agent.go`), stored in `sessions.context_tokens`; windows come
+  from `provider.ContextWindow` (`internal/provider/context.go`).
 - `agents/<name>.md`: agent definitions (`internal/catalog`).
 - `library/`: local agent collections (`internal/library`).
 - `history`: prompt history (`internal/ui`).
