@@ -533,7 +533,7 @@ func (m Model) sidebarRows(inner int, full bool) []sidebarRow {
 
 	add(rowHeading, 0, styleSectionHeading(m.section == sectionSpaces && m.focusSidebar).Render("SPACES"))
 	for i, sp := range m.ws.Spaces() {
-		row(rowSpace, i, sectionSpaces, sp.Active, m.marker(i, sp.Active, m.section == sectionSpaces)+nameStyle(sp.Active).Render(sp.Name)+m.spaceBadge(sp.Name)+m.spaceSpendBadge(sp.Name))
+		row(rowSpace, i, sectionSpaces, sp.Active, m.marker(i, sp.Active, m.section == sectionSpaces)+nameStyle(sp.Active).Render(sp.Name)+m.spaceBadge(sp.Name)+joinBadges(m.spaceSpendBadge(sp.Name), m.taskBadge(sp.Name)))
 		if full && sp.Active {
 			add(rowSpace, i, "    "+styleDim.Render(sp.Path))
 		}

@@ -79,6 +79,10 @@ type Workspace interface {
 	// space when all is set. SetContextWindow saves a model's window.
 	Contexts(ctx context.Context, all bool) ([]workspace.ContextRow, error)
 	SetContextWindow(model string, tokens int) error
+	// OpenTasks lists the open tasks of every space; ListTasks lists one space's
+	// tasks, or every space's when the name is empty, with the closed ones on request.
+	OpenTasks(ctx context.Context) ([]workspace.TaskRow, error)
+	ListTasks(ctx context.Context, name string, includeClosed bool) ([]workspace.TaskRow, error)
 }
 
 // Options wires a Model.
@@ -205,6 +209,7 @@ type Model struct {
 	unread        map[string]int
 	spend         workspace.SpendView             // spend and budgets behind the sidebar badges
 	contexts      map[string]workspace.ContextRow // context of each agent of the active space, by name
+	openTasks     map[string]int                  // open tasks per space, for the sidebar ⚑ badges
 	showCost      bool                            // ui.show_cost: cost in the status line and spend in the sidebar
 	ticking       bool                            // the spinner tick chain runs
 	lastPoll      time.Time                       // when the badges were last re-read     // unread counts per "space/agent", for the sidebar badges
@@ -727,6 +732,8 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		m.showDiff()
 	case "task":
 		m.runTaskCommand(cmd.Arg)
+	case "tasks":
+		m.runTasksCommand(cmd.Arg)
 	case "exit":
 		return m.quit()
 	}

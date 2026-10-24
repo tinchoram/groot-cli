@@ -101,6 +101,9 @@ type Manager interface {
 	// EditAgentTools adds and removes tools of an agent. The managed agents keep
 	// their required tools.
 	EditAgentTools(name string, add, remove []string) error
+	// TaskReport is the open tasks of a space, or of every space when empty, as
+	// text; includeClosed adds the done and failed tasks of the last seven days.
+	TaskReport(ctx context.Context, space string, includeClosed bool) (string, error)
 	// DefaultModel is the model used when an agent sets none; SessionModel is the
 	// model of the conversation that runs the tool.
 	DefaultModel() string
@@ -132,6 +135,7 @@ func All(m Manager, home string) []tool.Tool {
 		NewSetAgentBudget(m),
 		NewGetContext(m),
 		NewGetCost(m),
+		NewListTasks(m),
 		NewSetContextWindow(m),
 		NewGrantTool(m),
 		NewRevokeTool(m),

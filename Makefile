@@ -3,7 +3,7 @@ PKG     := ./cmd/groot
 VERSION ?= 0.4.0-dev
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: all build test lint vet fmt run clean
+.PHONY: all build test e2e lint vet fmt run clean
 
 all: build test
 
@@ -12,6 +12,10 @@ build:
 
 test:
 	go test ./... -count=1
+
+# End-to-end tests against the real API: needs ANTHROPIC_API_KEY, costs a few cents.
+e2e:
+	go test -tags e2e ./e2e/... -count=1 -v
 
 vet:
 	go vet ./...

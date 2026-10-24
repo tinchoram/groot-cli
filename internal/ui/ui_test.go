@@ -147,8 +147,12 @@ type fakeWorkspace struct {
 	contextAll []bool
 	windowSet  map[string]int
 	windowErr  error
-	inbox      []inbox.Message
-	handSent   []string
+	// tasks answers OpenTasks and ListTasks; taskQueries records each ListTasks
+	// call as "space|closed".
+	tasks       []workspace.TaskRow
+	taskQueries []string
+	inbox       []inbox.Message
+	handSent    []string
 	// flow is what SpaceFlow reports; flowErr makes it fail.
 	flow    workspace.FlowView
 	flowErr error

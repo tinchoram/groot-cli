@@ -65,7 +65,7 @@ func grootDef() catalog.AgentDef {
 		Tools: []string{
 			"list_spaces", "create_space", "assign_agent", "unassign_agent",
 			"list_agents", "create_agent", "import_agent", "list_library", "install_agent", "recall", "remember",
-			"send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "set_context_window", "grant_tool", "revoke_tool", "set_default_model",
+			"send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "set_context_window", "grant_tool", "revoke_tool", "set_default_model",
 		},
 	}
 }

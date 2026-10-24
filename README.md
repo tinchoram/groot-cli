@@ -184,6 +184,23 @@ make lint     # go vet and a gofmt check
 `internal/arch` fails the build if a core package imports an SDK, the UI, or
 `os/exec` outside `tool/exec.go`.
 
+### End-to-end tests
+
+The `e2e/` package calls the real Anthropic API through the workspace layer: one
+text turn (usage, cost and context are recorded), a turn where the model runs
+`read_file` on a file in the space, resuming a session in a second instance, and
+an agent budget that refuses a turn without a model call.
+
+```sh
+ANTHROPIC_API_KEY=... make e2e   # go test -tags e2e ./e2e/... -count=1 -v
+```
+
+- Without `ANTHROPIC_API_KEY` in the environment every test skips with a message.
+  The package never reads a `.env` file.
+- Cost: claude-haiku-5-5 with tiny prompts and `max_tokens` 256. A run should
+  stay under about $0.05; the last test prints the total spend.
+- CI does not run them. Only `make e2e` does, on a machine with a key.
+
 ## Spaces and agents
 
 Since 0.2.0 groot works in **spaces**, and inside a space you talk to **agents**.
@@ -285,6 +302,7 @@ and backslashes escaped).
 /budget [space|agent ...]        show or set spend budgets (see Budgets)
 /cost                            session cost, spend and budgets (see Budgets)
 /context [all|window <model> <tokens>]  context fill per agent (see Context)
+/tasks [space] [all]             open tasks across spaces; all adds done and failed of the last 7 days (see ODD flow)
 /agent list                      list the catalog (✓ = assigned to the active space)
 /agent new <name> [description]  create agents/<name>.md with a starter prompt
 /agent import <path-or-url> [--force]  import an agent file (see below)
@@ -600,6 +618,14 @@ pair is used in a process. Conversations already open keep the controller and mo
 they started with, so restart groot to apply a change to a pair you have used. The
 route model still applies while a task is open and is restored when the task closes.
 
+`/tasks` lists the open tasks of every space: space, agent, task id, size, phase,
+evidence count, opened and updated time, the goal (cut at 60 characters), and
+`ACTIVE` when the agent's conversation is running a turn in this process.
+`/tasks <space>` filters by space. `/tasks all` adds the done and failed tasks of
+the last seven days, with the phase they finished in. The sidebar shows `⚑ N`
+after a space with N open tasks. The admin agent reads the same table with
+`list_tasks {space?, include_closed?}`.
+
 What the rules leave alone: reads, the task tools, `send_message`, and the admin
 tools that change the catalog and the spaces (`create_space`, `create_agent`,
 `import_agent`, `install_agent` and the assign tools). A classification lasts until
@@ -733,7 +759,7 @@ Work mode decides by tool:
 | `bash`, unless it matches `work.always_ask` | `bash` matching `work.always_ask` (defaults: `rm -rf` outside the space, `sudo`, `git push --force`, `git reset --hard`, `git clean`, `kubectl apply/delete/patch/edit/scale/rollout`, `docker rm/rmi/system prune`, `terraform apply/destroy`, `curl`/`wget` writing a file) |
 | `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent` |
 | `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_budget`, `set_agent_budget`, `set_context_window`, `set_work_mode` |
-| `get_context`, `get_cost` (read-only, not asked) | none; they answer as text |
+| `get_context`, `get_cost`, `list_tasks` (read-only, not asked) | none; they answer as text |
 | `task_classify`, `task_open`, `task_advance`, `task_status` | `set_work_mode` |
 
 Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.

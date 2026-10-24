@@ -118,6 +118,7 @@ Per space, `<space>/.groot/`, at the paths set by `memory.path` and `audit.path`
   - The spend ledger is `sessions.cost_usd`, written after every model answer;
     budgets sum it (`memory.SpendUSD`, `SpendByAgent`; checks in `internal/workspace/budget.go`).
 - `audit.jsonl`: one JSON line per tool call.
+- Open tasks across spaces (`/tasks`, `list_tasks`, sidebar `⚑ N`): `workspace.ListTasks` reads each space's `tasks` through `memory.SQLite.TaskSummaries`, with the directory guard of `internal/workspace/context.go` (`internal/workspace/tasks.go`).
 
 Relative `memory.path` and `audit.path` values resolve against the space
 directory (`memoryPathFor`, `auditPathFor` in `internal/workspace/workspace.go`).

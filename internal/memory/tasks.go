@@ -144,6 +144,56 @@ func (s taskStore) List(ctx context.Context, space, agent string, limit int) ([]
 	return out, nil
 }
 
+// TaskSummary is one task as the listing across spaces shows it.
+type TaskSummary struct {
+	ID        int64
+	Space     string
+	Agent     string
+	Size      flow.Size
+	Phase     flow.Phase
+	Goal      string
+	Evidence  int
+	OpenedAt  time.Time
+	UpdatedAt time.Time
+}
+
+// TaskSummaries lists the open tasks of this space: every task whose phase is
+// neither done nor failed. With includeClosed it also lists the done and failed
+// tasks closed at or after closedSince. Rows are ordered by space, then by the
+// newest update first.
+func (s *SQLite) TaskSummaries(ctx context.Context, includeClosed bool, closedSince time.Time) ([]TaskSummary, error) {
+	done, failed := string(flow.PhaseDone), string(flow.PhaseFailed)
+	where := `t.phase NOT IN (?, ?)`
+	args := []any{done, failed}
+	if includeClosed {
+		where += ` OR (t.phase IN (?, ?) AND COALESCE(t.closed_at, t.updated_at) >= ?)`
+		args = append(args, done, failed, closedSince.UTC())
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.id, t.space, t.agent, t.size, t.phase, t.goal, t.opened_at, t.updated_at,
+			(SELECT COUNT(*) FROM task_evidence e WHERE e.task_id = t.id)
+		FROM tasks t
+		WHERE `+where+`
+		ORDER BY t.space, t.updated_at DESC, t.id DESC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list task summaries: %w", err)
+	}
+	defer rows.Close()
+	var out []TaskSummary
+	for rows.Next() {
+		var (
+			r           TaskSummary
+			size, phase string
+		)
+		if err := rows.Scan(&r.ID, &r.Space, &r.Agent, &size, &phase, &r.Goal, &r.OpenedAt, &r.UpdatedAt, &r.Evidence); err != nil {
+			return nil, fmt.Errorf("scan task summary: %w", err)
+		}
+		r.Size, r.Phase = flow.Size(size), flow.Phase(phase)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 const taskColumns = `SELECT id, space, agent, size, phase, goal, scope, done_when, plan_path,
 	opened_at, phase_at, updated_at, closed_at FROM tasks`
 

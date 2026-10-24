@@ -97,6 +97,7 @@ func TestToolsAreNamedAndRiskClassed(t *testing.T) {
 		"set_agent_budget":   tool.RiskWrite,
 		"get_context":        tool.RiskRead,
 		"get_cost":           tool.RiskRead,
+		"list_tasks":         tool.RiskRead,
 		"set_context_window": tool.RiskWrite,
 	}
 	for _, tl := range All(m, "/home/sre") {

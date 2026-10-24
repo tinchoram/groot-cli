@@ -11,3 +11,8 @@ func (a adminManager) ContextReport(ctx context.Context, space string) (string, 
 func (a adminManager) SetContextWindow(model string, tokens int) error {
 	return a.w.SetContextWindow(model, tokens)
 }
+
+// TaskReport lets the administrator agent list the open tasks through the admin manager.
+func (a adminManager) TaskReport(ctx context.Context, space string, includeClosed bool) (string, error) {
+	return a.w.TaskReport(ctx, space, includeClosed)
+}

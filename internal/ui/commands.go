@@ -15,7 +15,7 @@ type Command struct {
 
 var knownCommands = map[string]bool{
 	"help": true, "model": true, "compact": true, "tokens": true, "clear": true, "exit": true,
-	"space": true, "agent": true, "inbox": true, "task": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true,
+	"space": true, "agent": true, "inbox": true, "task": true, "tasks": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true,
 }
 
 // ParseCommand reports whether line is a slash command and splits it into name and argument.
@@ -64,6 +64,7 @@ var helpEntries = []helpEntry{
 	{"/context", "context fill of each agent in the active space"},
 	{"/context all", "context fill of the agents of every space"},
 	{"/context window <model> <tokens>", "context window of a model, saved in groot.yaml"},
+	{"/tasks [space] [all]", "open tasks of every space, or of one space; all adds the done and failed tasks of the last 7 days"},
 	{"/compact", "summarize older history now"},
 	{"/tokens", "token usage and estimated cost"},
 	{"/clear", "clear the conversation (memory keeps its records)"},

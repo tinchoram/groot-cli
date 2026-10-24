@@ -5,6 +5,22 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.4.0-dev (unreleased)
 
+### Tasks across spaces
+- `/tasks` prints the open ODD tasks (phase not done or failed) of every space:
+  space, agent, task id, size, phase, evidence count, opened and updated time,
+  goal (60 characters at most) and whether the conversation is running a turn.
+  `/tasks <space>` filters by space; `/tasks all` adds the done and failed tasks
+  of the last seven days with their final phase.
+- The sidebar shows `⚑ N` after a space with N open tasks, refreshed with the
+  other badges.
+- `list_tasks {space?, include_closed?}` admin tool (read-only), granted to `groot`.
+
+### End-to-end tests
+- `e2e/` holds tests against the real Anthropic API, behind the `e2e` build tag
+  and skipped unless `ANTHROPIC_API_KEY` is set. `make e2e` runs them. They use
+  the cheapest priced model with tiny prompts and print their total cost.
+  CI does not run them.
+
 ### Spaces, routes and models
 - Routes and models per space. A space in `spaces.yaml` can set `flow.mode`,
   `flow.routes.{small,medium,large}` (`model`, `agent`) and a default `model`.

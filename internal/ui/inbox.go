@@ -20,10 +20,12 @@ var styleInboxBadge = lipgloss.NewStyle().Foreground(lipgloss.Color(colorTan))
 
 // refreshUnread re-reads the unread counts behind the sidebar badges. It runs
 // after each turn, on space changes and when the model starts. The spend
-// behind the budget badges is re-read at the same points.
+// behind the budget badges is re-read at the same points, and so are the open
+// task counts.
 func (m *Model) refreshUnread() {
 	m.refreshSpend()
 	m.refreshContext()
+	m.refreshTasks()
 	counts, err := m.ws.UnreadCounts(context.Background())
 	if err != nil {
 		m.unread = nil
