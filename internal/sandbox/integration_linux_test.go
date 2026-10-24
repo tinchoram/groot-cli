@@ -4,6 +4,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -23,16 +24,27 @@ func realRunner(t *testing.T, home string) Runner {
 	h := defaultHost(home)
 	r, w := detect(h, Config{Mode: "auto"})
 	if r.Name() != BackendBwrap {
-		t.Skip("bwrap is not installed: install bubblewrap to run the sandbox tests")
+		skipOrFail(t, "bwrap is not installed: install bubblewrap to run the sandbox tests")
 	}
 	if w != "" {
 		t.Fatalf("unexpected warning %q", w)
 	}
 	probe := exec.Command("bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "true")
 	if out, err := probe.CombinedOutput(); err != nil {
-		t.Skipf("bwrap cannot create its namespaces here (unprivileged user namespaces may be restricted): %v: %s", err, strings.TrimSpace(string(out)))
+		skipOrFail(t, fmt.Sprintf("bwrap cannot create its namespaces here (unprivileged user namespaces may be restricted): %v: %s", err, strings.TrimSpace(string(out))))
 	}
 	return r
+}
+
+// skipOrFail skips the test on a developer machine without a usable backend,
+// and fails it where GROOT_REQUIRE_SANDBOX is set (CI), so a silent skip can
+// never pass for a real run.
+func skipOrFail(t *testing.T, reason string) {
+	t.Helper()
+	if os.Getenv("GROOT_REQUIRE_SANDBOX") != "" {
+		t.Fatalf("GROOT_REQUIRE_SANDBOX is set and the sandbox is unavailable: %s", reason)
+	}
+	t.Skip(reason)
 }
 
 // runSandboxed runs a shell script under r and returns its combined output and error.
