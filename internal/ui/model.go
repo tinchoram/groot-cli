@@ -222,6 +222,10 @@ type Model struct {
 	pastes   []pastedText // long pastes in the input, by placeholder
 	pasteSeq int          // numbers the pastes of the message being typed
 
+	compSel       int    // highlighted row of the completion list
+	compDismissed string // input value at which esc closed the list
+	compRows      int    // rows the open list takes, reserved from the transcript
+
 	sidebarOpen  bool
 	chatOpen     bool
 	focusSidebar bool
@@ -481,6 +485,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePaste(msg)
 	}
 	m.clearSelection()
+	if next, cmd, ok := m.completionKey(msg); ok {
+		return next, cmd
+	}
 	switch msg.Type {
 	case tea.KeyCtrlT:
 		return m, m.toggleTerminal()
@@ -544,7 +551,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	var cmd tea.Cmd
+	before := m.input.Value()
 	m.input, cmd = m.input.Update(msg)
+	if m.input.Value() != before {
+		// Typing refilters the completion list, so the highlight starts over.
+		m.compSel = 0
+	}
 	return m, cmd
 }
 
@@ -867,7 +879,9 @@ func (m *Model) resize() {
 	rows := m.inputRows()
 	m.input.SetHeight(rows)
 	// The input may take more rows than the one chromeRows budgets for.
-	vpHeight := max(m.height-chromeRows-(rows-1), 3)
+	// The open completion list takes its rows from the transcript while it shows.
+	m.compRows = m.completionRows()
+	vpHeight := max(m.height-chromeRows-(rows-1)-m.compRows, 3)
 	m.vp.Width = cw
 	m.vp.Height = vpHeight
 

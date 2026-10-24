@@ -27,11 +27,20 @@ func (m *Model) reportFeedback(kind, text string) {
 	m.refreshUnread()
 }
 
-// showBacklog prints the backlog: the open items, or all of them with "all".
+// showBacklog prints the backlog filtered by status: open items by default,
+// done items with "done", every item with "all".
 func (m *Model) showBacklog(arg string) {
-	status := feedback.StatusOpen
-	if strings.TrimSpace(arg) == "all" {
+	var status string
+	switch strings.TrimSpace(arg) {
+	case "", "open":
+		status = feedback.StatusOpen
+	case "done":
+		status = feedback.StatusDone
+	case "all":
 		status = ""
+	default:
+		m.append(styleError.Render("usage: /backlog [open|done|all]"))
+		return
 	}
 	items, err := m.ws.Backlog(status)
 	if err != nil {

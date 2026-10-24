@@ -108,13 +108,18 @@ func (m Model) inputArea() string {
 	}
 	box := styleModalBorder.BorderForeground(m.inputBorder()).Width(w).Render(m.styledInput())
 	hint := "  enter: send · shift-enter: newline · ↑/↓: history · tab: sidebar · ctrl-b: sidebar · ctrl-e: chat · ctrl-d: exit"
+	list := ""
+	if lines := m.completionLines(); len(lines) > 0 {
+		hint = "  tab: complete · ↑/↓: choose · esc: close the list · ctrl-d: exit"
+		list = strings.Join(lines, "\n") + "\n"
+	}
 	if m.focusTerm {
 		hint = "  shift-tab: leave · ctrl-t: hide · ctrl-b / ctrl-e: groot · everything else: shell"
 	}
 	if m.focusSidebar {
 		hint = "  ↑/↓: move · enter: select (space → agents, agent → input) · s/a: spaces/agents · tab/esc: back to input · ctrl-d: exit"
 	}
-	return box + "\n" + m.hintLine(hint)
+	return list + box + "\n" + m.hintLine(hint)
 }
 
 // styleSidebarBorder is the sidebar frame: rounded, dark brown.

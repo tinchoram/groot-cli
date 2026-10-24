@@ -46,3 +46,25 @@ func TestBacklogCommandPrintsTheItems(t *testing.T) {
 		t.Fatalf("backlog output:\n%s", stripANSI(m.transcriptText()))
 	}
 }
+
+func TestBacklogFiltersByStatus(t *testing.T) {
+	cases := map[string]string{"": "open", "open": "open", "done": "done", "all": ""}
+	for arg, want := range cases {
+		m, ws := newTestModel(t, &fakeSession{model: "m"})
+		m = sendLine(t, m, strings.TrimSpace("/backlog "+arg))
+		if ws.backlogStatus != want {
+			t.Fatalf("/backlog %q listed status %q, want %q", arg, ws.backlogStatus, want)
+		}
+	}
+}
+
+func TestBacklogRefusesUnknownStatus(t *testing.T) {
+	m, ws := newTestModel(t, &fakeSession{model: "m"})
+	m = sendLine(t, m, "/backlog later")
+	if !strings.Contains(stripANSI(m.transcriptText()), "usage: /backlog [open|done|all]") {
+		t.Fatalf("usage missing:\n%s", stripANSI(m.transcriptText()))
+	}
+	if ws.backlogListed {
+		t.Fatalf("an unknown status must not list the backlog, listed %q", ws.backlogStatus)
+	}
+}

@@ -290,6 +290,18 @@ duplicates are not stored, and the newest 1000 entries are kept. The history is
 per user, in `~/.groot/history` (mode 0600, one entry per line, with newlines
 and backslashes escaped).
 
+### Completion
+
+Type `/` at the start of the input and a list of up to six commands shows above
+it, each with its one-line help; the list narrows as you type, and a command
+word followed by a space lists its sub-commands. `tab` completes the highlighted
+row and adds a trailing space. `↓` and `↑` move the highlight while the list is
+open, so they do not recall history then. `esc` closes the list for the current
+line without clearing the input; typing again reopens it. `enter` completes
+instead of sending when one row remains and the word is not yet a whole command.
+The list stays hidden for text that does not start with `/`, during an approval,
+while a long paste is collapsed, and when the sidebar or the terminal has focus.
+
 ### Commands
 
 ```
@@ -862,7 +874,13 @@ area, reported_at, space, agent, version) and its description.
   report starts a turn by itself.
 - Every agent can read the backlog with `feedback_list`. Other agents do not have
   `feedback_report` or `feedback_update`; they report by messaging debug.
-- `/backlog [open|all]` prints the index (open items by default).
+- `/backlog [open|done|all]` prints the index (open items by default).
+- Release sweep: when you ask debug to "sweep the backlog" or "close the release",
+  it reads `CHANGELOG.md` at the root of its space and marks each open item that a
+  shipped entry covers as done, with the note `shipped in <version>: <line>`. Test
+  probes become wontfix. Items it cannot match stay open and are listed in its
+  answer. Debug sees only the files of its own space, so assign it to the project
+  space (`/space assign debug` there) for that project's changelog.
 - Statuses are open, in_progress, done and wontfix.
 
 ## Messaging

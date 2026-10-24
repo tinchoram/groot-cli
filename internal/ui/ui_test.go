@@ -112,24 +112,26 @@ func (f *fakeSession) SessionID() string { return "s-test" }
 
 // fakeWorkspace is an in-memory Workspace with two agents and two spaces.
 type fakeWorkspace struct {
-	order       []string
-	spaces      map[string]workspace.SpaceInfo
-	catalog     []workspace.AgentInfo
-	active      string
-	agent       string
-	chat        *fakeSession
-	closed      bool
-	unread      map[string]int
-	workModes   map[string]bool
-	blockClose  bool
-	backlog     []feedback.Item
-	lastContext []string
-	fastClosed  bool
-	grants      map[string][]string // session approvals by conversation key
-	models      []provider.ModelInfo
-	modelErr    error
-	modelWarn   string
-	checkErr    error
+	order         []string
+	spaces        map[string]workspace.SpaceInfo
+	catalog       []workspace.AgentInfo
+	active        string
+	agent         string
+	chat          *fakeSession
+	closed        bool
+	unread        map[string]int
+	workModes     map[string]bool
+	blockClose    bool
+	backlog       []feedback.Item
+	backlogStatus string // the status the last Backlog call asked for
+	backlogListed bool   // whether Backlog was called at all
+	lastContext   []string
+	fastClosed    bool
+	grants        map[string][]string // session approvals by conversation key
+	models        []provider.ModelInfo
+	modelErr      error
+	modelWarn     string
+	checkErr      error
 	// defaultModel is the configured default; defaultSet records --default.
 	defaultModel string
 	defaultSet   string
@@ -305,6 +307,7 @@ func (f *fakeWorkspace) SendFeedback(spaceName, agent, kind, text string, contex
 }
 
 func (f *fakeWorkspace) Backlog(status string) ([]feedback.Item, error) {
+	f.backlogStatus, f.backlogListed = status, true
 	return f.backlog, nil
 }
 

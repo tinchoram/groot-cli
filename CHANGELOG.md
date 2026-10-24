@@ -5,6 +5,19 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.4.0-dev (unreleased)
 
+### Command completion
+- Typing `/` at the start of the input shows up to six matching commands above it,
+  with their help; a command word followed by a space lists its sub-commands. `tab`
+  completes the highlighted row, `↑`/`↓` move the highlight, `esc` closes the list,
+  and `enter` completes when one row remains. History keys are unchanged while the
+  list is closed. The help table is the single source for `/help` and completion.
+
+### Backlog sweep
+- `/backlog [open|done|all]` lists the backlog filtered by status.
+- The debug agent has a release sweep: on "sweep the backlog" or "close the release"
+  it reads the space's `CHANGELOG.md` and closes the items a shipped entry covers,
+  with a `shipped in <version>` note. Unmatched items stay open.
+
 ### Tasks across spaces
 - `/tasks` prints the open ODD tasks (phase not done or failed) of every space:
   space, agent, task id, size, phase, evidence count, opened and updated time,

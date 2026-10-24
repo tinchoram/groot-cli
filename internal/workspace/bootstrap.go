@@ -30,7 +30,7 @@ func debugDef() catalog.AgentDef {
 	return catalog.AgentDef{
 		Name:        debugAgent,
 		Description: "Debug: reports bugs and feature requests about Groot into the backlog",
-		Tools:       []string{"feedback_report", "feedback_list", "feedback_update", "send_message", "recall", "remember"},
+		Tools:       []string{"feedback_report", "feedback_list", "feedback_update", "read_file", "send_message", "recall", "remember"},
 	}
 }
 
@@ -54,6 +54,21 @@ func debugReplyRule(confirm bool) string {
 		return `Confirmations are on: after you record an item, reply to the reporter with send_message: "<ID> recorded". For a duplicate, reply with send_message: "duplicate of <ID>".`
 	}
 	return `Confirmations are off: do not reply to the reporter unless the report asks for a confirmation. In that case reply with send_message as the report asks.`
+}
+
+// debugSweepRule is the release sweep. It is appended to the system prompt of
+// every debug conversation, like the reply rule, so homes with a stored prompt
+// from an older version follow it too.
+const debugSweepRule = `Release sweep: when the user asks to sweep the backlog or to close the release, read CHANGELOG.md at the root of the space with read_file. If there is none, say so and stop. Then go through the open items from feedback_list:
+- If a shipped entry of the changelog covers the request of an item, call feedback_update with status done and the note "shipped in <version>: <one line>", using the version of that entry.
+- If an item is a test (a probe of the reporting flow, not a request about groot), call feedback_update with status wontfix and a note that says it was a test.
+- If you cannot match an item to a shipped entry, change nothing for it and list those items in your answer with their IDs.
+Answer with the items you closed, one per line, then the ones you left open.`
+
+// debugRules is the text appended to the system prompt of every debug
+// conversation: the reply rule for the setting, then the release sweep.
+func debugRules(confirm bool) string {
+	return debugReplyRule(confirm) + "\n\n" + debugSweepRule
 }
 
 // grootDef is the administrator agent. It has no file, shell or cluster tools,

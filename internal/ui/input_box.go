@@ -53,9 +53,10 @@ func (m Model) inputRows() int {
 	return min(max(rows, inputMinRows), inputMaxRows)
 }
 
-// fitInput resizes the chat when the input changed its number of rows.
+// fitInput resizes the chat when the input or the open completion list changed
+// its number of rows.
 func (m *Model) fitInput() {
-	if m.inputRows() != m.input.Height() {
+	if m.inputRows() != m.input.Height() || m.completionRows() != m.compRows {
 		m.resize()
 	}
 }

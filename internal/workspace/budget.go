@@ -103,8 +103,8 @@ func (c *Conversation) checkBudget(ctx context.Context, next float64) error {
 		if b.Scope == "agent" {
 			hint = "/budget agent " + b.Name + " <usd>"
 		}
-		return fmt.Errorf("%s budget of %s reached: spent $%.2f of $%.2f · raise it with %s",
-			b.Scope, b.Name, b.Spent, b.Limit, hint)
+		return fmt.Errorf("%s budget of %s reached: spent %s of %s · raise it with %s",
+			b.Scope, b.Name, FormatUSD(b.Spent), FormatUSD(b.Limit), hint)
 	}
 	if c.budgetWarned || c.budgetNotice == nil {
 		return nil
@@ -112,7 +112,7 @@ func (c *Conversation) checkBudget(ctx context.Context, next float64) error {
 	for _, b := range bs {
 		if b.Overrun(next) {
 			c.budgetWarned = true
-			c.budgetNotice(fmt.Sprintf("%s budget may be passed by the next turn: spent $%.2f of $%.2f", b.describe(), b.Spent, b.Limit))
+			c.budgetNotice(fmt.Sprintf("%s budget may be passed by the next turn: spent %s of %s", b.describe(), FormatUSD(b.Spent), FormatUSD(b.Limit)))
 			return nil
 		}
 	}

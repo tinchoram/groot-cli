@@ -502,7 +502,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		base = w.opts.Config.EffectiveSystemPrompt()
 	}
 	if agentName == debugAgent {
-		base += "\n\n" + debugReplyRule(w.opts.Config.Feedback.Confirm)
+		base += "\n\n" + debugRules(w.opts.Config.Feedback.Confirm)
 	}
 	maxTurns := def.MaxTurns
 	if maxTurns == 0 {

@@ -66,6 +66,11 @@ type env struct {
 func newEnv(t *testing.T, key string, tools []string) *env {
 	t.Helper()
 	e := &env{home: t.TempDir(), dir: t.TempDir(), key: key, calls: &atomic.Int64{}}
+	if len(tools) == 0 {
+		// The catalog refuses an agent without tools; recall is read-only and
+		// never called by the text-only scenarios.
+		tools = []string{"recall"}
+	}
 	def := catalog.AgentDef{Name: agentName, Description: "answers briefly", Model: model, Tools: tools}
 	if err := catalog.Save(e.home, def, "You are a terse assistant. Follow the user's instructions exactly."); err != nil {
 		t.Fatalf("save agent: %v", err)
