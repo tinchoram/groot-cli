@@ -159,7 +159,7 @@ func (s *WorkState) warnOff(msg string) {
 
 // approves reports whether work mode covers this call.
 func (s *WorkState) approves(req Request) bool {
-	if adminChanges[req.Tool] {
+	if adminChanges[req.Tool] || req.Tainted {
 		return false
 	}
 	switch req.Tool {

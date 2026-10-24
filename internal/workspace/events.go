@@ -1,6 +1,9 @@
 package workspace
 
-import "github.com/tinchoram/groot-cli/internal/gate"
+import (
+	"github.com/tinchoram/groot-cli/internal/gate"
+	"github.com/tinchoram/groot-cli/internal/guard"
+)
 
 // keyedText binds the text hook to one conversation key.
 func keyedText(h Hooks, key string) func(string) {
@@ -33,9 +36,9 @@ func keyedWarn(h Hooks, key string) func(string) {
 // of this conversation, so the request reaches the transcript it belongs to.
 // Other policies are returned unchanged.
 // A call that work mode or a session grant approves prints as [auto].
-func autoAwareTool(h Hooks, key string, work *gate.WorkState, sess gate.Session) func(string, string) {
+func autoAwareTool(h Hooks, key string, work *gate.WorkState, sess gate.Session, g *guard.Guard) func(string, string) {
 	return func(name, input string) {
-		req := gate.Request{Tool: name, Input: input}
+		req := gate.Request{Tool: name, Input: input, Tainted: g.Tainted(input)}
 		if work.Would(req) || sess.Covers(req) {
 			if h.OnAuto != nil {
 				h.OnAuto(key, name, input)

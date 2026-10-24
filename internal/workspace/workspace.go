@@ -542,7 +542,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		System:            config.ComposeSystemPrompt(base, preamble, projectCtx),
 		MaxTurns:          maxTurns,
 		OnText:            keyedText(w.opts.Hooks, key),
-		OnToolCall:        autoAwareTool(w.opts.Hooks, key, work, sess),
+		OnToolCall:        autoAwareTool(w.opts.Hooks, key, work, sess, g),
 		OnWarning:         keyedWarn(w.opts.Hooks, key),
 		// Checked before every model call, so a turn that goes over its budget
 		// stops between tool rounds.

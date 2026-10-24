@@ -10,7 +10,7 @@ import (
 // tool in this conversation, within the scope work mode gives it. Admin tools
 // are not offered this answer, so the key does nothing for them.
 func (m *Model) answerForSession() {
-	if m.pending == nil || !gate.Grantable(m.pending.req.Tool) {
+	if m.pending == nil || !m.pending.req.CanGrant() {
 		return
 	}
 	name := m.pending.req.Tool
@@ -47,7 +47,7 @@ func (m *Model) runAllowCommand(arg string) {
 // approvalChoices is the answer key list shown with an approval: a is offered
 // only for tools that can be granted.
 func approvalChoices(req gate.Request) string {
-	if gate.Grantable(req.Tool) {
+	if req.CanGrant() {
 		return "(y/n/a)"
 	}
 	return "(y/n)"
