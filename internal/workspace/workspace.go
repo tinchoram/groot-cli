@@ -117,8 +117,11 @@ type Options struct {
 	// otherwise to GlobalConfigPath. Empty ConfigPath means groot.yaml.
 	ConfigPath       string
 	GlobalConfigPath string
-	Spaces           *space.Store
-	Gate             gate.Gate
+	// UserConfigPath is the identity file (user.yaml) that /me and the
+	// onboarding prompt write. Empty means the name cannot be saved.
+	UserConfigPath string
+	Spaces         *space.Store
+	Gate           gate.Gate
 	// Sandbox confines the bash tool. Nil runs commands unwrapped.
 	Sandbox sandbox.Runner
 	Hooks   Hooks
@@ -180,6 +183,10 @@ type Workspace struct {
 	sinks     *audit.Fanout
 	sinkMu    sync.Mutex
 	sinkWarns []string
+	// operator is the operator's name without @, read by the prompts of every
+	// turn. It has its own lock: prompts are built while mu is held.
+	operatorMu sync.Mutex
+	operator   string
 }
 
 type spaceStores struct {
@@ -217,6 +224,7 @@ func New(opts Options) (*Workspace, error) {
 		inbox:    ib,
 		work:     map[string]*gate.WorkState{},
 		grants:   map[string]*gate.Grants{},
+		operator: opts.Config.User.Name,
 		feedback: fb,
 	}
 	w.sinks = audit.NewFanout(w.noteSinkWarning)
@@ -590,7 +598,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		if err != nil {
 			return "", fmt.Errorf("read AGENTS.md: %w", err)
 		}
-		return config.ComposeSystemPrompt(base, preamble, projectCtx), nil
+		return config.ComposeSystemPrompt(base+"\n\n"+config.PeopleBlock(w.OperatorName()), preamble, projectCtx), nil
 	}
 	system, err := rebuildSystem(ctx)
 	if err != nil {

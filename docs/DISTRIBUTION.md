@@ -82,6 +82,7 @@ It asks for nothing except the API key, which is missing until
 | Backlog (when debug is installed) | `~/.groot/feedback/` |
 | Prompt history, layout, update cache | `~/.groot/history`, `layout.yaml`, `update-check.json` |
 | Global configuration | `~/.groot/groot.yaml` (optional) |
+| Your name (`/me`, first-start prompt) | `~/.groot/user.yaml`, mode 0600 |
 | API key | macOS keychain, or `~/.groot/credentials` (0600) on Linux |
 | Memory, sessions, tasks and audit of a space | `<space dir>/.groot/groot.db` and `audit.jsonl`, inside the project |
 | The same for `root` | `~/.groot/groot.db`, `~/.groot/audit.jsonl` |

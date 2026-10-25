@@ -43,6 +43,7 @@ type Config struct {
 	Guard        GuardConfig      `yaml:"guard"`
 	Updates      UpdatesConfig    `yaml:"updates"`
 	MCP          MCPConfig        `yaml:"mcp"`
+	User         UserConfig       `yaml:"user"`
 }
 
 // UpdatesConfig controls the release check. Check (default true) asks GitHub
@@ -251,28 +252,68 @@ func Load(path string) (Config, error) {
 // references literal here; they expand at connect time. The merged result is
 // validated once, at the end.
 func LoadLayers(paths ...string) (Config, error) {
-	cfg := Default()
+	layers := make([]layer, 0, len(paths))
 	for i, path := range paths {
-		raw, err := os.ReadFile(path)
+		kind := layerProject
+		if i == 0 {
+			kind = layerGlobal
+		}
+		layers = append(layers, layer{path: path, kind: kind})
+	}
+	return loadLayers(layers)
+}
+
+// layerKind says which rules a file is held to: the global file may set
+// everything, the identity file sets only the name, and project files set
+// everything except mcp.servers and user.name.
+type layerKind int
+
+const (
+	layerGlobal layerKind = iota
+	layerUser
+	layerProject
+)
+
+type layer struct {
+	path string
+	kind layerKind
+}
+
+// loadLayers applies the layers in order over the defaults, then finishes the
+// merged config: empty allowlist entries are dropped, MCP timeouts defaulted,
+// the operator's name normalized, and the result validated once.
+func loadLayers(layers []layer) (Config, error) {
+	cfg := Default()
+	for _, l := range layers {
+		raw, err := os.ReadFile(l.path)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return cfg, fmt.Errorf("read %s: %w", path, err)
+			return cfg, fmt.Errorf("read %s: %w", l.path, err)
 		}
-		if i > 0 {
-			if err := rejectProjectServers(path, raw); err != nil {
+		if l.kind == layerUser {
+			if err := loadUserLayer(&cfg, l.path); err != nil {
+				return cfg, err
+			}
+			continue
+		}
+		if l.kind == layerProject {
+			if err := rejectProjectServers(l.path, raw); err != nil {
+				return cfg, err
+			}
+			if err := rejectProjectUserName(l.path, raw); err != nil {
 				return cfg, err
 			}
 		}
 
 		var doc yaml.Node
 		if err := yaml.Unmarshal(raw, &doc); err != nil {
-			return cfg, fmt.Errorf("parse %s: %w", path, err)
+			return cfg, fmt.Errorf("parse %s: %w", l.path, err)
 		}
 		expandConfigNode(&doc, os.LookupEnv)
 		if err := doc.Decode(&cfg); err != nil {
-			return cfg, fmt.Errorf("decode %s: %w", path, err)
+			return cfg, fmt.Errorf("decode %s: %w", l.path, err)
 		}
 	}
 	// An unset ${VAR:-} expands to "", which must not become an allowlist entry.
@@ -282,6 +323,13 @@ func LoadLayers(paths ...string) (Config, error) {
 			s.Timeout = DefaultMCPTimeout
 			cfg.MCP.Servers[name] = s
 		}
+	}
+	if cfg.User.Name != "" {
+		name, err := NormalizeUserName(cfg.User.Name)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.User.Name = name
 	}
 	return cfg, cfg.Validate()
 }
@@ -315,6 +363,11 @@ func dropEmpty(in []string) []string {
 
 // Validate checks enumerated fields and numeric bounds.
 func (c Config) Validate() error {
+	if c.User.Name != "" {
+		if _, err := NormalizeUserName(c.User.Name); err != nil {
+			return err
+		}
+	}
 	if c.Compaction.MaxContextPercent < 0 || c.Compaction.MaxContextPercent > 100 {
 		return fmt.Errorf("compaction.max_context_percent must be between 0 and 100, got %d", c.Compaction.MaxContextPercent)
 	}

@@ -5,6 +5,20 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.6.0-dev (unreleased)
 
+### Identity and mentions
+- FEAT-017 and the operator's request: agents can mention you and each other with
+  `@`. Set your name once (`/me <name>`, or the prompt on the first start); the
+  banner shows `operated by: @<name>`, and agents mention you only when they need a
+  decision from you.
+- `@` in the input opens a list of agents: the current space first, then the other
+  spaces as `space/name`. A name held by several spaces is always qualified.
+  `tab` or `enter` completes the row. A message that starts with `@agent` or
+  `@space/agent` goes to that agent, switching the space when needed.
+- Mentions in a reply to the operator are highlighted, and a conversation whose
+  agent mentions you shows an `@` marker until you open it or write to it.
+- The name lives in `~/.groot/user.yaml`. A `user.name` in `groot.yaml` works too;
+  a project file cannot set it.
+
 ### MCP
 - MCP client: groot connects to the servers listed under `mcp.servers` in the
   global config (stdio or streamable HTTP). A project file can only narrow them

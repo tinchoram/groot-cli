@@ -101,6 +101,10 @@ type Workspace interface {
 	// tasks, or every space's when the name is empty, with the closed ones on request.
 	OpenTasks(ctx context.Context) ([]workspace.TaskRow, error)
 	ListTasks(ctx context.Context, name string, includeClosed bool) ([]workspace.TaskRow, error)
+	// OperatorName is the operator's name without @, or "". SetOperatorName
+	// validates and saves it, and returns it as stored.
+	OperatorName() string
+	SetOperatorName(raw string) (string, error)
 }
 
 // Options wires a Model.
@@ -255,6 +259,12 @@ type Model struct {
 	compDismissed string // input value at which esc closed the list
 	compRows      int    // rows the open list takes, reserved from the transcript
 
+	// needsYou marks the conversations whose agent mentioned the operator, until
+	// the operator views them or sends them a message.
+	needsYou map[string]bool
+	// onboard is set while the first-start prompt asks for the operator's name.
+	onboard bool
+
 	sidebarOpen  bool
 	chatOpen     bool
 	focusSidebar bool
@@ -332,6 +342,11 @@ func NewModel(o Options) Model {
 		chatOpen:    true,
 		shineCol:    -shineEdgePad,
 		updates:     o.UpdateNotices,
+		needsYou:    map[string]bool{},
+	}
+	m.onboard = o.Workspace.OperatorName() == ""
+	if m.onboard {
+		m.input.Placeholder = onboardingPrompt
 	}
 	m.clip = o.Clipboard
 	if m.clip == nil {
@@ -465,6 +480,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case answerMsg:
 		m.busy = false
+		// The conversation on screen is the one the workspace reports; a reply to
+		// any other conversation marks it.
+		if msg.key != m.ws.ConversationKey() && mentionsName(msg.text, m.ws.OperatorName()) {
+			m.needsYou[msg.key] = true
+		}
 		// The final answer is authoritative: it replaces the streamed text.
 		if msg.text != "" {
 			m.partial = ""
@@ -530,6 +550,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.clearSelection()
 	if next, cmd, ok := m.completionKey(msg); ok {
 		return next, cmd
+	}
+	if m.onboard && msg.Type == tea.KeyEsc {
+		// Esc skips the name for this session; the next start asks again.
+		m.onboard = false
+		m.input.Placeholder = ""
+		return m, nil
 	}
 	switch msg.Type {
 	case tea.KeyCtrlT:
@@ -673,18 +699,43 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
+	if m.onboard {
+		return m.saveOperator(text, true), nil
+	}
+	typed := full
+	// A message that starts with @agent or @space/agent goes to that agent. The
+	// token is the same in text and full, so the rest is cut from both.
+	routed := false
+	if token, _, ok := m.leadingAddress(full); ok {
+		if !m.routeTo(token) {
+			m.hist.Push(typed)
+			return m, nil
+		}
+		routed = true
+		text = strings.TrimSpace(text[1+len(token):])
+		full = strings.TrimSpace(full[1+len(token):])
+		if full == "" {
+			m.hist.Push(typed)
+			return m, nil
+		}
+	}
 	if m.busy {
 		m.append(styleDim.Render("agent is working; wait or switch"))
 		return m, nil
 	}
-	m.hist.Push(full)
+	m.hist.Push(typed)
 	if m.historyPath != "" {
 		if err := SaveHistory(m.historyPath, m.hist.Entries()); err != nil {
 			m.append(styleDim.Render("warning: could not save prompt history: " + err.Error()))
 		}
 	}
-	if cmd, ok := ParseCommand(full); ok {
-		return m.runCommand(cmd)
+	if !routed {
+		if cmd, ok := ParseCommand(full); ok {
+			return m.runCommand(cmd)
+		}
+	}
+	if note := m.mentionNote(full); note != "" {
+		full += "\n" + note
 	}
 	return m.sendPrompt(text, full, echoLines)
 }
@@ -692,6 +743,7 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 // sendPrompt echoes a prompt as a user turn and starts the turn on the active
 // conversation. text is what the user sees, full what the agent receives.
 func (m Model) sendPrompt(text, full string, echoLines []string) (tea.Model, tea.Cmd) {
+	delete(m.needsYou, m.key)
 	m.append("\n" + turnHeader(m.vp.Width))
 	// The echo prints the lines as typed: the prompt on the first, an indent after.
 	lines := strings.Split(text, "\n")
@@ -770,6 +822,8 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		m.append(m.costBlock())
 	case "tokens":
 		m.append(usageBlock(m.session.Usage(), m.session.CostUSD()))
+	case "me":
+		m.runMeCommand(cmd.Arg)
 	case "clear":
 		done := m.session.Clear()
 		m.lines = nil
@@ -914,10 +968,13 @@ func (m *Model) addMarkdown(raw string) {
 // expandLines replaces the Markdown markers with their rendering at width.
 func (m Model) expandLines(width int) []string {
 	var out []string
+	operator := m.ws.OperatorName()
 	for _, l := range m.lines {
 		if strings.HasPrefix(l, mdMarker) {
 			if idx, err := strconv.Atoi(l[len(mdMarker):]); err == nil && idx >= 0 && idx < len(m.md) {
-				out = append(out, strings.Split(renderMarkdown(m.md[idx], width), "\n")...)
+				for _, rl := range strings.Split(renderMarkdown(m.md[idx], width), "\n") {
+					out = append(out, highlightMentions(rl, operator))
+				}
 				continue
 			}
 		}
@@ -995,7 +1052,7 @@ func (m Model) banner() string {
 	if !m.shineOn {
 		shine = shineDisabled
 	}
-	return bannerView(m.chatWidth(), shine, m.version)
+	return bannerView(m.chatWidth(), shine, m.version, m.ws.OperatorName())
 }
 
 // transcriptText returns the plain transcript, used by tests.

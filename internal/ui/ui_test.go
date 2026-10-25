@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/tinchoram/groot-cli/internal/api"
+	"github.com/tinchoram/groot-cli/internal/config"
 	"github.com/tinchoram/groot-cli/internal/flow"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
@@ -237,6 +238,10 @@ type fakeWorkspace struct {
 	// flow is what SpaceFlow reports; flowErr makes it fail.
 	flow    workspace.FlowView
 	flowErr error
+	// operator is the operator's name without @; SetOperatorName stores it, or
+	// fails with opErr.
+	operator string
+	opErr    error
 }
 
 func newFakeWorkspace(chat *fakeSession) *fakeWorkspace {
@@ -249,10 +254,25 @@ func newFakeWorkspace(chat *fakeSession) *fakeWorkspace {
 			{Name: "devjunior", Description: "Junior developer", Model: "claude-sonnet-5-5", Tools: []string{"read_file", "bash"}},
 			{Name: "reviewer", Description: "Reviews diffs", Model: "claude-sonnet-5-5", Tools: []string{"read_file"}},
 		},
-		active: "default",
-		agent:  "devjunior",
-		chat:   chat,
+		active:   "default",
+		agent:    "devjunior",
+		chat:     chat,
+		operator: "Tinchoram",
 	}
+}
+
+func (f *fakeWorkspace) OperatorName() string { return f.operator }
+
+func (f *fakeWorkspace) SetOperatorName(raw string) (string, error) {
+	if f.opErr != nil {
+		return "", f.opErr
+	}
+	name, err := config.NormalizeUserName(raw)
+	if err != nil {
+		return "", err
+	}
+	f.operator = name
+	return name, nil
 }
 
 func (f *fakeWorkspace) assigned(space string) []string { return f.spaces[space].Agents }

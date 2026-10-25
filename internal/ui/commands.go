@@ -15,7 +15,7 @@ type Command struct {
 
 var knownCommands = map[string]bool{
 	"help": true, "model": true, "compact": true, "tokens": true, "clear": true, "exit": true,
-	"space": true, "agent": true, "inbox": true, "task": true, "tasks": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true, "audit": true, "memory": true, "readinbox": true, "mcp": true,
+	"space": true, "agent": true, "inbox": true, "task": true, "tasks": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true, "audit": true, "memory": true, "readinbox": true, "mcp": true, "me": true,
 }
 
 // ParseCommand reports whether line is a slash command and splits it into name and argument.
@@ -106,6 +106,7 @@ var helpEntries = []helpEntry{
 	{"/compact", "summarize older history now"},
 	{"/tokens", "token usage and estimated cost"},
 	{"/clear", "clear the conversation (memory keeps its records)"},
+	{"/me [name]", "show your name, or set it: agents mention you as @name"},
 	{"/exit", "end the session and quit"},
 }
 

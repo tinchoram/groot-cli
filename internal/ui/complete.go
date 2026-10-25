@@ -16,6 +16,9 @@ type completionItem struct {
 	usage  string // as /help prints it, e.g. "/space new <name> [path]"
 	insert string // the first line once completed, without the trailing space
 	help   string
+	// mention is set for an @address row: it replaces the @word at the caret,
+	// not the first line.
+	mention bool
 }
 
 // firstToken is the command word of a usage line: "/space" for "/space new <name>".
@@ -63,11 +66,17 @@ func (m Model) completionRows() int { return len(m.completionCandidates()) }
 // command names while the first word is typed, sub-commands once a known
 // command is followed by a space and a word without arguments yet.
 func (m Model) completionCandidates() []completionItem {
-	if m.pending != nil || m.focusSidebar || m.focusTerm || len(m.pastes) > 0 || !m.onFirstInputLine() {
+	if m.pending != nil || m.focusSidebar || m.focusTerm || len(m.pastes) > 0 {
 		return nil
 	}
 	// A list dismissed with esc stays closed until the input changes.
 	if m.input.Value() == m.compDismissed {
+		return nil
+	}
+	if items, ok := m.mentionCandidates(); ok {
+		return items
+	}
+	if !m.onFirstInputLine() {
 		return nil
 	}
 	line := m.firstLine()
@@ -143,6 +152,9 @@ func (m *Model) moveCompletion(step int) {
 // completeTo replaces the first input line with the item's text and a trailing
 // space, and leaves the cursor at the end of that line. Other lines stay.
 func (m Model) completeTo(item completionItem) Model {
+	if item.mention {
+		return m.completeMention(item)
+	}
 	rest := ""
 	if _, after, found := strings.Cut(m.input.Value(), "\n"); found {
 		rest = "\n" + after
@@ -182,6 +194,14 @@ func (m Model) completionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	case tea.KeyEnter:
 		if isNewlineKey(msg) {
 			return m, nil, false
+		}
+		if items[0].mention {
+			// Enter completes the highlighted address, unless the word is already
+			// one: then it sends.
+			if m.mentionExact() {
+				return m, nil, false
+			}
+			return m.completeTo(items[min(m.compSel, len(items)-1)]), nil, true
 		}
 		if len(items) == 1 && strings.TrimSpace(m.firstLine()) != items[0].insert {
 			return m.completeTo(items[0]), nil, true

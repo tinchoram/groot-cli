@@ -235,10 +235,17 @@ func versionTag(version string) string {
 
 // underName are the lines printed under the name, left aligned with it: the
 // tagline, the hint, then the version when the build has one.
-func underName(version, hint string) []string {
+func underName(version, hint, operator string) []string {
 	lines := []string{styleDim.Render(tagline), styleDim.Render(hint)}
+	var parts []string
 	if v := versionTag(version); v != "" {
-		lines = append(lines, v)
+		parts = append(parts, v)
+	}
+	if op := operatorTag(operator); op != "" {
+		parts = append(parts, op)
+	}
+	if len(parts) > 0 {
+		lines = append(lines, strings.Join(parts, "  "))
 	}
 	return lines
 }
@@ -246,11 +253,11 @@ func underName(version, hint string) []string {
 // bannerView renders the banner for a terminal of the given width. shine is
 // the sweep column; pass shineDisabled for the settled frame. version is
 // printed under the two text lines.
-func bannerView(width, shine int, version string) string {
+func bannerView(width, shine int, version, operator string) string {
 	if width < wordmarkMinWidth {
 		var sb strings.Builder
 		sb.WriteString("\n" + styleBanner.Render("  GROOT") + "\n")
-		for _, line := range underName(version, "type a message or /help") {
+		for _, line := range underName(version, "type a message or /help", operator) {
 			sb.WriteString("  " + line + "\n")
 		}
 		sb.WriteString("\n")
@@ -264,7 +271,7 @@ func bannerView(width, shine int, version string) string {
 			sb.WriteString(renderBannerRow(line, row, shine))
 			sb.WriteString("\n")
 		}
-		for _, line := range underName(version, bannerHint) {
+		for _, line := range underName(version, bannerHint, operator) {
 			sb.WriteString(line + "\n")
 		}
 		sb.WriteString("\n")
@@ -274,7 +281,7 @@ func bannerView(width, shine int, version string) string {
 	// and the tagline, hint and version beside its trunk and pot. The lines
 	// under the name take the rows the mascot leaves, so the wordmark starts
 	// one row higher when there is a version.
-	under := underName(version, bannerHint)
+	under := underName(version, bannerHint, operator)
 	wordmarkTop := len(mascotArt) - len(bannerArt) - len(under)
 	gap := strings.Repeat(" ", mascotGap)
 	right := make([]string, len(mascotArt))

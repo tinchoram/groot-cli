@@ -32,7 +32,7 @@ under `internal/`:
 | `auth` | Finds and stores the Anthropic key: environment, `.env`, the macOS keychain (through `security`), `<home>/credentials`. |
 | `feedback` | Backlog of bugs and feature requests about groot. |
 | `changelog` (repo root, `changelog.go`) | Embeds `CHANGELOG.md`; `go:embed` cannot reach a parent directory, so the file sits at the root. `Section` finds one version's entry. Used by `read_changelog` and by the version check in `cmd/groot`. |
-| `config` | `groot.yaml` schema, defaults, layering (global file under the project file), `${VAR}` expansion, system prompt composition, `AGENTS.md`. |
+| `config` | `groot.yaml` schema, defaults, layering (global file, then `user.yaml` with the operator's name, then the project file), `${VAR}` expansion, system prompt composition (People block included), `AGENTS.md`. |
 
 Supporting packages: `api` (provider-neutral messages and blocks), `audit` (JSONL
 log of tool calls; `reader.go` filters it from the end of the file and `Summarize`
@@ -68,6 +68,8 @@ on `/clear`, and after every change through the memory tools or `/memory`
 (`refreshSystem`, `internal/workspace/conversation.go`). It is budgeted by
 `memory.preamble_tokens` and `memory.preamble_summaries`, and composed into the
 system prompt by `config.ComposeSystemPrompt`. See `docs/MEMORY.md`.
+
+Mentions (`internal/ui/mention*.go`, `internal/ui/route.go`) are resolved in the UI, before a turn starts. A message that starts with `@address` is routed to that conversation (`routeTo` switches the space and selects the agent). Other `@` tokens resolve to a `[mentions: …]` line that is appended to the message, so the turn carries the full addresses. Nothing about mentions reaches the workspace except the People block in the system prompt.
 
 ## Gate chain
 
@@ -132,6 +134,7 @@ between agents (`internal/flow/delegation.go`), applied by `messenger.Send` thro
 Global state, under `~/.groot` (or `GROOT_HOME`):
 
 - `spaces.yaml`: spaces, the active space, assigned agents (`internal/space`).
+- `user.yaml`: the operator's name, a single `name:` key, written atomically with mode 0600 (`config.SaveUserName`). It loads as the identity layer between `groot.yaml` and the project file.
 - Context size: measured after each model answer in `Agent.recordContext`
   (`internal/agent/agent.go`), stored in `sessions.context_tokens`; windows come
   from `provider.ContextWindow` (`internal/provider/context.go`).

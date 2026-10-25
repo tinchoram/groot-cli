@@ -88,6 +88,9 @@ func (m Model) statusLine() string {
 	if b := m.agentBadge(); b != "" {
 		lead += b + " "
 	}
+	if b := m.needsYouLabel(); b != "" {
+		lead += b + " "
+	}
 	switch {
 	case m.closing:
 		return lead + styleDim.Render("closing… (esc to skip summaries)")

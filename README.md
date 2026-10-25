@@ -534,6 +534,8 @@ Every result is the state read back from `spaces.yaml` and the catalog.
 
 ```
 ~/.groot/
+  groot.yaml               global configuration (optional)
+  user.yaml                your name, written by the first-start prompt and /me
   spaces.yaml              spaces, the active space, assigned agents
   agents/<name>.md         one agent: frontmatter for the settings, body for the prompt
 <space path>/.groot/
@@ -616,6 +618,9 @@ instead of sending when one row remains and the word is not yet a whole command.
 The list stays hidden for text that does not start with `/`, during an approval,
 while a long paste is collapsed, and when the sidebar or the terminal has focus.
 
+Type `@` in a message that does not start with `/` and the list shows the agents
+you can mention (see [Identity and mentions](#identity-and-mentions)).
+
 ### Commands
 
 ```
@@ -640,6 +645,7 @@ while a long paste is collapsed, and when the sidebar or the terminal has focus.
 /agent new <name> [description]  create agents/<name>.md with a starter prompt
 /agent import <path-or-url> [--force]  import an agent file (see below)
 /agent show [name]               show an agent's settings and the first prompt line
+/me [name]                       show your name, or set it: agents mention you as @name
 ```
 
 To make a new agent: `/agent new reviewer "reviews diffs"`, edit the
@@ -719,6 +725,42 @@ Limits: 256 KB per file, text only, and 10 seconds for a URL. Imported files
 keep their own licence; check it before you share or redistribute them. The
 import is written to your catalog as is, so read the prompt before you assign
 the agent to a space.
+
+## Identity and mentions
+
+Agents address you and each other with `@`. Three names matter: yours, `@groot`
+(the coordinator), and every agent as `name` or `space/name`.
+
+- **Your name.** On the first start, with no name set, the input asks "How should
+  agents call you? (one word, e.g. Tinchoram)". Enter saves it; esc skips it for
+  this session, and the next start asks again. A name is one word of 2 to 32
+  letters, digits, `_` or `-`, with or without the `@`. Change it any time with
+  `/me <name>`, and `/me` alone shows it. It is stored in `~/.groot/user.yaml` and
+  takes effect at once: the banner and the prompts of open conversations change
+  without a restart. `user.name` in `~/.groot/groot.yaml` works too, and `user.yaml`
+  overrides it. A project's `groot.yaml` cannot set it.
+- **Banner.** The line under the wordmark shows `operated by: @<name>` next to the
+  version. It is hidden when no name is set.
+- **Autocomplete.** Type `@` and a list appears under the input: the agents of the
+  current space first as `name`, then the agents of other spaces as `space/name`.
+  An agent held by several spaces is always shown qualified. Typing filters by
+  prefix, ignoring case. Up and down choose, `tab` or `enter` inserts the address
+  and a space, `esc` closes the list. The list does not open in a `/` command.
+- **Routing.** A message that starts with `@name` or `@space/name` goes to that
+  agent: groot switches to its space when needed, opens its conversation and sends
+  the rest. A bare `@name` only switches. An unknown name sends nothing and prints
+  `no agent @x; agents: …`. A name held by several spaces needs the space when the
+  current space does not hold it.
+- **Mentions in text.** Other mentions stay in the text. The agent also gets a
+  line with the agents it names, in full, so it can `send_message` to them:
+  `[mentions: explore/search-specialist]`.
+- **What you see.** `@<your name>` and `@groot` are highlighted in agent replies.
+  When another conversation's reply mentions you, its agent in the sidebar and
+  the `@n` in the status line show an `@` marker. Opening the conversation or
+  writing to it clears the marker.
+- **What agents know.** Every prompt has a People section. It names you, tells the
+  agent to mention you only when it needs a decision, approval or information, and
+  says that `@groot` is reached with `send_message`, not by a mention alone.
 
 ## Mouse, copy and paste
 

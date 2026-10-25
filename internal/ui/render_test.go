@@ -139,14 +139,14 @@ func col(out, s string) int {
 
 func TestBannerShowsTaglineAndMascot(t *testing.T) {
 	for _, width := range []int{30, 120} {
-		out := bannerView(width, shineDisabled, "0.5.4-dev")
+		out := bannerView(width, shineDisabled, "0.5.4-dev", "")
 		if !strings.Contains(out, tagline) {
 			t.Errorf("width %d: banner lacks the tagline %q", width, tagline)
 		}
 	}
-	wide := bannerView(120, shineDisabled, "0.5.4-dev")
+	wide := bannerView(120, shineDisabled, "0.5.4-dev", "")
 	for _, width := range []int{30, 60, 120} {
-		out := stripANSI(bannerView(width, shineDisabled, "0.5.4-dev"))
+		out := stripANSI(bannerView(width, shineDisabled, "0.5.4-dev", ""))
 		if !strings.Contains(out, "v0.5.4-dev") {
 			t.Errorf("width %d: banner lacks the version", width)
 		}
@@ -164,7 +164,7 @@ func TestBannerShowsTaglineAndMascot(t *testing.T) {
 	if tagline != "Terminal Agent for Devs and Platform engineering" {
 		t.Errorf("tagline = %q", tagline)
 	}
-	if out := stripANSI(bannerView(120, shineDisabled, "")); strings.Contains(out, " v") {
+	if out := stripANSI(bannerView(120, shineDisabled, "", "")); strings.Contains(out, " v") {
 		t.Errorf("empty version prints nothing: %q", out)
 	}
 	if !strings.Contains(wide, "▀") && !strings.Contains(wide, "▄") {

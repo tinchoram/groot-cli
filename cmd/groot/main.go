@@ -146,7 +146,7 @@ func loadConfig(explicit bool, projectPath, globalPath string) (config.Config, e
 			return config.Config{}, fmt.Errorf("config file %s: %w", projectPath, err)
 		}
 	}
-	return config.LoadLayers(globalPath, projectPath)
+	return config.LoadWithUser(globalPath, config.UserFile(globalPath), projectPath)
 }
 
 // buildGate maps the policy name to a gate. confirm is used only by the
@@ -193,6 +193,7 @@ func runApp(cfg config.Config, cfgPath, groot, apiKey string) error {
 		Config:           cfg,
 		ConfigPath:       cfgPath,
 		GlobalConfigPath: filepath.Join(groot, "groot.yaml"),
+		UserConfigPath:   config.UserFile(filepath.Join(groot, "groot.yaml")),
 		Spaces:           spaces,
 		Gate:             g,
 		Hooks: workspace.Hooks{
