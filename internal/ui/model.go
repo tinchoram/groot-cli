@@ -4,6 +4,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/tinchoram/groot-cli/internal/feedback"
 	"strconv"
@@ -176,8 +177,9 @@ type confirmState struct {
 // Vertical budget of the chat column: header, status line, input box (3), hint.
 const chromeRows = 6
 
-// closeBudget bounds the model summaries written when the session closes.
-const closeBudget = 5 * time.Second
+// closeBudget bounds the model summaries written when the session closes. A
+// long conversation needs more than a few seconds; esc skips the wait.
+const closeBudget = 15 * time.Second
 
 // sidebarWidth is the outer width of the sidebar when it sits beside the chat.
 const sidebarWidth = 28
@@ -774,10 +776,16 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		// Ending the old session writes its summary, which calls the model,
 		// so it runs off the UI loop.
 		return m, func() tea.Msg {
-			if err := done(context.Background()); err != nil {
-				return noteMsg{err: err}
+			err := done(context.Background())
+			switch {
+			case err == nil:
+				return noteMsg{text: styleDim.Render("conversation cleared")}
+			case errors.Is(err, workspace.ErrSummaryFallback):
+				// The session is cleared and remembered; only the model summary
+				// was replaced by the local one.
+				return noteMsg{text: styleDim.Render("conversation cleared · " + strings.TrimPrefix(err.Error(), workspace.ErrSummaryFallback.Error()+": "))}
 			}
-			return noteMsg{text: styleDim.Render("conversation cleared")}
+			return noteMsg{err: err}
 		}
 	case "inbox":
 		m.runInboxCommand(cmd.Arg)

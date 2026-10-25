@@ -1213,8 +1213,12 @@ There is no global default yet: a `budget` key in `groot.yaml` is not read.
   denied, each conversation keeps a local summary (the last request and the start
   of the last answer) with no model call, and the shell is hung up.
 - `ctrl-d` and `/exit` write model summaries for the conversations that ran, in
-  parallel, within five seconds. The status line shows `closing… (esc to skip
-  summaries)`. Esc, or the end of the five seconds, keeps the local summary.
+  parallel, within fifteen seconds. The status line shows `closing… (esc to skip
+  summaries)`. Esc, or the end of the fifteen seconds, keeps the local summary.
+- When the model summary of a `/clear` fails or times out, the session keeps a
+  local summary and the note says so (`conversation cleared · summary for
+  groot: the model did not answer in time; a local summary was kept`). It is
+  not an error: the session is ended and remembered either way.
 - Summaries are stored as session summaries in each space's database.
 
 ## Reporting bugs and features

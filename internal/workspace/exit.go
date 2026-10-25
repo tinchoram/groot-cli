@@ -102,6 +102,34 @@ func (w *Workspace) shutdown(ctx context.Context, graceful bool) error {
 	return errors.Join(errs...)
 }
 
+// ErrSummaryFallback marks a session that kept its local summary because the
+// model summary failed, a timeout most often. It is a degradation to report
+// as a note, not an error: the session is ended and remembered either way.
+var ErrSummaryFallback = errors.New("summary fallback")
+
+// keepLocalSummary stores the local summary of session id after the model
+// summary failed with cause, and returns the fallback notice. An empty local
+// summary (no exchange) leaves nothing to store, and the notice still says the
+// model summary was skipped.
+func (c *Conversation) keepLocalSummary(ctx context.Context, id, local string, cause error) error {
+	if local != "" {
+		if err := c.store.Remember(ctx, memory.Entry{
+			Kind:   memory.KindSessionSummary,
+			Scope:  memory.ScopeProject,
+			Agent:  c.name,
+			Text:   local,
+			Source: "session:" + id,
+		}); err != nil {
+			return fmt.Errorf("local summary for %s: %w", c.name, err)
+		}
+	}
+	reason := "the model did not answer"
+	if errors.Is(cause, context.DeadlineExceeded) {
+		reason = "the model did not answer in time"
+	}
+	return fmt.Errorf("%w: summary for %s: %s; a local summary was kept", ErrSummaryFallback, c.name, reason)
+}
+
 // writeLocalSummary stores the local summary when the conversation has one. It
 // is used after a model summary failed, when the session is already ended.
 func (c *Conversation) writeLocalSummary(ctx context.Context) error {

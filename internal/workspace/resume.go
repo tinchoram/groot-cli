@@ -131,6 +131,9 @@ func (c *Conversation) Clear() func(context.Context) error {
 	// The session's own spend, not the provider's total: the provider keeps
 	// counting across the sessions of this conversation.
 	cost := c.Agent.SessionCost()
+	// The local summary is taken before the detach, while the exchange is still
+	// in memory; it is written only when the model summary fails.
+	local := c.localSummary()
 	id, transcript, n := c.Agent.Detach()
 	c.resumed = nil
 	// Cheap, and it picks up every entry remembered during the session. A failure
@@ -141,7 +144,7 @@ func (c *Conversation) Clear() func(context.Context) error {
 		if id != "" {
 			if n > 0 {
 				if err := c.summarize(ctx, id, transcript); err != nil {
-					errs = append(errs, err)
+					errs = append(errs, c.keepLocalSummary(ctx, id, local, err))
 				}
 			}
 			if err := c.store.EndSession(ctx, id, cost); err != nil {

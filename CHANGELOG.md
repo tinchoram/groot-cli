@@ -5,6 +5,14 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.5.5-dev (unreleased)
 
+### Sessions
+- A `/clear` whose model summary fails or times out keeps a local summary of
+  the session and reports it as a note (`conversation cleared · summary for
+  groot: the model did not answer in time; a local summary was kept`), not as
+  an error. Before, the error was shown and no summary was stored.
+- Closing groot gives the model summaries fifteen seconds instead of five;
+  `esc` still skips the wait and keeps the local summaries.
+
 ### Agents
 - `delete_space` and `delete_agent` take `confirm`. Without `confirm: true` they
   change nothing and report what the delete would touch: the agents assigned to

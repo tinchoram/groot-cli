@@ -44,6 +44,8 @@ type fakeSession struct {
 	window    int
 	// onClear runs inside Clear, to mirror what the workspace changes on /clear.
 	onClear func()
+	// clearErr is what the function returned by Clear reports.
+	clearErr error
 	// promptMemory and memoryOverview answer PromptMemory; recall answers
 	// RecallMemory, and recallQueries records each query it was asked.
 	promptMemory   []memory.Entry
@@ -128,7 +130,7 @@ func (f *fakeSession) Clear() func(context.Context) error {
 	if f.onClear != nil {
 		f.onClear()
 	}
-	return func(context.Context) error { return nil }
+	return func(context.Context) error { return f.clearErr }
 }
 func (f *fakeSession) SessionID() string { return "s-test" }
 
