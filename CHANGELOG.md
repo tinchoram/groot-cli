@@ -3,7 +3,15 @@
 All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
-## 0.6.0-dev (unreleased)
+
+## 0.6.0 — 2026-10-25
+
+First public release of Groot CLI, cut from main on 2026-10-25. It brings memory
+with scopes, the resume-test flow with feature documents and `task_verify`, the MCP
+client, operator identity and `@` mentions, and the distribution work of 0.5.5:
+`groot auth`, layered config, `groot doctor`, the goreleaser pipeline, `groot upgrade`,
+`install.sh`, admin tools and debug in the library. 0.5.5 was never published, so its
+entries fold into this section.
 
 ### Identity and mentions
 - FEAT-017 and the operator's request: agents can mention you and each other with
@@ -93,8 +101,6 @@ built in one day of live testing, so they are grouped by what shipped.
   still reported when the conversation opens. Unknown builtin names are still
   dropped with a warning.
 
-## 0.5.5-dev (unreleased)
-
 ### Time
 - Every turn starts with a `Current time:` line in local time, with the zone
   (IANA name when the machine has one). It is rebuilt each turn; the cached base
@@ -144,6 +150,10 @@ built in one day of live testing, so they are grouped by what shipped.
 - Closing groot gives the model summaries fifteen seconds instead of five;
   `esc` still skips the wait and keeps the local summaries.
 
+Several entries under Agents, Distribution and UI were first written under 0.5.4, a
+version that was tagged by mistake and never published; its tag was removed and they
+shipped in 0.6.0.
+
 ### Agents
 - `delete_space` and `delete_agent` take `confirm`. Without `confirm: true` they
   change nothing and report what the delete would touch: the agents assigned to
@@ -159,44 +169,6 @@ built in one day of live testing, so they are grouped by what shipped.
   space's database. Task ids are new there, and a task's parent link follows
   them; a session the target already has is skipped. The source keeps its
   copies, and the result lists the counts.
-
-### Distribution
-- `install.sh` at the repository root installs groot on macOS and Linux. It
-  detects the platform, downloads the release archive, checks its sha256 against
-  `checksums.txt`, installs `groot` into `~/.local/bin` (or `GROOT_INSTALL_DIR`),
-  and runs `groot doctor`. `GROOT_VERSION` pins a release. While the repository is
-  private it needs `GITHUB_TOKEN`. Each release carries the script.
-- A fresh home holds `root` and `groot` only. Bootstrap no longer creates or
-  assigns the `debug` agent, the one that keeps the groot backlog. It ships in the
-  built-in library: install it with `install_agent debug` or `/agent install debug`,
-  into the space you choose.
-- `/bug`, `/feat` and messages to `debug` fail with a message that says how to
-  install debug when it is assigned to no space. Nothing is written in that case.
-- An installed `debug` can be deleted; its backlog files stay. It is still kept
-  current at each start and cannot be renamed. `groot` keeps every protection.
-- Existing homes keep their debug file, its assignments and their groot prompt.
-  The new line about debug in groot's prompt reaches fresh homes only.
-
-The entries below were first written under 0.5.4, a version that was tagged by
-mistake and never published; its tag was removed and they ship here.
-
-### UI
-- The status line above the input starts with the active agent as a badge:
-  dark text on the primary green. It stays while the agent thinks, while
-  others work in the background and while groot closes, so the name of the
-  agent you are writing to is always in view.
-- The banner prints the version in deep green under the tagline and the key
-  hint, left aligned with them. The tagline now reads "Terminal Agent for Devs and
-  Platform engineering".
-- `home` and `end` (`fn-←` and `fn-→` on a Mac) move the cursor to the start
-  or the end of the line when the input has text. With an empty input they
-  scroll the transcript, as before.
-- When `/readinbox` finds nothing unread for the active agent, its note says
-  where the unread messages are (`3 unread elsewhere: groot-cli/debug (1), …`),
-  so a badge on another agent or space is explained, and the badges are
-  re-read at the same time.
-
-### Agents
 - The debug agent can be moved. Bootstrap used to assign it to `root` on every
   start, so a move to another space was undone by the next restart. It is now
   placed in `root` only when it is assigned to no space at all. Bug and feature
@@ -220,6 +192,21 @@ mistake and never published; its tag was removed and they ship here.
   prompt; edit `~/.groot/agents/groot.md` to mention them.
 
 ### Distribution
+- `install.sh` at the repository root installs groot on macOS and Linux. It
+  detects the platform, downloads the release archive, checks its sha256 against
+  `checksums.txt`, installs `groot` into `~/.local/bin` (or `GROOT_INSTALL_DIR`),
+  and runs `groot doctor`. `GROOT_VERSION` pins a release. While the repository is
+  private it needs `GITHUB_TOKEN`. Each release carries the script.
+- A fresh home holds `root` and `groot` only. Bootstrap no longer creates or
+  assigns the `debug` agent, the one that keeps the groot backlog. It ships in the
+  built-in library: install it with `install_agent debug` or `/agent install debug`,
+  into the space you choose.
+- `/bug`, `/feat` and messages to `debug` fail with a message that says how to
+  install debug when it is assigned to no space. Nothing is written in that case.
+- An installed `debug` can be deleted; its backlog files stay. It is still kept
+  current at each start and cannot be renamed. `groot` keeps every protection.
+- Existing homes keep their debug file, its assignments and their groot prompt.
+  The new line about debug in groot's prompt reaches fresh homes only.
 - `groot auth login` stores the Anthropic key: in the macOS keychain, or in
   `~/.groot/credentials` (mode 0600) when the keychain is unavailable and on
   Linux. It prompts with echo off, or reads the first line with `--stdin`.
@@ -256,6 +243,22 @@ mistake and never published; its tag was removed and they ship here.
   which tests the code and publishes the release, with the notes from the
   CHANGELOG section of that version (`cmd/relnotes`). `make release-check` and
   `make snapshot` need goreleaser; the other targets do not.
+
+### UI
+- The status line above the input starts with the active agent as a badge:
+  dark text on the primary green. It stays while the agent thinks, while
+  others work in the background and while groot closes, so the name of the
+  agent you are writing to is always in view.
+- The banner prints the version in deep green under the tagline and the key
+  hint, left aligned with them. The tagline now reads "Terminal Agent for Devs and
+  Platform engineering".
+- `home` and `end` (`fn-←` and `fn-→` on a Mac) move the cursor to the start
+  or the end of the line when the input has text. With an empty input they
+  scroll the transcript, as before.
+- When `/readinbox` finds nothing unread for the active agent, its note says
+  where the unread messages are (`3 unread elsewhere: groot-cli/debug (1), …`),
+  so a badge on another agent or space is explained, and the badges are
+  re-read at the same time.
 
 ## 0.5.3 — 2026-10-25
 

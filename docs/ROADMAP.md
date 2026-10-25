@@ -70,11 +70,11 @@ What is verified where. "Live" means the user exercised it in a real session;
 | `/audit`, `audit_query`, sinks | tests | 0.5.0 |
 | `/clear` memory refresh, `/memory`, `/readinbox` | tests | 0.5.2 |
 | Backlog sweep with `read_changelog` | tests | 0.5.3 |
-| Admin tools: delete, rename, move, copy; two-step confirm, `purge_data`, `with_memory` | live (first round) | 0.5.5-dev, the user exercised create/edit/delete/move |
-| `groot auth`, layered config, `groot doctor` | live (`doctor` on the dev machine) | 0.5.5-dev |
-| goreleaser pipeline, `groot upgrade`, `install.sh` | tests + local snapshot | 0.5.5-dev; the GitHub release workflow has not published yet |
-| `debug` from the library, movable | tests | 0.5.5-dev |
-| `/clear` summary fallback, 15 s close budget | tests | 0.5.5-dev |
+| Admin tools: delete, rename, move, copy; two-step confirm, `purge_data`, `with_memory` | live (first round) | 0.6.0, the user exercised create/edit/delete/move |
+| `groot auth`, layered config, `groot doctor` | live (`doctor` on the dev machine) | 0.6.0 |
+| goreleaser pipeline, `groot upgrade`, `install.sh` | tests + local snapshot | 0.6.0; the GitHub release workflow has not published yet |
+| `debug` from the library, movable | tests | 0.6.0 |
+| `/clear` summary fallback, 15 s close budget | tests | 0.6.0 |
 
 Known limits carried forward:
 
@@ -86,45 +86,41 @@ Known limits carried forward:
 - The memory block of the prompt is rebuilt on open and on `/clear`, not on
   every `remember`.
 
-Decisions waiting on the user before 0.6.0 is planned:
+Decisions waiting on the user before 0.7.0 is planned:
 
 - An ACP client so an external agent engine (AWS Kiro: `kiro-cli acp`) can be
   used from groot. Kiro has no token API, so this is the only integration path;
   the Bedrock adapter stays the way to control cost.
 - Skills as prompt fragments attached to agents.
 
-## 0.5.5: first public release
+## 0.5.5: folded into 0.6.0
 
-Decisions and the order of work are in [DISTRIBUTION.md](DISTRIBUTION.md).
-Done on main: `groot auth`, layered config, `groot doctor`, the goreleaser
-pipeline, `groot upgrade`, the admin tools to delete, rename, move and copy
-spaces and agents; `debug` moved from bootstrap to the built-in library (a fresh
-install holds `root` and `groot` only); `install.sh`. Still to do before the
-tag: the user's polish pass, then the repository goes public, the tag runs the
-release workflow for the first time, and `groot upgrade --check` is verified
-against a real release. After that, the Homebrew tap.
+0.5.5 was never published. Its work shipped in 0.6.0, the first public release.
+Decisions and the release steps are in [DISTRIBUTION.md](DISTRIBUTION.md).
 
-Memory hygiene slice (in progress on the working tree): scopes agent, space and
-global with a root-database global store and per-agent enablement; upsert by
-topic key and dedupe by content; pin, review dates and taint; a budgeted,
-rebuilt preamble; fixed-shape session summaries; and the `/memory` subcommands.
-The model is in [MEMORY.md](MEMORY.md). Vector recall stays under Later.
+## 0.6.0 (done): first public release
 
-Session closed on 2026-10-25 at commit `74aef30` with everything above on
-main, verified and pushed. Backlog: BUG-005 and FEAT-014 are implemented and
-still marked open until debug is told or the 0.5.5 sweep runs.
+Cut from main on 2026-10-25. The CHANGELOG.md section `0.6.0` has the details.
 
-## 0.6.0 (in progress): flow quality
+- Flow quality: the resume test classifies the work, large work writes a feature
+  document with numbered specs, `task_verify` checks each spec before delivery,
+  and the delivery review lists the test runs.
+- MCP client: servers from the global config, allowlisted tools, `/mcp`, and an
+  `mcp` section in `groot doctor`.
+- Identity and mentions: `@` mentions between you and the agents, the operator name.
+- Memory hygiene: scopes agent, space and global; upsert by topic key; pin,
+  review dates and taint; a budgeted preamble; the `/memory` subcommands.
+- Distribution: `groot auth`, layered config, `groot doctor`, the goreleaser
+  pipeline, `groot upgrade`, `install.sh`, the admin tools, and `debug` in the library.
+- Live-use fixes: turn budget answers, `read_file` windows, bash timeouts,
+  global memory ids, and `/mcp connect` off the UI loop.
 
-Done on main: the resume test classifies the work, large work writes a feature
-document with numbered specs, and `task_verify` checks each spec before the
-delivery. The notes are in the 0.6.0-dev section of CHANGELOG.md. The MCP client is
-done on main too: servers from the global config, allowlisted tools, `/mcp` and
-`groot doctor`.
+Backlog: BUG-005 and FEAT-014 are implemented and still marked open until debug
+is told or the sweep runs.
 
-## 0.6.0: connectivity
+## 0.7.0: connectivity
 
-Decision (2026-10-25): 0.6.0 ships the base structure only. Domain tools are
+Decision (2026-10-25): 0.6.0 shipped the base structure only, and 0.7.0 keeps that rule. Domain tools are
 built when a real task needs them, not ahead of it. The first of those is in
 the backlog below.
 

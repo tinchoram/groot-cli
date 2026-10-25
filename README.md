@@ -4,7 +4,7 @@ Groot is a terminal agent for developers and platform engineering. It works with
 Kubernetes, logs, files and the shell. Every tool call passes a permission gate,
 memory lives in SQLite, and the model layer is a port with an Anthropic adapter.
 
-- Binary: `groot`. Module: `github.com/tinchoram/groot-cli`. Go 1.26. Version 0.5.5-dev.
+- Binary: `groot`. Module: `github.com/tinchoram/groot-cli`. Go 1.26. Version 0.6.0.
 - Terminal UI with a green theme, built on Bubble Tea.
 
 ## Getting started

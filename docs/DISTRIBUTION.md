@@ -13,8 +13,9 @@ is the plan for the first public release.
    binary compiles there, but the bash sandbox and the keychain do not exist,
    so it needs a design of its own, not just a build target.
 3. **The first public release is a polished one.** 0.5.4 was tagged by mistake
-   and the tag was removed before anything was published; main continues as
-   0.5.5-dev. No GitHub release exists yet.
+   and the tag was removed before anything was published. 0.5.5 was never
+   published either: 0.6.0 is the first public release, cut from main on
+   2026-10-25. No GitHub release exists yet.
 4. **A fresh installation starts with the `root` space and the `groot` agent
    only.** `root` points at the home directory; `groot` is the administrator that
    creates spaces and agents and explains the keys. Nothing else is configured.
@@ -113,7 +114,7 @@ Consequences:
 
 1. `install.sh` for macOS and Linux (done: detects OS and arch, downloads, verifies
    the checksum, installs to `~/.local/bin`, runs `groot doctor`).
-2. First public release: make the repository public, tag, let the workflow
-   publish, verify `groot upgrade --check` against it.
+2. First public release, 0.6.0: make the repository public, tag `v0.6.0`, let the
+   release workflow publish, verify `groot upgrade --check` against the real release.
 3. Homebrew tap through goreleaser.
 4. Later: `.deb`/`.rpm`, signing and notarization, Windows.
