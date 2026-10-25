@@ -218,8 +218,8 @@ func NewMemoryGet(acc MemoryAccess) *MemoryGet {
 func (*MemoryGet) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "memory_get",
-		Description: "Read one long-term memory entry in full, by the id that recall or the memory list showed.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1}},"required":["id"]}`),
+		Description: "Read one long-term memory entry in full, by the id that recall or the memory list showed. Ids are per scope; pass scope global for an entry listed as global.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1},` + scopeProperty + `},"required":["id"]}`),
 	}
 }
 
@@ -243,7 +243,7 @@ func (m *MemoryGet) Execute(ctx context.Context, input string) (string, bool) {
 	if err := json.Unmarshal([]byte(input), &in); err != nil {
 		return "invalid input: " + err.Error(), true
 	}
-	e, err := m.acc.Store.Get(ctx, in.ID, m.acc.Reader)
+	e, err := memory.GetByRef(ctx, m.acc.Store, in.ref(), m.acc.Reader)
 	if errors.Is(err, memory.ErrNotFound) {
 		return fmt.Sprintf("memory #%d not found", in.ID), true
 	}
@@ -268,14 +268,24 @@ func NewForget(acc MemoryAccess) *Forget {
 }
 
 type idInput struct {
-	ID int64 `json:"id"`
+	ID    int64  `json:"id"`
+	Scope string `json:"scope"`
 }
+
+// ref is the entry the input names. Only scope global routes the id to the
+// global database; any other value, or none, keeps the space-first lookup.
+func (in idInput) ref() memory.Ref {
+	return memory.Ref{ID: in.ID, Global: in.Scope == "global"}
+}
+
+// scopeProperty is the optional scope field of the tools that take an id.
+const scopeProperty = `"scope":{"type":"string","description":"global for an entry listed as global; omit for a space or agent entry"}`
 
 func (*Forget) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "forget",
-		Description: "Remove one long-term memory entry so it no longer appears in recall or in the prompt.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1}},"required":["id"]}`),
+		Description: "Remove one long-term memory entry so it no longer appears in recall or in the prompt. Ids are per scope; pass scope global for an entry listed as global.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1},` + scopeProperty + `},"required":["id"]}`),
 	}
 }
 
@@ -296,7 +306,7 @@ func (f *Forget) Execute(ctx context.Context, input string) (string, bool) {
 	if err := json.Unmarshal([]byte(input), &in); err != nil {
 		return "invalid input: " + err.Error(), true
 	}
-	if err := f.acc.Store.Forget(ctx, in.ID, f.acc.Reader); err != nil {
+	if err := memory.ForgetByRef(ctx, f.acc.Store, in.ref(), f.acc.Reader); err != nil {
 		return memoryError(in.ID, err), true
 	}
 	f.acc.changed()
@@ -315,17 +325,22 @@ func NewUpdateMemory(acc MemoryAccess) *UpdateMemory {
 
 type updateMemoryInput struct {
 	ID       int64   `json:"id"`
+	Scope    string  `json:"scope"`
 	Title    *string `json:"title"`
 	Text     *string `json:"text"`
 	TopicKey *string `json:"topic_key"`
 	Pinned   *bool   `json:"pinned"`
 }
 
+func (in updateMemoryInput) ref() memory.Ref {
+	return memory.Ref{ID: in.ID, Global: in.Scope == "global"}
+}
+
 func (*UpdateMemory) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "update_memory",
-		Description: "Change one long-term memory entry. Give only the fields to change: title, text, topic_key or pinned.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1},"title":{"type":"string"},"text":{"type":"string"},"topic_key":{"type":"string"},"pinned":{"type":"boolean"}},"required":["id"]}`),
+		Description: "Change one long-term memory entry. Give only the fields to change: title, text, topic_key or pinned. Ids are per scope; pass scope global for an entry listed as global.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1},` + scopeProperty + `,"title":{"type":"string"},"text":{"type":"string"},"topic_key":{"type":"string"},"pinned":{"type":"boolean"}},"required":["id"]}`),
 	}
 }
 
@@ -350,7 +365,7 @@ func (u *UpdateMemory) Execute(ctx context.Context, input string) (string, bool)
 	if p.Title == nil && p.Text == nil && p.TopicKey == nil && p.Pinned == nil {
 		return "nothing to update: give title, text, topic_key or pinned", true
 	}
-	if err := u.acc.Store.Update(ctx, in.ID, u.acc.Reader, p); err != nil {
+	if err := memory.UpdateByRef(ctx, u.acc.Store, in.ref(), u.acc.Reader, p); err != nil {
 		return memoryError(in.ID, err), true
 	}
 	u.acc.changed()

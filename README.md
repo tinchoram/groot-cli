@@ -1127,9 +1127,11 @@ Tools:
   `decision` or `runbook`. Saving the same `topic_key` revises the entry; saving
   the same content again is counted, not stored twice. `session_summary` is
   written by the system only.
-- `recall {query, limit?}`: one line per entry with its id; `memory_get {id}`
+- `recall {query, limit?}`: one line per entry with its id; `memory_get {id, scope?}`
   returns the full text.
-- `update_memory {id, title?, text?, topic_key?, pinned?}`, `forget {id}`.
+- `update_memory {id, scope?, title?, text?, topic_key?, pinned?}`, `forget {id, scope?}`.
+  Ids are per scope: pass `scope: "global"` for an entry that `recall` lists as
+  global. Any other value, or none, reads the space or agent entry first.
 - `grant_global_memory {agent}`, `revoke_global_memory {agent}` (groot, admin):
   let an agent read global memory. `list_agents` shows `global memory: yes`.
 
@@ -1142,7 +1144,9 @@ runbooks, facts, then the newest session summaries, within
 (`★` pinned, `?` needs review, `!` tainted, `G` global), age and title or text,
 and a footer with the counts. Other forms: `/memory <query>` searches;
 `/memory show|pin|unpin|rm|reviewed <id>` act on one entry; `/memory review`
-lists the entries that need review.
+lists the entries that need review. Ids are per database, so a global entry is
+listed as `g<id>` and takes that form too (`/memory rm g12`); a plain number tries
+the space or agent entry first, as before.
 
 The database path is set by `memory.path` (default `.groot/groot.db`). A relative
 path is taken from the space directory, so each space has its own memory. An
@@ -1501,7 +1505,12 @@ mcp:
   warning that names the server and the error.
 - `/mcp` lists the servers of the active space with their state, and for a
   connected server each allowlisted tool with `ro` or `rw` and the agents that hold
-  it. `/mcp connect <name>` connects one now.
+  it. `/mcp connect <name>` connects one now, in the background: the transcript
+  shows its result when the connect ends, and the UI keeps running meanwhile.
+- MCP tools reach a conversation shortly after it opens, not at open. A slow server
+  never delays the open: the conversation answers without its tools until a note
+  `mcp <server>: N tools ready` appears, and the next turn offers them. A server
+  that fails warns as before.
 - `groot doctor` has an `mcp` section: one line per enabled server, `ok` with the
   tool count and any allowlisted tool the server does not offer, or `failed` with
   the error. A failed server makes doctor exit with 1.

@@ -201,3 +201,50 @@ func globalIDOf(t *testing.T, s *SQLite) int64 {
 	}
 	return got[0].ID
 }
+
+func TestLayeredRefRoutesCollidingIDsByScopeHint(t *testing.T) {
+	ctx := context.Background()
+	f := newLayeredFixture(t, true)
+	// The space database gets a third row, so its id 3 collides with the global
+	// id 3 ("global dns zone is example.internal").
+	local := mustRemember(t, f.local, Entry{Kind: KindFact, Scope: ScopeSpace, Agent: "", Text: "queue is rabbit"})
+	if local.ID != 3 || globalIDOf(t, f.root) != 3 {
+		t.Fatalf("fixture ids: local %d, global %d; both must be 3", local.ID, globalIDOf(t, f.root))
+	}
+	reader := Reader{Agent: "payments", Global: true}
+
+	t.Run("no hint resolves the space entry first", func(t *testing.T) {
+		got, err := f.layered.GetRef(ctx, Ref{ID: 3}, reader)
+		if err != nil || got.Text != "queue is rabbit" || got.Scope == ScopeGlobal {
+			t.Fatalf("GetRef(no hint) = %+v, %v; want the space entry", got, err)
+		}
+	})
+	t.Run("global hint reaches the global entry", func(t *testing.T) {
+		got, err := f.layered.GetRef(ctx, Ref{ID: 3, Global: true}, reader)
+		if err != nil || got.Scope != ScopeGlobal || got.Text != "global dns zone is example.internal" {
+			t.Fatalf("GetRef(global) = %+v, %v; want the global entry", got, err)
+		}
+	})
+	t.Run("global hint is refused to a reader without global access", func(t *testing.T) {
+		_, err := f.layered.GetRef(ctx, Ref{ID: 3, Global: true}, Reader{Agent: "payments"})
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("GetRef = %v, want ErrNotFound", err)
+		}
+	})
+	t.Run("mutations follow the hint", func(t *testing.T) {
+		pinned := true
+		if err := f.layered.UpdateRef(ctx, Ref{ID: 3}, reader, Patch{Pinned: &pinned}); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.layered.ForgetRef(ctx, Ref{ID: 3, Global: true}, reader); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.layered.GetRef(ctx, Ref{ID: 3, Global: true}, reader); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("forgotten global entry still readable: %v", err)
+		}
+		got, err := f.layered.GetRef(ctx, Ref{ID: 3}, reader)
+		if err != nil || got.Text != "queue is rabbit" || !got.Pinned {
+			t.Fatalf("space entry after global forget = %+v, %v; want it pinned and kept", got, err)
+		}
+	})
+}

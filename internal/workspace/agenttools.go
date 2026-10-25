@@ -75,7 +75,7 @@ func (w *Workspace) refreshAgentTools(name string, tools []string) error {
 		swaps = append(swaps, swap{c, reg})
 	}
 	for _, s := range swaps {
-		s.conv.SetTools(s.reg)
+		s.conv.swapTools(s.reg, tools)
 	}
 	return nil
 }

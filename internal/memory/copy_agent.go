@@ -17,7 +17,11 @@ type CopyCounts struct {
 	Sessions        int
 	Messages        int
 	Tasks           int
-	Evidence        int
+	// SkippedTasks counts the tasks the target already has under the same agent,
+	// goal and opened time. Their evidence and specs are not copied either, and
+	// the parent links of copied tasks point at the existing task.
+	SkippedTasks int
+	Evidence     int
 	// SkippedSessions counts the sessions the target already has under the same
 	// id. They are not copied, and neither are their messages.
 	SkippedSessions int
@@ -124,6 +128,18 @@ func (s *SQLite) CopyAgentData(ctx context.Context, dst *SQLite, agent string) (
 	for _, tk := range tasks {
 		oldID, _ := tk[0].(int64)
 		row := tk[1:]
+		// A task is identified in the target by its agent, goal and opened time.
+		// A task the target already has is skipped with its evidence and specs,
+		// so copying twice does not duplicate them.
+		twin, found, err := existingTask(ctx, tx, row[1], row[4], row[8])
+		if err != nil {
+			return c, fmt.Errorf("copy agent: check task: %w", err)
+		}
+		if found {
+			newID[oldID] = twin
+			c.SkippedTasks++
+			continue
+		}
 		parent, _ := row[parentTaskIndex].(int64)
 		row[parentTaskIndex] = newID[parent] // zero when the parent was not copied
 		res, err := tx.ExecContext(ctx, `INSERT INTO tasks (`+copyTaskCols+`) VALUES (`+placeholders(len(row))+`)`, row...)
@@ -194,6 +210,23 @@ func selectAll(ctx context.Context, db *sql.DB, query string, args ...any) ([][]
 		out = append(out, vals)
 	}
 	return out, rows.Err()
+}
+
+// existingTask returns the id of a task of tx with the same agent, goal and
+// opened time. The opened time is compared as the driver returned it, so its
+// sub-second part takes part in the match.
+func existingTask(ctx context.Context, tx *sql.Tx, agent, goal, openedAt any) (int64, bool, error) {
+	var id int64
+	err := tx.QueryRowContext(ctx,
+		`SELECT id FROM tasks WHERE agent = ? AND goal = ? AND opened_at = ? ORDER BY id LIMIT 1`,
+		agent, goal, openedAt).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
 }
 
 // copyRows inserts each row with the statement, which takes one placeholder

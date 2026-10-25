@@ -33,6 +33,10 @@ func TestMapToolsTable(t *testing.T) {
 		{[]string{"WebFetch"}, nil, 1},
 		{[]string{"kubectl", "recall"}, []string{"kubectl", "recall"}, 0},
 		{[]string{"Read", "Read", "Bash"}, []string{"read_file", "bash"}, 0},
+		// MCP names are kept as written; whether their server is configured is
+		// checked when the conversation opens, not when the file is imported.
+		{[]string{"grafana__*"}, []string{"grafana__*"}, 0},
+		{[]string{"Read", "grafana__echo", "teleport"}, []string{"read_file", "grafana__echo"}, 1},
 	}
 	for _, c := range cases {
 		got, warnings := MapTools(c.in)

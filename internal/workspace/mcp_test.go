@@ -12,11 +12,13 @@ import (
 	"testing"
 	"time"
 
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tinchoram/groot-cli/internal/admintool"
 	"github.com/tinchoram/groot-cli/internal/api"
 	"github.com/tinchoram/groot-cli/internal/catalog"
 	"github.com/tinchoram/groot-cli/internal/config"
 	"github.com/tinchoram/groot-cli/internal/gate"
+	"github.com/tinchoram/groot-cli/internal/mcp"
 	"github.com/tinchoram/groot-cli/internal/mcp/mcptest"
 	"github.com/tinchoram/groot-cli/internal/provider"
 	"github.com/tinchoram/groot-cli/internal/space"
@@ -51,6 +53,7 @@ type mcpFixture struct {
 	srv      *mcptest.Server
 	mu       sync.Mutex
 	warnings []string
+	notes    []string
 	asked    int
 }
 
@@ -60,6 +63,8 @@ type mcpOpts struct {
 	gate    gate.Gate
 	srv     *mcptest.Server
 	steps   []provider.Step
+	// transport replaces the server's transport, to make it slow. Nil uses srv.
+	transport mcp.TransportFunc
 }
 
 // newMCPFixture builds a workspace whose agent "reader" has the given tools and
@@ -100,19 +105,30 @@ func newMCPFixture(t *testing.T, o mcpOpts) *mcpFixture {
 	if g == nil {
 		g = gate.AutoApprove{}
 	}
+	transport := o.transport
+	if transport == nil {
+		transport = o.srv.Transport
+	}
 	ws, err := New(Options{
 		Home:          home,
 		Config:        cfg,
 		Spaces:        sp,
 		Gate:          g,
 		NewProvider:   func(string) provider.Provider { return mock },
-		MCPTransport:  o.srv.Transport,
+		MCPTransport:  transport,
 		DisablePublic: true,
-		Hooks: Hooks{OnWarning: func(_, msg string) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			f.warnings = append(f.warnings, msg)
-		}},
+		Hooks: Hooks{
+			OnWarning: func(_, msg string) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.warnings = append(f.warnings, msg)
+			},
+			OnNotice: func(_, text string) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.notes = append(f.notes, text)
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -145,6 +161,36 @@ func waitWarning(t *testing.T, f *mcpFixture, want string) {
 	t.Fatalf("no warning containing %q, got %q", want, f.warned())
 }
 
+// waitNotice waits for a note containing want. MCP tools join an open
+// conversation in the background, and the note says when they are in.
+func waitNotice(t *testing.T, f *mcpFixture, want string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		notes := slices.Clone(f.notes)
+		f.mu.Unlock()
+		for _, n := range notes {
+			if strings.Contains(n, want) {
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("no note containing %q", want)
+}
+
+// openReady opens the reader's conversation and waits until its MCP tools are in.
+func openReady(t *testing.T, f *mcpFixture) Chat {
+	t.Helper()
+	if err := f.ws.SelectAgent("reader"); err != nil {
+		t.Fatal(err)
+	}
+	chat := f.ws.Chat()
+	waitNotice(t, f, "mcp grafana: ")
+	return chat
+}
+
 func mcpCall(id, name, input string) provider.Step {
 	return provider.Step{Response: api.Response{
 		Content:    []api.Block{{Type: api.BlockToolUse, ID: id, Name: name, Input: json.RawMessage(input)}},
@@ -163,10 +209,7 @@ func toolNames(defs []api.ToolDef) []string {
 func TestConversationBuildsMCPToolsFromWildcardAndExplicitNames(t *testing.T) {
 	t.Run("wildcard admits every allowlisted tool and no other", func(t *testing.T) {
 		f := newMCPFixture(t, mcpOpts{servers: grafanaServers(), tools: []string{"read_file", "grafana__*"}, srv: fakeGrafana(), steps: []provider.Step{text("ok")}})
-		if err := f.ws.SelectAgent("reader"); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := f.ws.Chat().Send(context.Background(), "hi"); err != nil {
+		if _, err := openReady(t, f).Send(context.Background(), "hi"); err != nil {
 			t.Fatal(err)
 		}
 		got := toolNames(f.mock.Calls[0].Tools)
@@ -180,10 +223,7 @@ func TestConversationBuildsMCPToolsFromWildcardAndExplicitNames(t *testing.T) {
 
 	t.Run("explicit name admits only that tool", func(t *testing.T) {
 		f := newMCPFixture(t, mcpOpts{servers: grafanaServers(), tools: []string{"read_file", "grafana__echo"}, srv: fakeGrafana(), steps: []provider.Step{text("ok")}})
-		if err := f.ws.SelectAgent("reader"); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := f.ws.Chat().Send(context.Background(), "hi"); err != nil {
+		if _, err := openReady(t, f).Send(context.Background(), "hi"); err != nil {
 			t.Fatal(err)
 		}
 		got := toolNames(f.mock.Calls[0].Tools)
@@ -200,10 +240,7 @@ func TestConversationCallsAnMCPTool(t *testing.T) {
 		srv:     fakeGrafana(),
 		steps:   []provider.Step{mcpCall("tu_1", "grafana__echo", `{"text":"hi"}`), text("done")},
 	})
-	if err := f.ws.SelectAgent("reader"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.ws.Chat().Send(context.Background(), "echo hi"); err != nil {
+	if _, err := openReady(t, f).Send(context.Background(), "echo hi"); err != nil {
 		t.Fatal(err)
 	}
 	last := f.mock.Calls[1].Messages[len(f.mock.Calls[1].Messages)-1].Content[0]
@@ -251,10 +288,7 @@ func TestWorkModeAsksForMCPWritesAndApprovesReads(t *testing.T) {
 			text("done"),
 		},
 	})
-	if err := f.ws.SelectAgent("reader"); err != nil {
-		t.Fatal(err)
-	}
-	chat := f.ws.Chat()
+	chat := openReady(t, f)
 	chat.SetWorkMode(true)
 	if _, err := chat.Send(context.Background(), "go"); err != nil {
 		t.Fatal(err)
@@ -267,6 +301,88 @@ func TestWorkModeAsksForMCPWritesAndApprovesReads(t *testing.T) {
 	}
 	if n := srv.Calls("echo"); n != 1 {
 		t.Fatalf("work mode must approve the read_only tool, echo ran %d times", n)
+	}
+}
+
+// gatedTransport makes a server slow: it answers only after release is closed,
+// or fails when its context ends first.
+func gatedTransport(release <-chan struct{}, next mcp.TransportFunc) mcp.TransportFunc {
+	return func(ctx context.Context, server string) (sdk.Transport, error) {
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		return next(ctx, server)
+	}
+}
+
+func TestOpenDoesNotWaitForASlowMCPServer(t *testing.T) {
+	release := make(chan struct{})
+	srv := fakeGrafana()
+	f := newMCPFixture(t, mcpOpts{
+		servers:   grafanaServers(),
+		tools:     []string{"read_file", "grafana__echo"},
+		srv:       srv,
+		transport: gatedTransport(release, srv.Transport),
+		steps:     []provider.Step{text("first"), text("second")},
+	})
+	if err := f.ws.SelectAgent("reader"); err != nil {
+		t.Fatal(err)
+	}
+	opened := make(chan Chat, 1)
+	go func() { opened <- f.ws.Chat() }()
+	var chat Chat
+	select {
+	case chat = <-opened:
+	case <-time.After(3 * time.Second):
+		t.Fatal("opening the conversation waited for the slow MCP server")
+	}
+
+	if _, err := chat.Send(context.Background(), "before the server answers"); err != nil {
+		t.Fatal(err)
+	}
+	if got := toolNames(f.mock.Calls[0].Tools); slices.Contains(got, "grafana__echo") {
+		t.Fatalf("MCP tools were offered before the server answered: %v", got)
+	}
+
+	close(release)
+	waitNotice(t, f, "mcp grafana: 1 tool ready")
+	if _, err := chat.Send(context.Background(), "after the swap"); err != nil {
+		t.Fatal(err)
+	}
+	if got := toolNames(f.mock.Calls[1].Tools); !slices.Contains(got, "grafana__echo") {
+		t.Fatalf("MCP tools did not reach the next turn after the swap: %v", got)
+	}
+}
+
+func TestClosedConversationIgnoresTheLateMCPSwap(t *testing.T) {
+	release := make(chan struct{})
+	srv := fakeGrafana()
+	f := newMCPFixture(t, mcpOpts{
+		servers:   grafanaServers(),
+		tools:     []string{"read_file", "grafana__echo"},
+		srv:       srv,
+		transport: gatedTransport(release, srv.Transport),
+		steps:     []provider.Step{text("ok")},
+	})
+	if err := f.ws.SelectAgent("reader"); err != nil {
+		t.Fatal(err)
+	}
+	conv := f.ws.Chat().(*Conversation)
+	if err := f.ws.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	time.Sleep(300 * time.Millisecond)
+
+	for _, n := range func() []string { f.mu.Lock(); defer f.mu.Unlock(); return slices.Clone(f.notes) }() {
+		if strings.Contains(n, "tools ready") {
+			t.Fatalf("a closed conversation was swapped: note %q", n)
+		}
+	}
+	if _, ok := conv.Agent.Tools.Get("grafana__echo"); ok {
+		t.Fatal("the closed conversation's registry gained MCP tools")
 	}
 }
 

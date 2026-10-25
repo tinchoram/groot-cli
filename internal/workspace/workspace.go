@@ -76,15 +76,15 @@ type Chat interface {
 	// RecallMemory searches the entries this agent can read.
 	RecallMemory(ctx context.Context, query string) ([]memory.Entry, error)
 	// MemoryEntry returns one entry this agent can read, with its full text.
-	MemoryEntry(ctx context.Context, id int64) (memory.Entry, error)
+	MemoryEntry(ctx context.Context, ref memory.Ref) (memory.Entry, error)
 	// MemoryPin pins or unpins an entry this agent can change.
-	MemoryPin(ctx context.Context, id int64, pinned bool) error
+	MemoryPin(ctx context.Context, ref memory.Ref, pinned bool) error
 	// MemoryForget removes an entry this agent can change.
-	MemoryForget(ctx context.Context, id int64) error
+	MemoryForget(ctx context.Context, ref memory.Ref) error
 	// MemoryReview lists the entries this agent can read whose review date has passed.
 	MemoryReview(ctx context.Context) ([]memory.Entry, error)
 	// MemoryReviewed moves the review date of an entry one interval ahead.
-	MemoryReviewed(ctx context.Context, id int64) error
+	MemoryReviewed(ctx context.Context, ref memory.Ref) error
 }
 
 // Hooks receive the output of every conversation, tagged with its key
@@ -555,22 +555,30 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		return nil, err
 	}
 	g := newConversationGuard(w.opts.Config.Guard.Mode)
-	rebuild := func(names []string) (*tool.Registry, error) {
+	// build makes the registry of names with the given MCP tools. Open builds it
+	// without any: the MCP servers are reached in the background (attachMCP), so
+	// a slow server never holds the open.
+	build := func(names []string, extra []tool.Tool) (*tool.Registry, error) {
 		reg, err := w.buildTools(sp.Path, names, mem, w.messengerFor(sp.Name, agentName), ctl, files, agentName)
 		if err != nil {
 			return nil, err
 		}
-		tools, warns := w.mcpTools(context.Background(), st.mcp, names)
-		for _, t := range tools {
+		for _, t := range extra {
 			if err := reg.Register(t); err != nil {
 				return nil, err
 			}
 		}
-		w.warnLater(key, warns)
 		bindGuard(reg, g)
 		return reg, nil
 	}
-	tools, err := rebuild(def.Tools)
+	// rebuild is the synchronous form, used when the tools of an open
+	// conversation change.
+	rebuild := func(names []string) (*tool.Registry, error) {
+		extra, warns := w.mcpTools(context.Background(), st.mcp, names)
+		w.warnLater(key, warns)
+		return build(names, extra)
+	}
+	tools, err := build(def.Tools, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -636,9 +644,13 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	resumed := w.startOrResume(ctx, ag, st.mem, agentName)
 	conv = &Conversation{Agent: ag, prov: prov, store: mem.store, mem: mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, rebuildSystem: rebuildSystem, work: work, files: files, review: box,
 		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key), rebuildTools: rebuild,
+		toolNames:    slices.Clone(def.Tools),
 		clock:        w.opts.Now,
 		budgets:      func(ctx context.Context) ([]Budget, error) { return w.budgetsFor(ctx, st.mem, sp.Name, agentName) },
 		budgetNotice: keyedWarn(w.opts.Hooks, key)}
+	if hasMCPName(def.Tools) {
+		go w.attachMCP(conv, key, st.mcp, def.Tools, build)
+	}
 	return conv, nil
 }
 
@@ -742,15 +754,15 @@ func (c idleChat) PromptMemory(context.Context) ([]memory.Entry, memory.Overview
 func (c idleChat) RecallMemory(context.Context, string) ([]memory.Entry, error) {
 	return nil, c.err
 }
-func (c idleChat) MemoryEntry(context.Context, int64) (memory.Entry, error) {
+func (c idleChat) MemoryEntry(context.Context, memory.Ref) (memory.Entry, error) {
 	return memory.Entry{}, c.err
 }
-func (c idleChat) MemoryPin(context.Context, int64, bool) error { return c.err }
-func (c idleChat) MemoryForget(context.Context, int64) error    { return c.err }
+func (c idleChat) MemoryPin(context.Context, memory.Ref, bool) error { return c.err }
+func (c idleChat) MemoryForget(context.Context, memory.Ref) error    { return c.err }
 func (c idleChat) MemoryReview(context.Context) ([]memory.Entry, error) {
 	return nil, c.err
 }
-func (c idleChat) MemoryReviewed(context.Context, int64) error { return c.err }
+func (c idleChat) MemoryReviewed(context.Context, memory.Ref) error { return c.err }
 
 // ImportAgent fetches an agent file (a local path or an http(s) URL), maps its
 // tools, and saves it to the catalog. An existing agent is replaced only when

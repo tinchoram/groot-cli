@@ -57,10 +57,19 @@ type fakeSession struct {
 	// changes made through /memory, and reviewList answers MemoryReview.
 	memoryByID map[int64]memory.Entry
 	pinCalls   []string
-	forgotten  []int64
-	reviewed   []int64
+	forgotten  []memory.Ref
+	reviewed   []memory.Ref
+	shown      []memory.Ref
 	reviewList []memory.Entry
 	memoryErr  error
+}
+
+// refText is the id of a ref as /memory prints and reads it: 3, or g3 for global.
+func refText(r memory.Ref) string {
+	if r.Global {
+		return fmt.Sprintf("g%d", r.ID)
+	}
+	return fmt.Sprintf("%d", r.ID)
 }
 
 func (f *fakeSession) PromptMemory(context.Context) ([]memory.Entry, memory.Overview, error) {
@@ -72,27 +81,28 @@ func (f *fakeSession) RecallMemory(_ context.Context, query string) ([]memory.En
 	return f.recall, f.memoryErr
 }
 
-func (f *fakeSession) MemoryEntry(_ context.Context, id int64) (memory.Entry, error) {
+func (f *fakeSession) MemoryEntry(_ context.Context, ref memory.Ref) (memory.Entry, error) {
+	f.shown = append(f.shown, ref)
 	if f.memoryErr != nil {
 		return memory.Entry{}, f.memoryErr
 	}
-	e, ok := f.memoryByID[id]
+	e, ok := f.memoryByID[ref.ID]
 	if !ok {
 		return memory.Entry{}, memory.ErrNotFound
 	}
 	return e, nil
 }
 
-func (f *fakeSession) MemoryPin(_ context.Context, id int64, pinned bool) error {
-	f.pinCalls = append(f.pinCalls, fmt.Sprintf("%d=%v", id, pinned))
+func (f *fakeSession) MemoryPin(_ context.Context, ref memory.Ref, pinned bool) error {
+	f.pinCalls = append(f.pinCalls, fmt.Sprintf("%s=%v", refText(ref), pinned))
 	return f.memoryErr
 }
 
-func (f *fakeSession) MemoryForget(_ context.Context, id int64) error {
+func (f *fakeSession) MemoryForget(_ context.Context, ref memory.Ref) error {
 	if f.memoryErr != nil {
 		return f.memoryErr
 	}
-	f.forgotten = append(f.forgotten, id)
+	f.forgotten = append(f.forgotten, ref)
 	return nil
 }
 
@@ -100,11 +110,11 @@ func (f *fakeSession) MemoryReview(context.Context) ([]memory.Entry, error) {
 	return f.reviewList, f.memoryErr
 }
 
-func (f *fakeSession) MemoryReviewed(_ context.Context, id int64) error {
+func (f *fakeSession) MemoryReviewed(_ context.Context, ref memory.Ref) error {
 	if f.memoryErr != nil {
 		return f.memoryErr
 	}
-	f.reviewed = append(f.reviewed, id)
+	f.reviewed = append(f.reviewed, ref)
 	return nil
 }
 

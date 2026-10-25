@@ -71,6 +71,23 @@ built in one day of live testing, so they are grouped by what shipped.
   the limit and the fix: `command timed out after 60s; rerun with timeout_seconds
   up to 600 if it needs longer`. `bash.timeout` (default 60s, at least 1s) sets the
   limit for a call that names none.
+- Memory ids are per database, so a global entry whose number matched a space entry
+  could not be reached: the space entry always won. `memory_get`, `forget` and
+  `update_memory` take `scope: "global"` for an entry listed as global. `/memory`
+  prints global ids as `g<id>`, and `/memory show|pin|unpin|rm|reviewed` accept
+  `g12`; a plain number keeps resolving the space entry first.
+- Copying an agent twice duplicated its tasks, with their evidence and specs. A task
+  already in the target (same agent, goal and opened time) is now skipped with its
+  evidence and specs, and the copy report says how many tasks were skipped.
+- A slow MCP server stalled the workspace lock when a conversation opened, and
+  `/mcp connect` blocked the UI until the server answered. A conversation now opens
+  without its MCP tools, which join in the background; the transcript notes
+  `mcp <server>: N tools ready` and the next turn offers them. `/mcp connect` runs
+  off the UI loop and prints its result when the connect ends.
+- Imported agent files dropped MCP tool names such as `grafana__*`, although the
+  catalog accepts them. They are kept now; a server the space does not configure is
+  still reported when the conversation opens. Unknown builtin names are still
+  dropped with a warning.
 
 ## 0.5.5-dev (unreleased)
 

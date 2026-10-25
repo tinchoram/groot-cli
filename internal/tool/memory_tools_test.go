@@ -3,6 +3,7 @@ package tool
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -299,6 +300,81 @@ func TestUpdateMemoryAppliesOnlyTheFieldsGiven(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("Changed ran %d times", calls)
 	}
+}
+
+// collidingLayered is a space database and a root database whose ids collide:
+// the space entry and the global entry are both id 3.
+func collidingLayered(t *testing.T) (*memory.Layered, *memory.SQLite) {
+	t.Helper()
+	ctx := context.Background()
+	open := func(name string) *memory.SQLite {
+		s, err := memory.OpenSQLite(filepath.Join(t.TempDir(), name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = s.Close() })
+		return s
+	}
+	local, root := open("space.db"), open("root.db")
+	remember := func(s *memory.SQLite, e memory.Entry) {
+		t.Helper()
+		if _, err := s.Remember(ctx, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Two root rows that no space reader sees push the global entry to id 3.
+	remember(root, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeAgent, Agent: "ops", Text: "ops filler one"})
+	remember(root, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeAgent, Agent: "ops", Text: "ops filler two"})
+	remember(root, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeGlobal, Agent: "groot", Text: "global dns zone"})
+	remember(local, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeSpace, Text: "space one"})
+	remember(local, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeSpace, Text: "space two"})
+	remember(local, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeSpace, Text: "queue is rabbit"})
+	return &memory.Layered{Store: local, Global: root, GlobalWrite: true}, root
+}
+
+func TestMemoryToolsScopeGlobalReachesTheGlobalEntry(t *testing.T) {
+	ctx := context.Background()
+	layered, root := collidingLayered(t)
+	acc := MemoryAccess{Store: layered, Reader: memory.Reader{Agent: "payments", Global: true}, CanWriteGlobal: true}
+
+	t.Run("memory_get without scope reads the space entry", func(t *testing.T) {
+		out, isErr := NewMemoryGet(acc).Execute(ctx, mustJSON(t, map[string]any{"id": 3}))
+		if isErr || !strings.Contains(out, "queue is rabbit") {
+			t.Fatalf("got (%q, %v), want the space entry", out, isErr)
+		}
+	})
+	t.Run("memory_get with scope global reads the global entry", func(t *testing.T) {
+		out, isErr := NewMemoryGet(acc).Execute(ctx, mustJSON(t, map[string]any{"id": 3, "scope": "global"}))
+		if isErr || !strings.Contains(out, "#3 [fact|global]") || !strings.Contains(out, "global dns zone") {
+			t.Fatalf("got (%q, %v), want the global entry", out, isErr)
+		}
+	})
+	t.Run("any other scope value is local first", func(t *testing.T) {
+		out, isErr := NewMemoryGet(acc).Execute(ctx, mustJSON(t, map[string]any{"id": 3, "scope": "space"}))
+		if isErr || !strings.Contains(out, "queue is rabbit") {
+			t.Fatalf("got (%q, %v), want the space entry", out, isErr)
+		}
+	})
+	t.Run("update_memory with scope global changes only the global entry", func(t *testing.T) {
+		out, isErr := NewUpdateMemory(acc).Execute(ctx, mustJSON(t, map[string]any{"id": 3, "scope": "global", "pinned": true}))
+		if isErr {
+			t.Fatalf("update failed: %s", out)
+		}
+		g, err := root.Get(ctx, 3, memory.Reader{Agent: "groot", Global: true})
+		if err != nil || !g.Pinned {
+			t.Fatalf("global entry = %+v, %v; want it pinned", g, err)
+		}
+	})
+	t.Run("forget with scope global keeps the space entry", func(t *testing.T) {
+		out, isErr := NewForget(acc).Execute(ctx, mustJSON(t, map[string]any{"id": 3, "scope": "global"}))
+		if isErr || out != "forgot #3" {
+			t.Fatalf("got (%q, %v)", out, isErr)
+		}
+		out, isErr = NewMemoryGet(acc).Execute(ctx, mustJSON(t, map[string]any{"id": 3}))
+		if isErr || !strings.Contains(out, "queue is rabbit") {
+			t.Fatalf("space entry after global forget: (%q, %v)", out, isErr)
+		}
+	})
 }
 
 func TestUpdateMemoryNeedsAField(t *testing.T) {

@@ -502,6 +502,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshUnread()
 		return m, nil
 
+	case mcpReplyMsg:
+		// A reply does not end a turn, so it leaves busy alone.
+		m.append(msg.text)
+		return m, nil
+
 	case noteMsg:
 		m.busy = false
 		if msg.err != nil {
@@ -871,7 +876,9 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 	case "tasks":
 		m.runTasksCommand(cmd.Arg)
 	case "mcp":
-		m.runMCPCommand(cmd.Arg)
+		if c := m.runMCPCommand(cmd.Arg); c != nil {
+			return m, c
+		}
 	case "audit":
 		m.runAuditCommand(cmd.Arg)
 	case "exit":

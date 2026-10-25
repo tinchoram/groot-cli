@@ -40,9 +40,10 @@ func (w *Workspace) refreshAgentMemory(name string, d catalog.AgentDef, on bool)
 	defer w.mu.Unlock()
 
 	type swap struct {
-		conv *Conversation
-		reg  *tool.Registry
-		prev bool
+		conv  *Conversation
+		reg   *tool.Registry
+		prev  bool
+		names []string
 	}
 	var swaps []swap
 	revert := func() {
@@ -62,10 +63,10 @@ func (w *Workspace) refreshAgentMemory(name string, d catalog.AgentDef, on bool)
 			revert()
 			return fmt.Errorf("update open conversation %s/%s: %w", c.space, c.name, err)
 		}
-		swaps = append(swaps, swap{c, reg, prev})
+		swaps = append(swaps, swap{c, reg, prev, d.Tools})
 	}
 	for _, s := range swaps {
-		s.conv.SetTools(s.reg)
+		s.conv.swapTools(s.reg, s.names)
 		_ = s.conv.refreshSystem(context.Background())
 	}
 	return nil

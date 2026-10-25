@@ -56,10 +56,12 @@ type Planned struct {
 
 // MapTools converts declared tool names to groot tool names. It returns the
 // mapped names in order, without duplicates, and one warning per dropped name.
+// A name that catalog.IsKnownTool accepts is kept as it is, including an MCP
+// name such as grafana__* whose server the space may not configure yet.
 func MapTools(declared []string) (tools []string, warnings []string) {
 	for _, name := range declared {
 		mapped, ok := toolMap[name]
-		if !ok && slices.Contains(catalog.KnownTools, name) {
+		if !ok && catalog.IsKnownTool(name) {
 			mapped, ok = name, true
 		}
 		if !ok {

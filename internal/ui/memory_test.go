@@ -49,7 +49,7 @@ func TestMemoryFlagsMarkPinnedReviewTaintedAndGlobal(t *testing.T) {
 	}
 	m, _ := newTestModel(t, chat)
 	m = sendLine(t, m, "/memory")
-	line := lineContaining(stripANSI(m.transcriptText()), "#4 ")
+	line := lineContaining(stripANSI(m.transcriptText()), "#g4 ")
 	for _, flag := range []string{"★", "?", "!", "G"} {
 		if !strings.Contains(line, flag) {
 			t.Fatalf("line %q lacks flag %s", line, flag)
@@ -66,7 +66,7 @@ func TestMemoryCommandWithQueryPrintsMatchesWithIDs(t *testing.T) {
 	if got := chat.recallQueries; len(got) != 1 || got[0] != "foo" {
 		t.Fatalf("recall queries = %v, want [foo]", got)
 	}
-	if out := stripANSI(m.transcriptText()); !strings.Contains(out, "#3 ") || !strings.Contains(out, "restart foo with the runbook") {
+	if out := stripANSI(m.transcriptText()); !strings.Contains(out, "#g3 ") || !strings.Contains(out, "restart foo with the runbook") {
 		t.Fatalf("/memory foo lacks the match:\n%s", out)
 	}
 
@@ -113,11 +113,81 @@ func TestMemoryPinUnpinForgetAndReviewRunThroughTheSession(t *testing.T) {
 	if got := strings.Join(chat.pinCalls, ","); got != "7=true,7=false" {
 		t.Fatalf("pin calls = %q", got)
 	}
-	if len(chat.forgotten) != 1 || chat.forgotten[0] != 7 {
+	if len(chat.forgotten) != 1 || chat.forgotten[0] != (memory.Ref{ID: 7}) {
 		t.Fatalf("forgotten = %v", chat.forgotten)
 	}
-	if len(chat.reviewed) != 1 || chat.reviewed[0] != 11 {
+	if len(chat.reviewed) != 1 || chat.reviewed[0] != (memory.Ref{ID: 11}) {
 		t.Fatalf("reviewed = %v", chat.reviewed)
+	}
+}
+
+func TestMemoryListingLabelsGlobalIDsWithAG(t *testing.T) {
+	now := time.Now()
+	chat := &fakeSession{
+		model: "m",
+		promptMemory: []memory.Entry{
+			{ID: 3, Kind: memory.KindFact, Scope: memory.ScopeSpace, Text: "queue is rabbit", CreatedAt: now},
+			{ID: 3, Kind: memory.KindFact, Scope: memory.ScopeGlobal, Text: "global dns zone", CreatedAt: now},
+		},
+	}
+	m, _ := newTestModel(t, chat)
+	m = sendLine(t, m, "/memory")
+	out := stripANSI(m.transcriptText())
+	if !strings.Contains(out, "#3 ") || !strings.Contains(out, "#g3 ") {
+		t.Fatalf("listing must show the space id #3 and the global id #g3:\n%s", out)
+	}
+}
+
+func TestMemoryGIDsRouteToTheGlobalEntry(t *testing.T) {
+	chat := &fakeSession{model: "m", memoryByID: map[int64]memory.Entry{
+		3: {ID: 3, Kind: memory.KindFact, Scope: memory.ScopeSpace, Text: "queue is rabbit", CreatedAt: time.Now()},
+	}}
+	m, _ := newTestModel(t, chat)
+	steps := []struct {
+		line, want string
+	}{
+		{"/memory show g3", "#3 "},
+		{"/memory pin g3", "pinned #g3"},
+		{"/memory unpin 3", "unpinned #3"},
+		{"/memory reviewed g3", "reviewed #g3"},
+		{"/memory rm g3", "forgot #g3"},
+		{"/memory rm 3", "forgot #3"},
+	}
+	for _, s := range steps {
+		m = sendLine(t, m, s.line)
+		if out := stripANSI(m.transcriptText()); !strings.Contains(out, s.want) {
+			t.Fatalf("%s: transcript lacks %q:\n%s", s.line, s.want, out)
+		}
+	}
+	global := memory.Ref{ID: 3, Global: true}
+	local := memory.Ref{ID: 3}
+	if len(chat.shown) != 1 || chat.shown[0] != global {
+		t.Fatalf("shown = %v, want [g3]", chat.shown)
+	}
+	if got := strings.Join(chat.pinCalls, ","); got != "g3=true,3=false" {
+		t.Fatalf("pin calls = %q", got)
+	}
+	if len(chat.reviewed) != 1 || chat.reviewed[0] != global {
+		t.Fatalf("reviewed = %v, want [g3]", chat.reviewed)
+	}
+	if len(chat.forgotten) != 2 || chat.forgotten[0] != global || chat.forgotten[1] != local {
+		t.Fatalf("forgotten = %v, want [g3 3]", chat.forgotten)
+	}
+}
+
+func TestMemoryRejectsBadGIDs(t *testing.T) {
+	for _, line := range []string{"/memory rm g", "/memory rm g0", "/memory rm gx", "/memory rm G3"} {
+		t.Run(line, func(t *testing.T) {
+			chat := &fakeSession{model: "m"}
+			m, _ := newTestModel(t, chat)
+			m = sendLine(t, m, line)
+			if out := stripANSI(m.transcriptText()); !strings.Contains(out, "id must be a positive number") {
+				t.Fatalf("transcript lacks the id error:\n%s", out)
+			}
+			if len(chat.forgotten) != 0 {
+				t.Fatal("a bad id must not change memory")
+			}
+		})
 	}
 }
 

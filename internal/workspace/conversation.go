@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,9 @@ type Conversation struct {
 	name  string
 	space string
 	inbox *inbox.Store
+	// toolNames are the tool names the registry of the agent was built from.
+	// Callers hold the workspace lock when they change them.
+	toolNames []string
 	// resumed is set when the conversation continued a stored session.
 	resumed *Resumed
 	// ctl enforces the ODD flow; baseSystem is the prompt before the flow block.
@@ -118,6 +122,13 @@ func (c *Conversation) base() string {
 
 // refreshSystem recomputes the prompt from the memory stored now. On failure the
 // previous prompt stays in place.
+// swapTools makes reg the registry of the next model call, and records the
+// names it was built from. Callers hold the workspace lock.
+func (c *Conversation) swapTools(reg *tool.Registry, names []string) {
+	c.toolNames = slices.Clone(names)
+	c.SetTools(reg)
+}
+
 func (c *Conversation) refreshSystem(ctx context.Context) error {
 	if c.rebuildSystem == nil {
 		return nil
@@ -152,22 +163,22 @@ func (c *Conversation) RecallMemory(ctx context.Context, query string) ([]memory
 }
 
 // MemoryEntry returns one entry this agent can read, with its full text.
-func (c *Conversation) MemoryEntry(ctx context.Context, id int64) (memory.Entry, error) {
-	return c.store.Get(ctx, id, c.mem.reader())
+func (c *Conversation) MemoryEntry(ctx context.Context, ref memory.Ref) (memory.Entry, error) {
+	return memory.GetByRef(ctx, c.store, ref, c.mem.reader())
 }
 
 // MemoryPin pins or unpins an entry. The prompt is rebuilt, so the change is in
 // the next turn.
-func (c *Conversation) MemoryPin(ctx context.Context, id int64, pinned bool) error {
-	if err := c.store.SetPinned(ctx, id, c.mem.reader(), pinned); err != nil {
+func (c *Conversation) MemoryPin(ctx context.Context, ref memory.Ref, pinned bool) error {
+	if err := memory.SetPinnedByRef(ctx, c.store, ref, c.mem.reader(), pinned); err != nil {
 		return err
 	}
 	return c.refreshSystem(ctx)
 }
 
 // MemoryForget removes an entry this agent can change, and rebuilds the prompt.
-func (c *Conversation) MemoryForget(ctx context.Context, id int64) error {
-	if err := c.store.Forget(ctx, id, c.mem.reader()); err != nil {
+func (c *Conversation) MemoryForget(ctx context.Context, ref memory.Ref) error {
+	if err := memory.ForgetByRef(ctx, c.store, ref, c.mem.reader()); err != nil {
 		return err
 	}
 	return c.refreshSystem(ctx)
@@ -180,8 +191,8 @@ func (c *Conversation) MemoryReview(ctx context.Context) ([]memory.Entry, error)
 
 // MemoryReviewed moves the review date of an entry one interval ahead, and
 // rebuilds the prompt, which marks the entry as reviewed.
-func (c *Conversation) MemoryReviewed(ctx context.Context, id int64) error {
-	if err := c.store.MarkReviewed(ctx, id, c.mem.reader()); err != nil {
+func (c *Conversation) MemoryReviewed(ctx context.Context, ref memory.Ref) error {
+	if err := memory.MarkReviewedByRef(ctx, c.store, ref, c.mem.reader()); err != nil {
 		return err
 	}
 	return c.refreshSystem(ctx)

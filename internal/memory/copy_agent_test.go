@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/tinchoram/groot-cli/internal/api"
 	"github.com/tinchoram/groot-cli/internal/flow"
@@ -147,6 +148,51 @@ func TestCopyAgentDataSkipsSessionsThatTheTargetAlreadyHas(t *testing.T) {
 	}
 	if msgs, err := dst.SessionMessages(ctx, "s1"); err != nil || len(msgs) != 1 {
 		t.Fatalf("target messages = %d, %v; want its own single message", len(msgs), err)
+	}
+}
+
+func TestCopyAgentDataTwiceDoesNotDuplicateTasks(t *testing.T) {
+	ctx := context.Background()
+	src := openTempSQLite(t)
+	dst := openTempSQLite(t)
+	// Sub-second opened times: the task key compares them exactly.
+	opened := base.Add(123456789 * time.Nanosecond)
+	task, err := src.Tasks().Open(ctx, newTask("payments", "developer", opened))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"one", "two"} {
+		if err := src.Tasks().AddEvidence(ctx, task.ID, flow.Evidence{Phase: flow.PhaseClassified, Kind: flow.KindNote, Text: text, At: base}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := src.Tasks().SetSpecs(ctx, task.ID, []flow.Spec{{N: 1, Text: "first spec"}, {N: 2, Text: "second spec"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := src.CopyAgentData(ctx, dst, "developer")
+	if err != nil || first.Tasks != 1 || first.SkippedTasks != 0 || first.Evidence != 2 {
+		t.Fatalf("first copy = %+v, %v; want 1 task and 2 evidence copied", first, err)
+	}
+	second, err := src.CopyAgentData(ctx, dst, "developer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Tasks != 0 || second.SkippedTasks != 1 || second.Evidence != 0 {
+		t.Fatalf("second copy = %+v; want the task skipped with no evidence copied", second)
+	}
+
+	tasks, err := dst.Tasks().List(ctx, "payments", "developer", 10)
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("target tasks after two copies = %d, %v; want 1", len(tasks), err)
+	}
+	got, err := dst.Tasks().Get(ctx, tasks[0].ID)
+	if err != nil || len(got.Evidence) != 2 {
+		t.Fatalf("target evidence = %d, %v; want 2 and no duplicates", len(got.Evidence), err)
+	}
+	specs, err := dst.Tasks().Specs(ctx, tasks[0].ID)
+	if err != nil || len(specs) != 2 {
+		t.Fatalf("target specs = %d, %v; want 2 and no duplicates", len(specs), err)
 	}
 }
 

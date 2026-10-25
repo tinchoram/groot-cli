@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/tinchoram/groot-cli/internal/workspace"
 )
 
@@ -14,18 +15,25 @@ const mcpUsage = "usage: /mcp | /mcp connect <name>"
 // mcpNone is the reply to /mcp when the config defines no server.
 const mcpNone = "no MCP servers configured: add mcp.servers to ~/.groot/groot.yaml"
 
+// mcpReplyMsg is the result of /mcp connect, rendered as a transcript line.
+type mcpReplyMsg struct {
+	text string
+}
+
 // runMCPCommand handles /mcp: the servers of the active space, and /mcp connect
-// <name>, which connects one server now and reports what it offers.
-func (m *Model) runMCPCommand(arg string) {
+// <name>. A connect returns the command that runs it off the UI loop; the
+// other forms answer at once and return nil.
+func (m *Model) runMCPCommand(arg string) tea.Cmd {
 	fields := strings.Fields(arg)
 	switch {
 	case len(fields) == 0:
 		m.showMCP()
 	case fields[0] == "connect" && len(fields) == 2:
-		m.connectMCP(fields[1])
+		return m.connectMCP(fields[1])
 	default:
 		m.append(styleError.Render(mcpUsage))
 	}
+	return nil
 }
 
 // showMCP lists each server with its state, then the allowlisted tools of each
@@ -58,14 +66,17 @@ func (m *Model) showMCP() {
 	m.append(strings.TrimRight(sb.String(), "\n"))
 }
 
-// connectMCP connects one server now and reports the tools it admits.
-func (m *Model) connectMCP(name string) {
-	n, err := m.ws.MCPConnect(context.Background(), name)
-	if err != nil {
-		m.append(styleError.Render("mcp " + name + ": " + err.Error()))
-		return
+// connectMCP connects one server and reports the tools it admits. A server may
+// be slow, so the connect runs in the returned command, off the UI loop.
+func (m *Model) connectMCP(name string) tea.Cmd {
+	ws := m.ws
+	return func() tea.Msg {
+		n, err := ws.MCPConnect(context.Background(), name)
+		if err != nil {
+			return mcpReplyMsg{text: styleError.Render("mcp " + name + ": " + err.Error())}
+		}
+		return mcpReplyMsg{text: styleDim.Render(fmt.Sprintf("mcp %s: connected · %s", name, toolCount(n)))}
 	}
-	m.append(styleDim.Render(fmt.Sprintf("mcp %s: connected · %s", name, toolCount(n))))
 }
 
 // mcpServerLine is the summary line of one server:

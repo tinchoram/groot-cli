@@ -685,6 +685,9 @@ func copyReport(to, from string, c memory.CopyCounts) string {
 	if c.SkippedSessions > 0 {
 		s += fmt.Sprintf(", %d sessions skipped because %s already has them", c.SkippedSessions, to)
 	}
+	if c.SkippedTasks > 0 {
+		s += fmt.Sprintf(", %d tasks skipped because %s already has them", c.SkippedTasks, to)
+	}
 	return s + fmt.Sprintf("; %s keeps its copies", from)
 }
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/tinchoram/groot-cli/internal/workspace"
 )
 
@@ -94,6 +95,31 @@ func TestMCPConnectForcesAConnectAndReports(t *testing.T) {
 	m = sendLine(t, m, "/mcp connect grafana")
 	if out := stripANSI(m.transcriptText()); !strings.Contains(out, "mcp grafana: connection refused") {
 		t.Fatalf("a failed connect must be reported:\n%s", out)
+	}
+}
+
+func TestMCPConnectRunsOffTheUILoop(t *testing.T) {
+	m, ws := newTestModel(t, &fakeSession{model: "m"})
+	ws.mcpConnectTools = 2
+	m = typeText(m, "/mcp connect grafana")
+	m, cmd := press(m, tea.KeyEnter)
+	if len(ws.mcpConnects) != 0 {
+		t.Fatalf("/mcp connect connected on the UI loop: %v", ws.mcpConnects)
+	}
+	reply := findMsg[mcpReplyMsg](t, cmd)
+	if len(ws.mcpConnects) != 1 || ws.mcpConnects[0] != "grafana" {
+		t.Fatalf("connects = %v, want [grafana]", ws.mcpConnects)
+	}
+	if !strings.Contains(stripANSI(reply.text), "mcp grafana: connected · 2 tools") {
+		t.Fatalf("reply = %q, want the connect result", reply.text)
+	}
+
+	ws.mcpConnectErr = map[string]error{"grafana": errors.New("connection refused")}
+	m = typeText(m, "/mcp connect grafana")
+	_, cmd = press(m, tea.KeyEnter)
+	reply = findMsg[mcpReplyMsg](t, cmd)
+	if !strings.Contains(stripANSI(reply.text), "mcp grafana: connection refused") {
+		t.Fatalf("reply = %q, want the failure", reply.text)
 	}
 }
 

@@ -109,6 +109,73 @@ func (w *Workspace) mcpTools(ctx context.Context, mgr *mcp.Manager, names []stri
 	return out, warns
 }
 
+// hasMCPName reports whether a tool list names any MCP tool.
+func hasMCPName(names []string) bool {
+	for _, n := range names {
+		if _, _, ok := mcp.SplitToolName(n); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// attachMCP connects the MCP servers of a conversation that has just opened,
+// then swaps in a registry with their tools. It runs off the caller's goroutine,
+// because a server may be slow: the conversation answers without the tools until
+// the swap. The swap is dropped when the conversation has closed, or when its
+// tools changed since the open, since such a change rebuilds the tools itself.
+func (w *Workspace) attachMCP(c *Conversation, key string, mgr *mcp.Manager, names []string, build func([]string, []tool.Tool) (*tool.Registry, error)) {
+	extra, warns := w.mcpTools(context.Background(), mgr, names)
+	w.mu.Lock()
+	if w.convs[key] != c || !slices.Equal(c.toolNames, names) {
+		w.mu.Unlock()
+		return
+	}
+	reg, err := build(names, extra)
+	if err != nil {
+		w.mu.Unlock()
+		w.warnLater(key, []string{"mcp tools not attached: " + err.Error()})
+		return
+	}
+	c.swapTools(reg, names)
+	w.mu.Unlock()
+	w.warnLater(key, warns)
+	for _, note := range readyNotes(extra, names) {
+		w.notifyKey(key, note)
+	}
+}
+
+// readyNotes says how many tools each server named in names contributed, for
+// the servers that contributed any.
+func readyNotes(extra []tool.Tool, names []string) []string {
+	count := map[string]int{}
+	for _, t := range extra {
+		if s, _, ok := mcp.SplitToolName(t.Definition().Name); ok {
+			count[s]++
+		}
+	}
+	var servers []string
+	for _, n := range names {
+		if s, _, ok := mcp.SplitToolName(n); ok && !slices.Contains(servers, s) {
+			servers = append(servers, s)
+		}
+	}
+	sort.Strings(servers)
+	var out []string
+	for _, s := range servers {
+		n := count[s]
+		if n == 0 {
+			continue
+		}
+		word := "tools"
+		if n == 1 {
+			word = "tool"
+		}
+		out = append(out, fmt.Sprintf("mcp %s: %d %s ready", s, n, word))
+	}
+	return out
+}
+
 // warnLater delivers warnings to the hook off the caller's goroutine. Callers
 // hold the workspace lock, and the hook may block on the UI.
 func (w *Workspace) warnLater(key string, msgs []string) {
