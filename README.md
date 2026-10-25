@@ -38,6 +38,10 @@ active space as it was. Nothing is ever deleted.
 The `groot` catalog entry is managed: its name cannot be used by `/agent new`,
 and nothing deletes it. You may edit its prompt (the body of its file).
 
+`debug` is optional. It keeps groot's backlog of bug reports and feature requests,
+and it ships in the library: ask groot to install it ("install debug"), or run
+`/agent install debug`. Until it is installed, `/bug` and `/feat` say so.
+
 ## Architecture
 
 ```
@@ -482,8 +486,8 @@ The same operations are shortcuts in the UI.
 - `delete_agent {name, confirm?}`, `/agent delete <name>`: removes the agent from
   the catalog and from every space. The first call, without `confirm: true`,
   changes nothing and reports the spaces it is assigned to with the open tasks
-  per space. Its memory and sessions stay in each space's database. `groot` and
-  `debug` cannot be deleted.
+  per space. Its memory and sessions stay in each space's database. `groot` cannot
+  be deleted. An installed `debug` can be; its backlog files stay.
 - `edit_agent {name, description?, prompt?, new_name?}`, `/agent rename <old> <new>`:
   changes the description or the prompt, or renames the agent everywhere it is
   assigned (assignments, routes, inbox, tasks, memory and sessions). Managed
@@ -651,8 +655,8 @@ granted on purpose:
 - Groot does the same with `grant_tool {agent, tool}` and `revoke_tool {agent,
   tool}`. Both always ask for your approval, and the session approval `a` never
   covers them.
-- The managed agents `groot` and `debug` keep their required tools: removing one is
-  refused. Groot can gain tools but never lose its admin tools.
+- The managed agents `groot` and `debug` (once installed) keep their required tools:
+  removing one is refused. Groot can gain tools but never lose its admin tools.
 
 Changes are saved in the agent's file and apply right away, including open conversations, which keep their session.
 
@@ -735,10 +739,11 @@ request.
 
 ### Your collection: @tinchoram
 
-Six agents ship embedded in the binary, all in the collection `@tinchoram`:
+Seven agents ship embedded in the binary, all in the collection `@tinchoram`:
 
 | Agent | Purpose | Tools |
 |---|---|---|
+| `debug` | keeps the groot backlog: bug reports and feature requests about groot | feedback_report, feedback_list, feedback_update, read_changelog, send_message, recall, remember |
 | `project-manager` | release plans, backlog, status notes, risk logs, release notes | read_file, write_file, recall, remember |
 | `ux-designer` | flows, ASCII wireframes, components, accessibility checks | read_file, write_file, recall, remember |
 | `developer` | test-first engineering with small diffs and explained trade-offs | read_file, write_file, bash, recall, remember |
@@ -1220,12 +1225,15 @@ table, regenerated after every change. Each item is one file under `items/`, nam
 area, reported_at, space, agent, version) and its description.
 
 - `/bug <text>` and `/feat <text>` send a message to the debug agent, in whatever
-  space it is assigned to (`root` at first; a move is kept across restarts), from
-  the current space and agent. No model call and no permission gate. The body holds your text,
+  space it is assigned to, from the current space and agent. When debug is not
+  installed they fail with a message that says how to install it. No model call and no permission gate. The body holds your text,
   the last ten lines you typed in this conversation as context, and the version.
   Earlier reports are left out. The confirmation gives the message id.
-- Only the `debug` agent writes the backlog. It is created by bootstrap next to
-  groot, lives in the root space, and is managed like groot. For each report it
+- Only the `debug` agent writes the backlog. A fresh home does not create it: install
+  it from the library (`install_agent debug` or `/agent install debug`) into the
+  space you choose. Bootstrap never moves or assigns it, and an existing home keeps
+  its debug file and assignments. Once installed it is kept current like groot and
+  cannot be renamed. Deleting it keeps the backlog files. For each report it
   checks `feedback_list` for duplicates and writes the item with `feedback_report`.
   It records silently: it replies to the reporter only when the report asks for a
   confirmation, or when `feedback.confirm: true` is set in `groot.yaml`. Then it

@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tinchoram/groot-cli/internal/catalog"
 	"github.com/tinchoram/groot-cli/internal/space"
+	"github.com/tinchoram/groot-cli/library"
 )
 
 const (
@@ -21,29 +23,37 @@ const (
 	managedAgent = "groot"
 )
 
-// debugAgent collects bug reports and feature requests about groot. Like groot,
-// it is managed: bootstrap keeps it, and it cannot be replaced by hand.
+// debugAgent collects bug reports and feature requests about groot. It is not
+// created at bootstrap: it ships in the built-in library and is installed on
+// request. Once installed it is kept current like groot, and its name cannot
+// be renamed.
 const debugAgent = "debug"
 
-// debugDef is the feedback agent: it writes the backlog and nothing else.
+var (
+	debugOnce sync.Once
+	debugFile catalog.AgentDef
+)
+
+// debugDef is the debug agent as the embedded library file defines it, so the
+// library entry and the tools kept current here cannot drift apart. The file is
+// parsed once; a broken embedded file is a build defect, caught by the library
+// tests.
 func debugDef() catalog.AgentDef {
-	return catalog.AgentDef{
-		Name:        debugAgent,
-		Description: "Debug: reports bugs and feature requests about Groot into the backlog",
-		Tools:       []string{"feedback_report", "feedback_list", "feedback_update", "read_changelog", "send_message", "recall", "remember"},
-	}
+	debugOnce.Do(func() {
+		raw, err := library.Agents.ReadFile("agents/debug.md")
+		if err != nil {
+			panic(fmt.Sprintf("embedded debug agent: %v", err))
+		}
+		def, err := catalog.ParseAgentFile(raw)
+		if err != nil {
+			panic(fmt.Sprintf("embedded debug agent: %v", err))
+		}
+		debugFile = def
+	})
+	def := debugFile
+	def.Tools = slices.Clone(debugFile.Tools)
+	return def
 }
-
-// debugPrompt is the body of the debug agent.
-const debugPrompt = `You are Debug, the only agent that writes the backlog of bugs and feature requests about Groot. Reports arrive as messages from other agents and from the user; the subject starts with bug: or feat:.
-
-- For each delivered report, call feedback_list to check for a duplicate. If one exists, do not write a new item.
-- Otherwise write the item with feedback_report: the type from the subject prefix, a good short title, the area when it is obvious, and a body with the steps, the expected and the actual behaviour when the report has them.
-- Replies to the reporter follow the reply rule below.
-- Ask a clarifying question only when the report cannot be written without it.
-- When the user says an item is done or dropped, use feedback_update with done or wontfix.
-- Keep answers short.
-`
 
 // debugReplyRule says when debug answers the reporter. It is appended to the
 // system prompt of every debug conversation, so homes that kept an older stored
@@ -102,6 +112,7 @@ Your job:
 - You can list directories and find files by pattern (list_dir, glob), but you cannot read file contents or run commands. If the user needs that, point them to a space with a suitable agent.
 - Agents may send you requests and specifications with send_message; read them with read_inbox when the user asks or when the inbox block appears. You can send specifications or instructions to any agent with send_message, naming <space>/<agent>; keep them concrete: goal, constraints, definition of done.
 - Work rubric: small = 1-2 files, no design, reversible; medium = several files or one component, tests affected, no open decisions; large = design or architecture, several components, risk, or questions the user must answer. Classify before the first write (task_classify). Open a task for medium and large (task_open). Record evidence. Deliver with risks.
+- Bug and feature reports about groot are kept by the debug agent from the library. It is installed on request with install_agent; until then /bug and /feat say so.
 - Answer style: lead with the direct answer in one or two sentences. Default to at most eight lines. No headings, no bold, no nested lists; a flat list only when listing things. Expand only when the user asks.
 `
 
@@ -112,16 +123,6 @@ func starterPrompt(name string) string {
 Describe the role, the scope of this agent, and the rules it must follow.
 Keep it short and concrete. Edit this file to change how the agent behaves.
 `, name)
-}
-
-// assignedAnywhere reports whether agent is assigned to at least one space.
-func assignedAnywhere(st *space.Store, agent string) bool {
-	for _, sp := range st.List() {
-		if slices.Contains(sp.Agents, agent) {
-			return true
-		}
-	}
-	return false
 }
 
 // Bootstrap prepares the groot home on every start. It never deletes anything
@@ -148,11 +149,6 @@ func Bootstrap(home, userHome string, now time.Time) (fresh bool, err error) {
 		return false, fmt.Errorf("create %s: %w", home, err)
 	}
 
-	if !catalog.Exists(home, debugAgent) {
-		if err := catalog.Save(home, debugDef(), debugPrompt); err != nil {
-			return false, err
-		}
-	}
 	if !catalog.Exists(home, managedAgent) {
 		if err := catalog.Save(home, grootDef(), grootPrompt); err != nil {
 			return false, err
@@ -175,13 +171,6 @@ func Bootstrap(home, userHome string, now time.Time) (fresh bool, err error) {
 	root, _ := st.Get(rootSpaceName)
 	if !slices.Contains(root.Agents, managedAgent) {
 		if err := st.Assign(rootSpaceName, managedAgent); err != nil {
-			return false, err
-		}
-	}
-	// Debug starts in root but may be moved: it is placed only when it is
-	// assigned to no space at all, so a move survives a restart.
-	if !assignedAnywhere(st, debugAgent) {
-		if err := st.Assign(rootSpaceName, debugAgent); err != nil {
 			return false, err
 		}
 	}

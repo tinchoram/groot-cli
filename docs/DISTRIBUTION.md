@@ -20,12 +20,14 @@ is the plan for the first public release.
    creates spaces and agents and explains the keys. Nothing else is configured.
 5. **The `debug` agent is not installed by default.** It is the agent that keeps
    the groot backlog (`~/.groot/feedback`), useful to us while we build groot.
-   For users it ships in the built-in library, so groot installs it like any
-   other agent when asked ("install debug"). The feedback flow (`/bug`, `/feat`,
-   `feedback_report`) follows debug to whatever space it is assigned to; when
-   debug is not installed, those commands say so and point to groot.
-   *Pending:* today bootstrap still creates debug in `root`; moving it to the
-   library is the next change on this list.
+   It ships in the built-in library, so groot installs it like any other agent
+   when asked ("install debug"), or the user runs `/agent install debug`. Bootstrap
+   neither creates nor assigns it. The user puts it in the space they choose, and
+   the feedback flow (`/bug`, `/feat`, `send_message` to `debug`) follows it there;
+   when debug is assigned to no space, those commands fail with a message that says
+   how to install it. An installed debug is kept current like groot, cannot be
+   renamed, and can be deleted (its backlog files stay). Existing homes keep their
+   debug file and assignments untouched.
 6. **The API key is never stored in plain configuration.** `groot auth login`
    keeps it in the macOS keychain, or in `~/.groot/credentials` with mode 0600
    on Linux. The environment and a `.env` in the working directory still win,
@@ -108,11 +110,9 @@ Consequences:
 
 ## Order of the remaining work
 
-1. Move `debug` out of bootstrap into the built-in library; `/bug` and `/feat`
-   explain how to install it when absent.
-2. `install.sh` for macOS and Linux (detect OS and arch, download, verify the
+1. `install.sh` for macOS and Linux (detect OS and arch, download, verify the
    checksum, install to `~/.local/bin`, run `groot doctor`).
-3. First public release: make the repository public, tag, let the workflow
+2. First public release: make the repository public, tag, let the workflow
    publish, verify `groot upgrade --check` against it.
-4. Homebrew tap through goreleaser.
-5. Later: `.deb`/`.rpm`, signing and notarization, Windows.
+3. Homebrew tap through goreleaser.
+4. Later: `.deb`/`.rpm`, signing and notarization, Windows.

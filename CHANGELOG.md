@@ -21,6 +21,18 @@ built in one day of live testing, so they are grouped by what shipped.
   them; a session the target already has is skipped. The source keeps its
   copies, and the result lists the counts.
 
+### Distribution
+- A fresh home holds `root` and `groot` only. Bootstrap no longer creates or
+  assigns the `debug` agent, the one that keeps the groot backlog. It ships in the
+  built-in library: install it with `install_agent debug` or `/agent install debug`,
+  into the space you choose.
+- `/bug`, `/feat` and messages to `debug` fail with a message that says how to
+  install debug when it is assigned to no space. Nothing is written in that case.
+- An installed `debug` can be deleted; its backlog files stay. It is still kept
+  current at each start and cannot be renamed. `groot` keeps every protection.
+- Existing homes keep their debug file, its assignments and their groot prompt.
+  The new line about debug in groot's prompt reaches fresh homes only.
+
 ## 0.5.4 — 2026-10-25 (tagged, not published)
 
 ### UI

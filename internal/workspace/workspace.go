@@ -446,7 +446,7 @@ func (w *Workspace) UnassignAgent(name string) error {
 // NewAgent creates a starter agent in the catalog and returns its folder.
 func (w *Workspace) NewAgent(name, description string) (string, error) {
 	if isManaged(name) {
-		return "", fmt.Errorf("agent %q is managed and cannot be created again", managedAgent)
+		return "", fmt.Errorf("agent %q is managed and cannot be created by hand; install it from the library", name)
 	}
 	if catalog.Exists(w.opts.Home, name) {
 		return "", fmt.Errorf("agent %q already exists", name)
@@ -703,7 +703,7 @@ func (w *Workspace) ImportAgent(ctx context.Context, source string, overwrite bo
 func (w *Workspace) importPlan(plan agentimport.Planned, overwrite bool) (ImportResult, error) {
 	name := plan.Def.Name
 	if isManaged(name) {
-		return ImportResult{}, fmt.Errorf("agent %q is managed and cannot be overwritten", managedAgent)
+		return ImportResult{}, fmt.Errorf("agent %q is managed and cannot be overwritten", name)
 	}
 	if catalog.Exists(w.opts.Home, name) && !overwrite {
 		return ImportResult{}, fmt.Errorf("agent %q already exists; import again with --force to replace it", name)

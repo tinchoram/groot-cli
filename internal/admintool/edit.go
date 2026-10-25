@@ -155,7 +155,7 @@ type deleteAgent struct {
 // NewDeleteAgent returns the delete_agent tool.
 func NewDeleteAgent(m Manager) tool.Tool {
 	return deleteAgent{base{"delete_agent",
-		"Delete an agent from the catalog and unassign it from every space. The first call, without confirm: true, changes nothing and reports the spaces it is assigned to with open tasks per space. Call again with confirm: true to delete. Its open conversations end; its memory and sessions stay in each space's database. Managed agents (groot, debug) cannot be deleted.",
+		"Delete an agent from the catalog and unassign it from every space. The first call, without confirm: true, changes nothing and reports the spaces it is assigned to with open tasks per space. Call again with confirm: true to delete. Its open conversations end; its memory and sessions stay in each space's database. groot cannot be deleted; an installed debug can, and its backlog files stay.",
 		`{"type":"object","properties":{"name":{"type":"string","description":"the agent to delete"},"confirm":{"type":"boolean","description":"true to delete; omit for the report"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }

@@ -18,8 +18,12 @@ import (
 )
 
 var wantTinchoram = []string{
-	"developer", "devsecops-platform", "observability", "project-manager", "security-tester", "ux-designer",
+	"debug", "developer", "devsecops-platform", "observability", "project-manager", "security-tester", "ux-designer",
 }
+
+// shortPromptAgents keep a prompt below the 25-line floor on purpose: debug only
+// writes the feedback backlog, so its prompt stays narrow.
+var shortPromptAgents = []string{"debug"}
 
 // catalogOf reads only the home directory: no index and no public source, so
 // the test never touches the network.
@@ -50,7 +54,7 @@ func TestBuiltinEntriesLoadAndValidate(t *testing.T) {
 		if e.Description == "" || e.Author == "" || e.Collection == "" {
 			t.Errorf("%s lacks description, author or collection: %+v", e.Name, e)
 		}
-		if lines := len(strings.Split(e.Prompt, "\n")); lines < 25 || lines > 50 {
+		if lines := len(strings.Split(e.Prompt, "\n")); !slices.Contains(shortPromptAgents, e.Name) && (lines < 25 || lines > 50) {
 			t.Errorf("%s prompt has %d lines, want 25 to 50", e.Name, lines)
 		}
 	}

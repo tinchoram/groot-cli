@@ -85,8 +85,8 @@ func TestFreshBootstrapCreatesRootAndGroot(t *testing.T) {
 	if !strings.Contains(groot.Prompt, "administrator") {
 		t.Errorf("groot prompt should describe its role:\n%s", groot.Prompt)
 	}
-	if len(defs) != 2 {
-		t.Fatalf("a fresh home must hold groot and debug, got %d agents", len(defs))
+	if len(defs) != 1 {
+		t.Fatalf("a fresh home must hold only groot, got %d agents", len(defs))
 	}
 	if findDef(defs, "devjunior") != nil {
 		t.Fatal("a fresh home must not create the devjunior sample")
@@ -118,8 +118,8 @@ func TestUpgradeKeepsExistingSpaceAndAddsRootAndGroot(t *testing.T) {
 	if got := list[1].Agents; len(got) != 1 || got[0] != "devjunior" {
 		t.Fatalf("default agents changed: %v", got)
 	}
-	if got := list[0].Agents; !slices.Contains(got, "groot") || !slices.Contains(got, "debug") {
-		t.Fatalf("root agents = %v", got)
+	if got := list[0].Agents; !slices.Equal(got, []string{"groot"}) {
+		t.Fatalf("root agents = %v, want only groot", got)
 	}
 }
 

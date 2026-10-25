@@ -17,10 +17,11 @@ func TestDebugReplyRuleFollowsTheConfirmSetting(t *testing.T) {
 }
 
 func TestDebugPromptNoLongerConfirmsByDefault(t *testing.T) {
-	if strings.Contains(debugPrompt, `"<ID> recorded"`) {
+	prompt := debugDef().Prompt
+	if strings.Contains(prompt, `"<ID> recorded"`) {
 		t.Fatal("the managed prompt must not ask for a confirmation on every report")
 	}
-	if !strings.Contains(debugPrompt, "feedback_report") {
+	if !strings.Contains(prompt, "feedback_report") {
 		t.Fatal("the managed prompt must still write the items")
 	}
 }

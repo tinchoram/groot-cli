@@ -8,8 +8,10 @@ import (
 	"github.com/tinchoram/groot-cli/internal/catalog"
 )
 
-// managedAgents are the agents that bootstrap owns: they are kept current on
-// every start and cannot be created, imported over, or upgraded by hand.
+// managedAgents are the agents with a bootstrap definition: they are kept current
+// on every start and cannot be created, imported over, renamed or upgraded by
+// hand. groot is always in the catalog; debug is there once it is installed from
+// the library. Only groot is protected from deletion.
 var managedAgents = []string{managedAgent, debugAgent}
 
 func isManaged(name string) bool { return slices.Contains(managedAgents, name) }

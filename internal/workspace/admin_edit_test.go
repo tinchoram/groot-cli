@@ -225,12 +225,10 @@ func TestEditSpacePathKeepsDataAndSaysSo(t *testing.T) {
 	}
 }
 
-func TestDeleteAgentRefusesManagedAgents(t *testing.T) {
+func TestDeleteAgentRefusesGroot(t *testing.T) {
 	f := newFixture(t)
-	for _, name := range []string{managedAgent, debugAgent} {
-		if _, err := f.ws.DeleteAgent(name); err == nil {
-			t.Fatalf("%s must never be deleted", name)
-		}
+	if _, err := f.ws.DeleteAgent(managedAgent); err == nil {
+		t.Fatalf("%s must never be deleted", managedAgent)
 	}
 }
 

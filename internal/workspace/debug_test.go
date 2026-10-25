@@ -6,32 +6,45 @@ import (
 
 	"github.com/tinchoram/groot-cli/internal/catalog"
 	"github.com/tinchoram/groot-cli/internal/space"
+	"github.com/tinchoram/groot-cli/library"
 )
 
-func TestBootstrapCreatesTheDebugAgentNextToGroot(t *testing.T) {
+// A fresh home holds root and groot only: debug is installed from the library
+// on request, like any other agent.
+func TestFreshBootstrapDoesNotCreateDebug(t *testing.T) {
 	home, userHome := t.TempDir(), t.TempDir()
 	if _, err := Bootstrap(home, userHome, t0); err != nil {
 		t.Fatal(err)
 	}
-	defs, _ := catalog.Load(home)
-	var debug catalog.AgentDef
-	for _, d := range defs {
-		if d.Name == debugAgent {
-			debug = d
-		}
-	}
-	if debug.Name == "" {
-		t.Fatal("bootstrap must create the debug agent")
-	}
-	for _, want := range []string{"feedback_report", "feedback_list", "feedback_update"} {
-		if !slices.Contains(debug.Tools, want) {
-			t.Fatalf("debug lacks %s: %v", want, debug.Tools)
-		}
+	if catalog.Exists(home, debugAgent) {
+		t.Fatal("a fresh home must not create the debug agent")
 	}
 	sp, _ := space.Open(home + "/spaces.yaml")
 	root, _ := sp.Get("root")
-	if !slices.Contains(root.Agents, debugAgent) {
-		t.Fatalf("debug is assigned to root: %v", root.Agents)
+	if !slices.Equal(root.Agents, []string{managedAgent}) {
+		t.Fatalf("root agents = %v, want only groot", root.Agents)
+	}
+}
+
+// The debug definition is the embedded library file, so the library entry and
+// the tools that groot keeps current can never drift apart.
+func TestDebugDefComesFromTheLibraryFile(t *testing.T) {
+	raw, err := library.Agents.ReadFile("agents/debug.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := catalog.ParseAgentFile(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := debugDef()
+	if got.Name != want.Name || got.Description != want.Description || !slices.Equal(got.Tools, want.Tools) || got.Prompt != want.Prompt {
+		t.Fatalf("debugDef() = %+v, library file = %+v", got, want)
+	}
+	for _, need := range []string{"feedback_report", "feedback_list", "feedback_update"} {
+		if !slices.Contains(got.Tools, need) {
+			t.Fatalf("debug lacks %s: %v", need, got.Tools)
+		}
 	}
 }
 

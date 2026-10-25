@@ -5,6 +5,9 @@
 collection: "@tinchoram"
 author: "@tinchoram"
 agents:
+  - name: debug
+    description: "Keeps the groot backlog: records bug reports and feature requests about groot, checks for duplicates, closes items a release ships"
+    url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/debug.md
   - name: developer
     description: "Expert software engineer: reads the codebase before editing, writes tests first, small reviewable diffs, explains trade-offs"
     url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/developer.md

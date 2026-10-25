@@ -93,9 +93,9 @@ Decisions waiting on the user before 0.6.0 is planned:
 Decisions and the order of work are in [DISTRIBUTION.md](DISTRIBUTION.md).
 Done on main: `groot auth`, layered config, `groot doctor`, the goreleaser
 pipeline, `groot upgrade`, the admin tools to delete, rename, move and copy
-spaces and agents. Still to do before the tag: `debug` moves from bootstrap to
-the built-in library (a fresh install holds `root` and `groot` only),
-`install.sh`, and the repository goes public.
+spaces and agents; `debug` moved from bootstrap to the built-in library (a fresh
+install holds `root` and `groot` only). Still to do before the tag: `install.sh`,
+and the repository goes public.
 
 ## 0.6.0: connectivity
 

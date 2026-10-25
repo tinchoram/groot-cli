@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -14,9 +15,13 @@ import (
 // feedbackSubjectRunes caps the part of the text that becomes the message subject.
 const feedbackSubjectRunes = 60
 
+// errDebugNotInstalled is returned when debug is assigned to no space: reports
+// and the bare "debug" address have nowhere to go until it is installed.
+var errDebugNotInstalled = errors.New("the debug agent is not installed: ask groot to install it (install_agent debug), or run /agent install debug")
+
 // debugSpace is the space debug is assigned to: root when it is there, else
-// the first space that has it, else root. Reports and the bare "debug"
-// address follow it when the user moves it.
+// the first space that has it, else "" when debug is installed nowhere.
+// Reports and the bare "debug" address follow it when the user moves it.
 func (w *Workspace) debugSpace() string {
 	if sp, ok := w.opts.Spaces.Get(rootSpaceName); ok && slices.Contains(sp.Agents, debugAgent) {
 		return rootSpaceName
@@ -26,13 +31,17 @@ func (w *Workspace) debugSpace() string {
 			return sp.Name
 		}
 	}
-	return rootSpaceName
+	return ""
 }
 
 // feedbackRecipient is where reports go: the debug agent, wherever it is
-// assigned. Only debug writes the backlog.
-func (w *Workspace) feedbackRecipient() string {
-	return w.debugSpace() + "/" + debugAgent
+// assigned. Only debug writes the backlog. It fails when debug is not installed.
+func (w *Workspace) feedbackRecipient() (string, error) {
+	sp := w.debugSpace()
+	if sp == "" {
+		return "", errDebugNotInstalled
+	}
+	return sp + "/" + debugAgent, nil
 }
 
 // SendFeedback sends a bug or a feature request about groot to the debug agent,
@@ -52,7 +61,11 @@ func (w *Workspace) SendFeedback(spaceName, agent, kind, text string, lines []st
 	// A report is never refused for its size: a long paste is cut and marked,
 	// and the footer is kept so debug still knows where it came from.
 	content := capBytes(body.String(), inbox.MaxBodyBytes-len(footer))
-	recipient, id, err := w.messengerFor(spaceName, agent).Send(context.Background(), w.feedbackRecipient(), subject, content+footer)
+	to, err := w.feedbackRecipient()
+	if err != nil {
+		return 0, "", err
+	}
+	recipient, id, err := w.messengerFor(spaceName, agent).Send(context.Background(), to, subject, content+footer)
 	if err != nil {
 		return 0, "", err
 	}

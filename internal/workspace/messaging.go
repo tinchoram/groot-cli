@@ -75,7 +75,10 @@ func (w *Workspace) resolveRecipient(senderSpace, to string) (string, string, er
 	case to == managedAgent:
 		spaceName, agent = rootSpaceName, managedAgent
 	case to == debugAgent:
-		spaceName, agent = w.debugSpace(), debugAgent
+		if spaceName = w.debugSpace(); spaceName == "" {
+			return "", "", errDebugNotInstalled
+		}
+		agent = debugAgent
 	case strings.Contains(to, "/"):
 		i := strings.Index(to, "/")
 		spaceName, agent = to[:i], to[i+1:]

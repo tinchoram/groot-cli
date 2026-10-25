@@ -385,7 +385,8 @@ func (w *Workspace) EditSpace(name, newName, path string) (string, error) {
 
 // DeleteAgent removes an agent from the catalog and from every space that
 // assigns it. Its open conversations end. Its memory and sessions stay in each
-// space's database. Managed agents are never deleted.
+// space's database. groot is never deleted; an installed debug can be, and its
+// backlog files stay.
 func (w *Workspace) DeleteAgent(name string) (string, error) {
 	return w.DeleteAgentWithConfirm(name, true)
 }
@@ -394,7 +395,7 @@ func (w *Workspace) DeleteAgent(name string) (string, error) {
 // changes nothing and returns the report: the spaces the agent is assigned to
 // and the open tasks per space. With confirm it deletes the agent.
 func (w *Workspace) DeleteAgentWithConfirm(name string, confirm bool) (string, error) {
-	if isManaged(name) {
+	if name == managedAgent {
 		return "", fmt.Errorf("agent %q is managed and cannot be deleted", name)
 	}
 	if !catalog.Exists(w.opts.Home, name) {

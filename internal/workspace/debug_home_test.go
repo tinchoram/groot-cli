@@ -6,11 +6,12 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/tinchoram/groot-cli/internal/catalog"
 	"github.com/tinchoram/groot-cli/internal/space"
 )
 
 // The user may move debug to another space. Bootstrap must not put it back
-// in root on the next start; it only places debug when it is nowhere.
+// in root on the next start.
 func TestBootstrapKeepsDebugWhereTheUserMovedIt(t *testing.T) {
 	home, userHome := t.TempDir(), t.TempDir()
 	st, err := space.Open(filepath.Join(home, "spaces.yaml"))
@@ -44,8 +45,13 @@ func TestBootstrapKeepsDebugWhereTheUserMovedIt(t *testing.T) {
 	}
 }
 
-func TestBootstrapPlacesDebugInRootOnlyWhenItIsNowhere(t *testing.T) {
+// An existing home that has the debug file but assigns it nowhere keeps that
+// state: bootstrap never assigns debug on its own.
+func TestBootstrapLeavesAnUnassignedDebugAlone(t *testing.T) {
 	home, userHome := t.TempDir(), t.TempDir()
+	if err := catalog.Save(home, debugDef(), "my debug prompt"); err != nil {
+		t.Fatal(err)
+	}
 	st, _ := space.Open(filepath.Join(home, "spaces.yaml"))
 	_ = st.Add("root", userHome, t0)
 	_ = st.Assign("root", "groot")
@@ -56,8 +62,11 @@ func TestBootstrapPlacesDebugInRootOnlyWhenItIsNowhere(t *testing.T) {
 	}
 	after, _ := space.Open(filepath.Join(home, "spaces.yaml"))
 	root, _ := after.Get("root")
-	if !slices.Contains(root.Agents, "debug") {
-		t.Fatalf("debug assigned nowhere must land in root: %v", root.Agents)
+	if slices.Contains(root.Agents, "debug") {
+		t.Fatalf("bootstrap must not assign debug: %v", root.Agents)
+	}
+	if !catalog.Exists(home, debugAgent) {
+		t.Fatal("bootstrap must keep the debug file")
 	}
 }
 
