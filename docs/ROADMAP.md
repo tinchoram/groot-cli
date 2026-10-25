@@ -70,6 +70,11 @@ What is verified where. "Live" means the user exercised it in a real session;
 | `/audit`, `audit_query`, sinks | tests | 0.5.0 |
 | `/clear` memory refresh, `/memory`, `/readinbox` | tests | 0.5.2 |
 | Backlog sweep with `read_changelog` | tests | 0.5.3 |
+| Admin tools: delete, rename, move, copy; two-step confirm, `purge_data`, `with_memory` | live (first round) | 0.5.5-dev, the user exercised create/edit/delete/move |
+| `groot auth`, layered config, `groot doctor` | live (`doctor` on the dev machine) | 0.5.5-dev |
+| goreleaser pipeline, `groot upgrade`, `install.sh` | tests + local snapshot | 0.5.5-dev; the GitHub release workflow has not published yet |
+| `debug` from the library, movable | tests | 0.5.5-dev |
+| `/clear` summary fallback, 15 s close budget | tests | 0.5.5-dev |
 
 Known limits carried forward:
 
@@ -94,8 +99,14 @@ Decisions and the order of work are in [DISTRIBUTION.md](DISTRIBUTION.md).
 Done on main: `groot auth`, layered config, `groot doctor`, the goreleaser
 pipeline, `groot upgrade`, the admin tools to delete, rename, move and copy
 spaces and agents; `debug` moved from bootstrap to the built-in library (a fresh
-install holds `root` and `groot` only). Still to do before the tag: `install.sh`,
-and the repository goes public.
+install holds `root` and `groot` only); `install.sh`. Still to do before the
+tag: the user's polish pass, then the repository goes public, the tag runs the
+release workflow for the first time, and `groot upgrade --check` is verified
+against a real release. After that, the Homebrew tap.
+
+Session closed on 2026-10-25 at commit `74aef30` with everything above on
+main, verified and pushed. Backlog: BUG-005 and FEAT-014 are implemented and
+still marked open until debug is told or the 0.5.5 sweep runs.
 
 ## 0.6.0: connectivity
 
