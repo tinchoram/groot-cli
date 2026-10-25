@@ -36,7 +36,7 @@ func assembleWordmark() [6]string {
 }
 
 // tagline is the one-line description printed under the wordmark.
-const tagline = "terminal agent for Devs and Platform work"
+const tagline = "Terminal Agent for Devs and Platform engineering"
 
 // mascotPixels is a pixel-art sapling in a pot, drawn to the left of the
 // wordmark. One character per pixel: G leaf, B bark, D brow, K outline/eye,
@@ -229,26 +229,28 @@ func versionTag(version string) string {
 	return styleSubtitle.Render("v" + version)
 }
 
-// taglineLine is the line under the wordmark: the tagline and the version.
-func taglineLine(version string) string {
+// underName are the lines printed under the name, left aligned with it: the
+// version when the build has one, then the tagline.
+func underName(version string) []string {
+	var lines []string
 	if v := versionTag(version); v != "" {
-		return styleDim.Render(tagline+"  ·  ") + v
+		lines = append(lines, v)
 	}
-	return styleDim.Render(tagline)
+	return append(lines, styleDim.Render(tagline))
 }
 
 // bannerView renders the banner for a terminal of the given width. shine is
 // the sweep column; pass shineDisabled for the settled frame. version is
-// printed under the name.
+// printed under the name, above the tagline.
 func bannerView(width, shine int, version string) string {
 	if width < wordmarkMinWidth {
-		name := styleBanner.Render("  GROOT")
-		if v := versionTag(version); v != "" {
-			name += " " + v
+		var sb strings.Builder
+		sb.WriteString("\n" + styleBanner.Render("  GROOT") + "\n")
+		for _, line := range underName(version) {
+			sb.WriteString("  " + line + "\n")
 		}
-		return "\n" + name +
-			styleDim.Render("  ·  "+tagline) + "\n" +
-			styleDim.Render("  type a message or /help") + "\n\n"
+		sb.WriteString(styleDim.Render("  type a message or /help") + "\n\n")
+		return sb.String()
 	}
 	if width < bannerMinWidth {
 		// Room for the letters but not the mascot: wordmark only.
@@ -258,20 +260,27 @@ func bannerView(width, shine int, version string) string {
 			sb.WriteString(renderBannerRow(line, row, shine))
 			sb.WriteString("\n")
 		}
-		sb.WriteString(taglineLine(version) + "\n")
+		for _, line := range underName(version) {
+			sb.WriteString(line + "\n")
+		}
 		sb.WriteString(styleDim.Render("type a message · /help for commands · ctrl-d to exit") + "\n\n")
 		return sb.String()
 	}
 	// The mascot is taller than the wordmark: the letters sit beside its head
-	// and the tagline and hint beside its trunk and pot.
-	const wordmarkTop = 2
+	// and the version, tagline and hint beside its trunk and pot. The lines
+	// under the name take the rows the mascot leaves, so the wordmark starts
+	// one row down when there is no version.
+	under := underName(version)
+	wordmarkTop := len(mascotArt) - len(bannerArt) - len(under) - 1
 	gap := strings.Repeat(" ", mascotGap)
 	right := make([]string, len(mascotArt))
 	for row, line := range bannerArt {
 		right[wordmarkTop+row] = renderBannerRow(line, row, shine)
 	}
-	right[wordmarkTop+len(bannerArt)] = taglineLine(version)
-	right[wordmarkTop+len(bannerArt)+1] = styleDim.Render("type a message · /help for commands · ctrl-d to exit")
+	for i, line := range under {
+		right[wordmarkTop+len(bannerArt)+i] = line
+	}
+	right[wordmarkTop+len(bannerArt)+len(under)] = styleDim.Render("type a message · /help for commands · ctrl-d to exit")
 
 	var sb strings.Builder
 	sb.WriteString("\n")

@@ -10,6 +10,8 @@ built in one day of live testing, so they are grouped by what shipped.
   dark text on the primary green. It stays while the agent thinks, while
   others work in the background and while groot closes, so the name of the
   agent you are writing to is always in view.
+- The banner prints the version under the name, left aligned, above the
+  tagline, which now reads "Terminal Agent for Devs and Platform engineering".
 
 ## 0.5.3 — 2026-10-25
 

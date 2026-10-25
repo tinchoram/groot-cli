@@ -127,6 +127,16 @@ func TestMascotRowsAreAlignedAndTallerThanWordmark(t *testing.T) {
 	}
 }
 
+// col returns the column at which s first appears in its line of out, or -1.
+func col(out, s string) int {
+	for _, line := range strings.Split(out, "\n") {
+		if i := strings.Index(line, s); i >= 0 {
+			return lipgloss.Width(line[:i])
+		}
+	}
+	return -1
+}
+
 func TestBannerShowsTaglineAndMascot(t *testing.T) {
 	for _, width := range []int{30, 120} {
 		out := bannerView(width, shineDisabled, "0.5.4-dev")
@@ -143,6 +153,16 @@ func TestBannerShowsTaglineAndMascot(t *testing.T) {
 		if strings.Index(out, "v0.5.4-dev") < strings.Index(out, "GROOT") && strings.Index(out, "v0.5.4-dev") < strings.Index(out, "██") {
 			t.Errorf("width %d: the version goes under the name, not before it", width)
 		}
+		if strings.Index(out, "v0.5.4-dev") > strings.Index(out, tagline) {
+			t.Errorf("width %d: the version goes above the tagline", width)
+		}
+		// Left aligned with the tagline: both lines start at the same column.
+		if col(out, "v0.5.4-dev") != col(out, tagline) {
+			t.Errorf("width %d: version at column %d, tagline at %d", width, col(out, "v0.5.4-dev"), col(out, tagline))
+		}
+	}
+	if tagline != "Terminal Agent for Devs and Platform engineering" {
+		t.Errorf("tagline = %q", tagline)
 	}
 	if out := stripANSI(bannerView(120, shineDisabled, "")); strings.Contains(out, " v") {
 		t.Errorf("empty version prints nothing: %q", out)
