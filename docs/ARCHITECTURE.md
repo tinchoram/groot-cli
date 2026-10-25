@@ -26,6 +26,8 @@ under `internal/`:
 | `library` | Lists the agents that can be installed: builtin, GitHub collections, local files (`sources.go`). |
 | `space` | The list of spaces, the active space and the agents assigned to each (`space.go`). |
 | `home` | Resolves the global state directory, `~/.groot` or `GROOT_HOME`. |
+| `update` | Release check and self-update: `Latest` reads the GitHub release API (`update.go`), `Apply` verifies the archive's sha256 against `checksums.txt` and replaces the binary by rename. `check.go` keeps `<home>/update-check.json` so the API is asked at most once a day. Used by `groot upgrade`, the startup note and `groot doctor` (cache only). |
+| `cmd/relnotes` | Prints the CHANGELOG.md section of one version, without its heading. The release workflow passes it to goreleaser as the release notes (`main.go`). |
 | `auth` | Finds and stores the Anthropic key: environment, `.env`, the macOS keychain (through `security`), `<home>/credentials`. |
 | `feedback` | Backlog of bugs and feature requests about groot. |
 | `changelog` (repo root, `changelog.go`) | Embeds `CHANGELOG.md`; `go:embed` cannot reach a parent directory, so the file sits at the root. `Section` finds one version's entry. Used by `read_changelog` and by the version check in `cmd/groot`. |

@@ -68,6 +68,30 @@ and audit every call. Repeat until the model stops asking for tools or
 The package map, the per-turn wiring, the gate chain and the storage layout are
 in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Install
+
+Each release is on the GitHub releases page of `tinchoram/groot-cli`: one archive
+per platform named `groot_<version>_<os>_<arch>.tar.gz` (`darwin` or `linux`,
+`amd64` or `arm64`), and `checksums.txt` with the sha256 of each archive.
+
+```sh
+V=0.5.3; OS=darwin; ARCH=arm64        # your platform; V is the version without the v
+gh release download "v$V" --repo tinchoram/groot-cli \
+  --pattern "groot_${V}_${OS}_${ARCH}.tar.gz" --pattern checksums.txt
+shasum -a 256 -c checksums.txt --ignore-missing   # must print OK
+tar -xzf "groot_${V}_${OS}_${ARCH}.tar.gz" groot
+mv groot ~/.local/bin/groot           # or /usr/local/bin/groot (needs sudo)
+groot auth login
+groot doctor
+```
+
+While the repository is private, the download and `groot upgrade` need a GitHub
+token in `GITHUB_TOKEN` (or `GH_TOKEN`). `gh release download` uses your `gh`
+login and needs no variable. Once the repository is public, neither is needed.
+
+On Linux, groot's bash sandbox needs bubblewrap. `groot doctor` prints the install
+command for your distribution when it is missing.
+
 ## Setup
 
 Requirements: Go 1.26 (the toolchain downloads automatically with
@@ -112,7 +136,14 @@ bin/groot --config ./prod.yaml --policy readonly
 bin/groot --model claude-opus-5-5
 bin/groot --version
 bin/groot doctor                       # what groot found: key, config files, sandbox, kubectl, data
+bin/groot upgrade --check              # is a newer release out? (no API key needed)
+bin/groot upgrade                      # download it, verify the checksum, replace this binary
 ```
+
+`groot upgrade` replaces the binary it runs from and says to restart groot. On
+start, groot checks GitHub at most once a day, in the background, and shows a note
+in the status line when a newer release exists. `updates.check: false` turns the
+check off; `groot doctor` shows what the last check found, without a network call.
 
 If no key is found, groot stops and names `groot auth login`.
 
@@ -151,6 +182,7 @@ directory, Groot adds it to the system prompt under "Project context".
 | `compaction.max_context_percent` | `80` | Compact before a call once the last context fills this share of the window; `0` turns it off. See Context |
 | `models.context_window` | empty | Map of model id or prefix to context window in tokens. Overrides the built-in table (200000) |
 | `ui.show_cost` | `false` | Show the estimated session cost in the status line and the spend of each agent in the sidebar. `/cost` and `/tokens` show it either way |
+| `updates.check` | `true` | Check GitHub once a day, in the background at startup, for a newer release and show a note in the status line. `groot upgrade --check` checks at any time |
 | `memory.path` | `.groot/groot.db` | SQLite database. A relative path is under each space's directory; an absolute path is shared by all spaces |
 | `audit.path` | `.groot/audit.jsonl` | Audit log. Same rules as `memory.path` |
 | `audit.sinks` | empty | Export sinks: `file`, `http` or `syslog`. See Audit |

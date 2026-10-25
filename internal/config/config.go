@@ -41,6 +41,14 @@ type Config struct {
 	UI           UIConfig         `yaml:"ui"`
 	Bash         BashConfig       `yaml:"bash"`
 	Guard        GuardConfig      `yaml:"guard"`
+	Updates      UpdatesConfig    `yaml:"updates"`
+}
+
+// UpdatesConfig controls the release check. Check (default true) asks GitHub
+// at most once a day, at startup, whether a newer groot exists; the answer
+// only shows a note in the status line. `groot upgrade` checks regardless.
+type UpdatesConfig struct {
+	Check bool `yaml:"check"`
 }
 
 // GuardConfig shapes the untrusted-content guard. Mode is warn (default: show
@@ -209,6 +217,7 @@ func Default() Config {
 		Work:       WorkConfig{MaxTurns: 50, MaxAutoTurns: 10, MaxUSD: 5.0, AlwaysAsk: DefaultAlwaysAsk()},
 		Bash:       BashConfig{Sandbox: SandboxConfig{Mode: "auto"}},
 		Guard:      GuardConfig{Mode: "warn"},
+		Updates:    UpdatesConfig{Check: true},
 		Flow: FlowConfig{Mode: "strict", Delegation: "auto", Manager: "project-manager", Routes: FlowRoutes{
 			Small:  FlowRoute{Model: "claude-haiku-5-5"},
 			Medium: FlowRoute{Model: "claude-sonnet-5-5"},

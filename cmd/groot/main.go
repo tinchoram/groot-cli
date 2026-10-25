@@ -20,6 +20,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/sandbox"
 	"github.com/tinchoram/groot-cli/internal/space"
 	"github.com/tinchoram/groot-cli/internal/ui"
+	"github.com/tinchoram/groot-cli/internal/update"
 	"github.com/tinchoram/groot-cli/internal/workspace"
 )
 
@@ -42,6 +43,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(s
 			return runAuth(args[1:], stdin, stdout, stderr, getenv)
 		case "doctor":
 			return runDoctor(args[1:], stdout, stderr, getenv)
+		case "upgrade":
+			return runUpgrade(args[1:], stdout, stderr, upgradeEnvironment(getenv))
 		}
 	}
 
@@ -238,5 +241,7 @@ func runApp(cfg config.Config, cfgPath, groot, apiKey string) error {
 		// The sandbox state is shown in the header; the notice explains it once.
 		SandboxName:   runner.Name(),
 		SandboxNotice: string(sandboxWarning),
+		// The release check runs in the background; a newer version shows as a note.
+		UpdateNotices: startUpdateNotice(cfg.Updates.Check, groot, version, update.Token(os.Getenv)),
 	})
 }

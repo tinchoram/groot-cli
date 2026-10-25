@@ -47,6 +47,24 @@ built in one day of live testing, so they are grouped by what shipped.
   would be blocked.
 - The sandbox warning on linux names the install command of the detected
   distribution (apt, dnf, pacman or zypper) instead of always apt.
+- `groot upgrade` downloads the latest release for this platform, checks its
+  sha256 against `checksums.txt`, and replaces the running binary (symlinks
+  resolved). `--check` only reports. Nothing is written before the checksum
+  matches. A permission error names the path and suggests `sudo` or
+  `~/.local/bin`. While the repository is private, it needs `GITHUB_TOKEN`
+  (or `GH_TOKEN`).
+- Startup checks GitHub for a newer release at most once a day, in the
+  background with a 3 second budget. A newer version shows as a dim note in
+  the status line for 10 seconds: `v0.6.0 available · run: groot upgrade`. It
+  never blocks startup and never fails it. Turn it off with `updates.check: false`.
+- `groot doctor` prints `update:` from the cached check, with no network call:
+  available, up to date, or unknown with the reason.
+- Release pipeline: `.goreleaser.yaml` builds darwin and linux on amd64 and
+  arm64 with `CGO_ENABLED=0`, and publishes `groot_<version>_<os>_<arch>.tar.gz`
+  archives and `checksums.txt`. A pushed `v*` tag runs `.github/workflows/release.yml`,
+  which tests the code and publishes the release, with the notes from the
+  CHANGELOG section of that version (`cmd/relnotes`). `make release-check` and
+  `make snapshot` need goreleaser; the other targets do not.
 
 ## 0.5.3 — 2026-10-25
 

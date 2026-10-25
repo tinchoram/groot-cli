@@ -1,0 +1,51 @@
+name: release
+
+# A tag vX.Y.Z builds the archives, the checksums and the GitHub release. The
+# release notes are the CHANGELOG.md section of that version (cmd/relnotes).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
+      - name: Allow unprivileged user namespaces
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+      - name: Test
+        env:
+          GROOT_REQUIRE_SANDBOX: "1"
+        run: go test ./... -count=1
+
+      - name: Release notes
+        run: go run ./cmd/relnotes "${GITHUB_REF_NAME}" > /tmp/notes.md
+
+      - name: GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --release-notes /tmp/notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

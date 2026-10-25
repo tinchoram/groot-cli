@@ -120,6 +120,9 @@ type Options struct {
 	Clipboard clipboard.Clipboard
 	// LayoutPath is the file the columns are saved to. Empty disables saving.
 	LayoutPath string
+	// UpdateNotices delivers the version of a newer groot, at most once, when
+	// the release check finds one. Nil disables the note.
+	UpdateNotices <-chan string
 	// Layout is the saved layout to restore at start. Nil uses the defaults.
 	Layout *Layout
 }
@@ -268,6 +271,8 @@ type Model struct {
 
 	note      string
 	noteUntil time.Time
+	// updates delivers the newer version, if any, once (see updateNoticeCmd).
+	updates <-chan string
 
 	shineOn   bool
 	shineDone bool
@@ -315,6 +320,7 @@ func NewModel(o Options) Model {
 		sidebarOpen: true,
 		chatOpen:    true,
 		shineCol:    -shineEdgePad,
+		updates:     o.UpdateNotices,
 	}
 	m.clip = o.Clipboard
 	if m.clip == nil {
@@ -348,12 +354,14 @@ func NewModel(o Options) Model {
 // managedAgent is the administrator agent's name in the catalog.
 const managedAgent = "groot"
 
-// Init starts the cursor blink.
+// Init starts the cursor blink, the terminal column when it is open, and the
+// wait for a newer release.
 func (m Model) Init() tea.Cmd {
+	cmds := []tea.Cmd{textarea.Blink, m.updateNoticeCmd()}
 	if m.tm != nil && m.termOpen {
-		return tea.Batch(textarea.Blink, waitTerminalOutput(m.tm))
+		cmds = append(cmds, waitTerminalOutput(m.tm))
 	}
-	return textarea.Blink
+	return tea.Batch(cmds...)
 }
 
 // Update applies one message.
@@ -483,6 +491,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.note = ""
 		}
 		return m, nil
+
+	case updateNoticeMsg:
+		m.note = updateNoticeText(msg.version)
+		m.noteUntil = time.Now().Add(updateNoticeFor)
+		return m, clearNoteAfterFor(updateNoticeFor)
 
 	case tea.KeyMsg:
 		if m.closing {

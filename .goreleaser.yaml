@@ -1,0 +1,51 @@
+# GoReleaser (v2 schema). Release notes come from CHANGELOG.md through
+# cmd/relnotes, so the changelog generator is off. Check this file with
+# `goreleaser check` (make release-check).
+version: 2
+
+project_name: groot
+
+builds:
+  - id: groot
+    main: ./cmd/groot
+    binary: groot
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - "-s -w -X main.version={{ .Version }}"
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: groot
+    ids:
+      - groot
+    formats:
+      - tar.gz
+    # Matches update.AssetName in internal/update: groot_0.6.0_darwin_arm64.tar.gz
+    name_template: "groot_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev"
+
+release:
+  github:
+    owner: tinchoram
+    name: groot-cli
+
+changelog:
+  disable: true

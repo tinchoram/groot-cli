@@ -14,6 +14,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/home"
 	"github.com/tinchoram/groot-cli/internal/sandbox"
 	"github.com/tinchoram/groot-cli/internal/space"
+	"github.com/tinchoram/groot-cli/internal/update"
 )
 
 // doctorEnv is everything doctor looks at. runDoctor fills it from the real
@@ -52,6 +53,7 @@ type doctorInput struct {
 	SpacesErr    error
 	InboxPath    string
 	InboxFound   bool
+	Update       update.Status // from the cache only; doctor makes no network call
 }
 
 // doctorLine is one line of the report. Blocks means groot cannot start.
@@ -126,6 +128,7 @@ func gatherDoctor(env doctorEnv) doctorInput {
 		ProjectFound: isFile(env.ConfigPath),
 		InboxPath:    filepath.Join(env.Home, "inbox.db"),
 		InboxFound:   isFile(filepath.Join(env.Home, "inbox.db")),
+		Update:       update.Known(env.Home, env.Version),
 	}
 
 	cfg, err := loadConfig(env.ExplicitConfig, env.ConfigPath, env.GlobalPath)
@@ -227,7 +230,20 @@ func doctorLines(in doctorInput) ([]doctorLine, bool) {
 		add("spaces", fmt.Sprintf("%d in %s", in.Spaces, filepath.Join(in.Home, "spaces.yaml")), false)
 	}
 	add("inbox", in.InboxPath+" ("+existence(in.InboxFound, "found", "missing")+")", false)
+	add("update", updateValue(in.Update), false)
 	return lines, blocks
+}
+
+// updateValue words the update status: available, up to date, or unknown with
+// the reason the cache gives.
+func updateValue(st update.Status) string {
+	switch {
+	case st.Newer:
+		return "v" + st.Latest + " available"
+	case st.Latest != "":
+		return "up to date"
+	}
+	return "unknown (" + st.Reason + ")"
 }
 
 func existence(ok bool, yes, no string) string {
