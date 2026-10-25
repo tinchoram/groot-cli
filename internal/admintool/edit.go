@@ -41,31 +41,46 @@ type deleteSpace struct {
 	m Manager
 }
 
+// deleteSpaceInput is the input of delete_space. Without Confirm the call only
+// reports; PurgeData is honoured only together with Confirm.
+type deleteSpaceInput struct {
+	Name      string `json:"name"`
+	Confirm   bool   `json:"confirm"`
+	PurgeData bool   `json:"purge_data"`
+}
+
 // NewDeleteSpace returns the delete_space tool.
 func NewDeleteSpace(m Manager) tool.Tool {
 	return deleteSpace{base{"delete_space",
-		"Delete a space from spaces.yaml. Its directory and its .groot data stay on disk. The root space cannot be deleted. Deleting the active space switches to root.",
-		`{"type":"object","properties":{"name":{"type":"string","description":"the space to delete"}},"required":["name"],"additionalProperties":false}`,
+		"Delete a space from spaces.yaml. The first call, without confirm: true, changes nothing and reports the agents assigned and the open tasks per agent. Call again with confirm: true to delete. The directory and the .groot data stay on disk unless purge_data is true, which also deletes <space path>/.groot (memory database and audit log). The root space cannot be deleted. Deleting the active space switches to root.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"the space to delete"},"confirm":{"type":"boolean","description":"true to delete; omit for the report"},"purge_data":{"type":"boolean","description":"with confirm: true, also delete <space path>/.groot; default false"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
 func (t deleteSpace) Preview(input string) string {
-	var in nameOnly
+	var in deleteSpaceInput
 	if err := decode(input, &in); err != nil {
 		return "delete space: invalid input"
+	}
+	if !in.Confirm {
+		return fmt.Sprintf("report for deleting space %s (nothing is changed by this call; the report lists its agents and open tasks)", in.Name)
+	}
+	if in.PurgeData {
+		return fmt.Sprintf("delete space %s from spaces.yaml and purge its .groot data (its directory is kept)", in.Name)
 	}
 	return fmt.Sprintf("delete space %s from spaces.yaml (its directory and .groot data are kept)", in.Name)
 }
 
 func (t deleteSpace) Execute(_ context.Context, input string) (string, bool) {
-	var in nameOnly
+	var in deleteSpaceInput
 	if err := decode(input, &in); err != nil {
 		return err.Error(), true
 	}
 	if strings.TrimSpace(in.Name) == "" {
 		return "name is required", true
 	}
-	return result(t.m.DeleteSpace(in.Name))
+	purge := in.PurgeData && in.Confirm
+	return result(t.m.DeleteSpace(in.Name, in.Confirm, purge))
 }
 
 // ---- edit_space ----
@@ -140,28 +155,37 @@ type deleteAgent struct {
 // NewDeleteAgent returns the delete_agent tool.
 func NewDeleteAgent(m Manager) tool.Tool {
 	return deleteAgent{base{"delete_agent",
-		"Delete an agent from the catalog and unassign it from every space. Its open conversations end; its memory and sessions stay in each space's database. Managed agents (groot, debug) cannot be deleted.",
-		`{"type":"object","properties":{"name":{"type":"string","description":"the agent to delete"}},"required":["name"],"additionalProperties":false}`,
+		"Delete an agent from the catalog and unassign it from every space. The first call, without confirm: true, changes nothing and reports the spaces it is assigned to with open tasks per space. Call again with confirm: true to delete. Its open conversations end; its memory and sessions stay in each space's database. Managed agents (groot, debug) cannot be deleted.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"the agent to delete"},"confirm":{"type":"boolean","description":"true to delete; omit for the report"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
+// deleteAgentInput is the input of delete_agent.
+type deleteAgentInput struct {
+	Name    string `json:"name"`
+	Confirm bool   `json:"confirm"`
+}
+
 func (t deleteAgent) Preview(input string) string {
-	var in nameOnly
+	var in deleteAgentInput
 	if err := decode(input, &in); err != nil {
 		return "delete agent: invalid input"
+	}
+	if !in.Confirm {
+		return fmt.Sprintf("report for deleting agent %s (nothing is changed by this call; the report lists its spaces and open tasks)", in.Name)
 	}
 	return fmt.Sprintf("delete agent %s from the catalog and from every space", in.Name)
 }
 
 func (t deleteAgent) Execute(_ context.Context, input string) (string, bool) {
-	var in nameOnly
+	var in deleteAgentInput
 	if err := decode(input, &in); err != nil {
 		return err.Error(), true
 	}
 	if strings.TrimSpace(in.Name) == "" {
 		return "name is required", true
 	}
-	return result(t.m.DeleteAgent(in.Name))
+	return result(t.m.DeleteAgent(in.Name, in.Confirm))
 }
 
 // ---- edit_agent ----
@@ -224,9 +248,10 @@ func (t editAgent) Execute(_ context.Context, input string) (string, bool) {
 // ---- move_agent ----
 
 type moveInput struct {
-	Agent string `json:"agent"`
-	From  string `json:"from"`
-	To    string `json:"to"`
+	Agent      string `json:"agent"`
+	From       string `json:"from"`
+	To         string `json:"to"`
+	WithMemory bool   `json:"with_memory"`
 }
 
 type moveAgent struct {
@@ -237,8 +262,8 @@ type moveAgent struct {
 // NewMoveAgent returns the move_agent tool.
 func NewMoveAgent(m Manager) tool.Tool {
 	return moveAgent{base{"move_agent",
-		"Move an agent from one space to another in one step. The agent must be assigned to the source space and not yet to the target. The conversation in the source space ends; its sessions stay stored.",
-		`{"type":"object","properties":{"agent":{"type":"string"},"from":{"type":"string","description":"space the agent leaves"},"to":{"type":"string","description":"space the agent joins"}},"required":["agent","from","to"],"additionalProperties":false}`,
+		"Move an agent from one space to another in one step. The agent must be assigned to the source space and not yet to the target. The conversation in the source space ends; its sessions stay stored there. With with_memory: true, its memory, sessions (with their messages) and tasks (with their evidence) are copied to the target space's database; the source keeps its copies.",
+		`{"type":"object","properties":{"agent":{"type":"string"},"from":{"type":"string","description":"space the agent leaves"},"to":{"type":"string","description":"space the agent joins"},"with_memory":{"type":"boolean","description":"copy the agent's memory, sessions and tasks to the target; default false"}},"required":["agent","from","to"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -247,7 +272,11 @@ func (t moveAgent) Preview(input string) string {
 	if err := decode(input, &in); err != nil {
 		return "move agent: invalid input"
 	}
-	return fmt.Sprintf("move agent %s from space %s to space %s", in.Agent, in.From, in.To)
+	preview := fmt.Sprintf("move agent %s from space %s to space %s", in.Agent, in.From, in.To)
+	if in.WithMemory {
+		preview += " and copy its memory, sessions and tasks to the target (the source space keeps its copies)"
+	}
+	return preview
 }
 
 func (t moveAgent) Execute(_ context.Context, input string) (string, bool) {
@@ -258,7 +287,7 @@ func (t moveAgent) Execute(_ context.Context, input string) (string, bool) {
 	if in.Agent == "" || in.From == "" || in.To == "" {
 		return "agent, from and to are required", true
 	}
-	return result(t.m.MoveAgent(in.Agent, in.From, in.To))
+	return result(t.m.MoveAgent(in.Agent, in.From, in.To, in.WithMemory))
 }
 
 // ---- copy_agent ----

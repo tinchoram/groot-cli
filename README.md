@@ -467,21 +467,32 @@ Since 0.2.0 groot works in **spaces**, and inside a space you talk to **agents**
 Groot does these with six admin tools, each a write that you confirm inline.
 The same operations are shortcuts in the UI.
 
-- `delete_space {name}`, `/space delete <name>`: removes the space from
-  `spaces.yaml`. Its directory and its `.groot` data stay on disk. `root` cannot
-  be deleted. Deleting the active space switches to `root`.
+- `delete_space {name, confirm?, purge_data?}`, `/space delete <name>`: removes
+  the space from `spaces.yaml`. The first call, without `confirm: true`, changes
+  nothing and reports the agents assigned and the open tasks per agent; call
+  again with `confirm: true` to delete. The space's directory stays on disk, and
+  its `.groot` data too unless `purge_data: true` (honoured only with `confirm`):
+  that deletes `<space dir>/.groot`, the memory database and the audit log, and
+  nothing else. A purge refuses the home directory and a directory another space
+  uses. `root` cannot be deleted. Deleting the active space switches to `root`.
 - `edit_space {name, new_name?, path?}`, `/space rename <old> <new>`: renames a
   space or points it at another directory. `root` cannot be renamed. A rename
   keeps the selection and the unread messages; a new path does not move the
   `.groot` data under the old path.
-- `delete_agent {name}`, `/agent delete <name>`: removes the agent from the
-  catalog and from every space. Its memory and sessions stay in each space's
-  database. `groot` and `debug` cannot be deleted.
+- `delete_agent {name, confirm?}`, `/agent delete <name>`: removes the agent from
+  the catalog and from every space. The first call, without `confirm: true`,
+  changes nothing and reports the spaces it is assigned to with the open tasks
+  per space. Its memory and sessions stay in each space's database. `groot` and
+  `debug` cannot be deleted.
 - `edit_agent {name, description?, prompt?, new_name?}`, `/agent rename <old> <new>`:
   changes the description or the prompt, or renames the agent everywhere it is
   assigned (assignments, routes, inbox, tasks, memory and sessions). Managed
   agents keep their name.
-- `move_agent {agent, from, to}`: moves an agent between two spaces in one save.
+- `move_agent {agent, from, to, with_memory?}`: moves an agent between two spaces
+  in one save. With `with_memory: true` it also copies the agent's memory,
+  sessions (with their messages) and tasks (with their evidence) into the target
+  space's database, under new task ids. The source keeps its copies, and the
+  result says so. Sessions the target already has are skipped.
 - `copy_agent {agent, new_name, space?}`: copies the description, prompt, model,
   tools and `max_turns` under a new name, optionally assigned to a space.
 

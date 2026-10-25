@@ -95,6 +95,17 @@ Consequences:
 - Uninstalling is removing the binary and, if wanted, `~/.groot` and the
   `.groot/` directories of the projects. Nothing else is written.
 
+### What moves and what stays
+
+- `delete_space` keeps a space's `.groot` data. With `purge_data` and `confirm`
+  it deletes `<space dir>/.groot` (the memory database and the audit log) and
+  nothing else in the project.
+- `move_agent` copies the agent's memory, sessions and tasks to the target
+  space's database only when `with_memory` is set. It never moves them: the
+  source keeps its copies.
+- `edit_space` never moves data. A new path leaves the `.groot` data under the
+  old path, and the space reads its data from the new path from then on.
+
 ## Order of the remaining work
 
 1. Move `debug` out of bootstrap into the built-in library; `/bug` and `/feat`

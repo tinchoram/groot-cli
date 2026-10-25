@@ -124,18 +124,23 @@ type Manager interface {
 	SessionModel() string
 	// SetDefaultModel writes the default model into the configuration file.
 	SetDefaultModel(ctx context.Context, model string) (string, error)
-	// DeleteSpace removes a space from the list; its directory and data stay.
-	// It returns the final state read back from disk.
-	DeleteSpace(name string) (string, error)
+	// DeleteSpace removes a space from the list. Without confirm it changes
+	// nothing and returns the report of what the delete would do. With confirm
+	// it removes the space; purge also deletes its .groot data. It returns the
+	// final state read back from disk.
+	DeleteSpace(name string, confirm, purge bool) (string, error)
 	// EditSpace renames a space and/or points it at a directory; an empty
 	// newName or path keeps the current value.
 	EditSpace(name, newName, path string) (string, error)
-	// DeleteAgent removes an agent from the catalog and from every space.
-	DeleteAgent(name string) (string, error)
+	// DeleteAgent removes an agent from the catalog and from every space. Without
+	// confirm it changes nothing and returns the report instead.
+	DeleteAgent(name string, confirm bool) (string, error)
 	// EditAgent changes the description or prompt of an agent, or renames it.
 	EditAgent(edit AgentEdit) (string, error)
-	// MoveAgent moves an agent from one space to another.
-	MoveAgent(agent, from, to string) (string, error)
+	// MoveAgent moves an agent from one space to another. withMemory copies its
+	// memory, sessions and tasks to the destination database; the source keeps
+	// its copies.
+	MoveAgent(agent, from, to string, withMemory bool) (string, error)
 	// CopyAgent makes a new agent from an existing one, optionally assigned to a space.
 	CopyAgent(agent, newName, space string) (string, error)
 }

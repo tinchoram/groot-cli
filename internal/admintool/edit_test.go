@@ -3,14 +3,16 @@ package admintool
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/tinchoram/groot-cli/internal/tool"
 )
 
-func (f *fakeManager) DeleteSpace(name string) (string, error) {
-	f.edits = append(f.edits, "delete_space:"+name)
+func (f *fakeManager) DeleteSpace(name string, confirm, purge bool) (string, error) {
+	f.edits = append(f.edits, fmt.Sprintf("delete_space:%s:%t:%t", name, confirm, purge))
 	return f.editReport, f.editErr
 }
 
@@ -19,8 +21,8 @@ func (f *fakeManager) EditSpace(name, newName, path string) (string, error) {
 	return f.editReport, f.editErr
 }
 
-func (f *fakeManager) DeleteAgent(name string) (string, error) {
-	f.edits = append(f.edits, "delete_agent:"+name)
+func (f *fakeManager) DeleteAgent(name string, confirm bool) (string, error) {
+	f.edits = append(f.edits, fmt.Sprintf("delete_agent:%s:%t", name, confirm))
 	return f.editReport, f.editErr
 }
 
@@ -36,8 +38,8 @@ func (f *fakeManager) EditAgent(e AgentEdit) (string, error) {
 	return f.editReport, f.editErr
 }
 
-func (f *fakeManager) MoveAgent(agent, from, to string) (string, error) {
-	f.edits = append(f.edits, "move_agent:"+agent+":"+from+":"+to)
+func (f *fakeManager) MoveAgent(agent, from, to string, withMemory bool) (string, error) {
+	f.edits = append(f.edits, fmt.Sprintf("move_agent:%s:%s:%s:%t", agent, from, to, withMemory))
 	return f.editReport, f.editErr
 }
 
@@ -86,23 +88,51 @@ func TestEditToolsRequireTheirNamesAndRejectUnknownFields(t *testing.T) {
 	}
 }
 
-func TestDeleteSpacePreviewNamesTargetAndResult(t *testing.T) {
-	m := newEditFake()
-	tl := NewDeleteSpace(m)
+func TestDeleteSpacePreviewSaysWhetherTheCallReportsOrDeletes(t *testing.T) {
+	tl := NewDeleteSpace(newEditFake())
 	if tl.Risk() != tool.RiskWrite {
 		t.Fatalf("risk = %v, want write", tl.Risk())
 	}
-	in := `{"name":"payments"}`
-	got := tl.Preview(in)
-	if !strings.Contains(got, "delete space payments") || !strings.Contains(got, "kept") {
-		t.Fatalf("preview = %q", got)
+	report := tl.Preview(`{"name":"payments"}`)
+	if !strings.Contains(report, "report") || !strings.Contains(report, "nothing is changed") || strings.Contains(report, "from spaces.yaml") {
+		t.Fatalf("report preview = %q", report)
 	}
-	out, isErr := tl.Execute(context.Background(), in)
-	if isErr || out != "report from the workspace" {
-		t.Fatalf("execute = %q (%v)", out, isErr)
+	del := tl.Preview(`{"name":"payments","confirm":true}`)
+	if !strings.Contains(del, "delete space payments from spaces.yaml") || !strings.Contains(del, "kept") {
+		t.Fatalf("delete preview = %q", del)
 	}
-	if len(m.edits) != 1 || m.edits[0] != "delete_space:payments" {
-		t.Fatalf("calls = %v", m.edits)
+	purge := tl.Preview(`{"name":"payments","confirm":true,"purge_data":true}`)
+	if !strings.Contains(purge, "purge its .groot data") {
+		t.Fatalf("purge preview = %q", purge)
+	}
+}
+
+func TestDeleteSpaceForwardsConfirmAndPurgeOnlyWhenConfirmed(t *testing.T) {
+	m := newEditFake()
+	tl := NewDeleteSpace(m)
+	calls := []string{
+		`{"name":"payments"}`,
+		`{"name":"payments","confirm":true}`,
+		`{"name":"payments","confirm":true,"purge_data":true}`,
+		`{"name":"payments","purge_data":true}`,
+	}
+	for _, in := range calls {
+		out, isErr := tl.Execute(context.Background(), in)
+		if isErr || out != "report from the workspace" {
+			t.Fatalf("call %s = %q (%v)", in, out, isErr)
+		}
+	}
+	want := []string{
+		"delete_space:payments:false:false",
+		"delete_space:payments:true:false",
+		"delete_space:payments:true:true",
+		"delete_space:payments:false:false",
+	}
+	if !slices.Equal(m.edits, want) {
+		t.Fatalf("calls = %v, want %v", m.edits, want)
+	}
+	if !strings.Contains(string(tl.Definition().InputSchema), `"purge_data"`) {
+		t.Fatal("the schema must declare purge_data")
 	}
 }
 
@@ -145,14 +175,23 @@ func TestDeleteAgentNeedsNameAndPreviews(t *testing.T) {
 	if tl.Risk() != tool.RiskWrite {
 		t.Fatal("delete_agent must be a write")
 	}
-	if got := tl.Preview(`{"name":"reviewer"}`); !strings.Contains(got, "delete agent reviewer") {
-		t.Fatalf("preview = %q", got)
+	if got := tl.Preview(`{"name":"reviewer"}`); !strings.Contains(got, "report") || !strings.Contains(got, "nothing is changed") {
+		t.Fatalf("report preview = %q", got)
+	}
+	if got := tl.Preview(`{"name":"reviewer","confirm":true}`); !strings.Contains(got, "delete agent reviewer") {
+		t.Fatalf("delete preview = %q", got)
 	}
 	if out, isErr := tl.Execute(context.Background(), `{"name":" "}`); !isErr || out != "name is required" {
 		t.Fatalf("blank name = %q (%v)", out, isErr)
 	}
 	if out, isErr := tl.Execute(context.Background(), `{"name":"reviewer"}`); isErr || out != "report from the workspace" {
 		t.Fatalf("execute = %q (%v)", out, isErr)
+	}
+	if _, isErr := tl.Execute(context.Background(), `{"name":"reviewer","confirm":true}`); isErr {
+		t.Fatal("a confirmed delete refused")
+	}
+	if !slices.Equal(m.edits, []string{"delete_agent:reviewer:false", "delete_agent:reviewer:true"}) {
+		t.Fatalf("calls = %v", m.edits)
 	}
 }
 
@@ -193,8 +232,27 @@ func TestMoveAgentPreviewAndCall(t *testing.T) {
 	if _, isErr := tl.Execute(context.Background(), in); isErr {
 		t.Fatal("valid move refused")
 	}
-	if len(m.edits) != 1 || m.edits[0] != "move_agent:reviewer:payments:billing" {
+	if len(m.edits) != 1 || m.edits[0] != "move_agent:reviewer:payments:billing:false" {
 		t.Fatalf("calls = %v", m.edits)
+	}
+}
+
+func TestMoveAgentWithMemoryCopiesAndSaysSo(t *testing.T) {
+	m := newEditFake()
+	tl := NewMoveAgent(m)
+	in := `{"agent":"reviewer","from":"payments","to":"billing","with_memory":true}`
+	got := tl.Preview(in)
+	if !strings.Contains(got, "copy") || !strings.Contains(got, "keeps its copies") {
+		t.Fatalf("preview = %q", got)
+	}
+	if _, isErr := tl.Execute(context.Background(), in); isErr {
+		t.Fatal("valid move refused")
+	}
+	if len(m.edits) != 1 || m.edits[0] != "move_agent:reviewer:payments:billing:true" {
+		t.Fatalf("calls = %v", m.edits)
+	}
+	if !strings.Contains(string(tl.Definition().InputSchema), `"with_memory"`) {
+		t.Fatal("the schema must declare with_memory")
 	}
 }
 

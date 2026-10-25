@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/tinchoram/groot-cli/internal/catalog"
+	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/space"
 )
 
@@ -111,12 +114,117 @@ func (w *Workspace) hasDatabase(sp space.Space) bool {
 }
 
 // openTasksOf lists the open tasks of a space. A space without a database has
-// none, and no database is created to find that out.
-func (w *Workspace) openTasksOf(ctx context.Context, sp space.Space) ([]TaskRow, error) {
+// none, and no database is created to find that out. The memory database is
+// read alone, without the audit log, so a report never creates a file; stores
+// that are already open are reused.
+func (w *Workspace) openTasksOf(ctx context.Context, sp space.Space) ([]memory.TaskSummary, error) {
 	if !w.hasDatabase(sp) {
 		return nil, nil
 	}
-	return w.ListTasks(ctx, sp.Name, false)
+	w.mu.Lock()
+	st, open := w.stores[sp.Path]
+	w.mu.Unlock()
+	if open {
+		return st.mem.TaskSummaries(ctx, false, time.Time{})
+	}
+	mem, err := memory.OpenSQLite(memoryPathFor(sp.Path, w.opts.Config.Memory.Path))
+	if err != nil {
+		return nil, fmt.Errorf("space %s: %w", sp.Name, err)
+	}
+	defer func() { _ = mem.Close() }()
+	return mem.TaskSummaries(ctx, false, time.Time{})
+}
+
+// openTaskCounts lists the open tasks per agent, or "none".
+func openTaskCounts(rows []memory.TaskSummary) string {
+	counts := map[string]int{}
+	for _, r := range rows {
+		counts[r.Agent]++
+	}
+	if len(counts) == 0 {
+		return "none"
+	}
+	var parts []string
+	for _, name := range slices.Sorted(maps.Keys(counts)) {
+		parts = append(parts, fmt.Sprintf("%s %d", name, counts[name]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// spaceDeleteReport is what the first delete_space call returns. It changes
+// nothing.
+func spaceDeleteReport(sp space.Space, open []memory.TaskSummary) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "space %s would be deleted from spaces.yaml\n", sp.Name)
+	fmt.Fprintf(&b, "path: %s\n", sp.Path)
+	fmt.Fprintf(&b, "agents assigned: %s\n", agentList(sp.Agents))
+	fmt.Fprintf(&b, "open tasks: %s\n", openTaskCounts(open))
+	fmt.Fprintf(&b, "kept on disk: the directory %s and its .groot data\n", sp.Path)
+	b.WriteString("Call again with confirm: true to delete.")
+	return b.String()
+}
+
+// agentDeleteReport is what the first delete_agent call returns. It changes
+// nothing.
+func agentDeleteReport(name string, assigned, open []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "agent %s would be deleted from the catalog\n", name)
+	fmt.Fprintf(&b, "assigned to: %s\n", agentList(assigned))
+	if len(open) == 0 {
+		fmt.Fprintf(&b, "open tasks by space: none\n")
+	} else {
+		fmt.Fprintf(&b, "open tasks by space: %s\n", strings.Join(open, ", "))
+	}
+	fmt.Fprintf(&b, "kept: its memory and sessions stay in each space's database\n")
+	b.WriteString("Call again with confirm: true to delete.")
+	return b.String()
+}
+
+// checkPurge refuses a purge that could delete more than the space's own
+// .groot data: the home directory, a relative path, or a directory that another
+// space also uses.
+func (w *Workspace) checkPurge(sp space.Space) error {
+	if !filepath.IsAbs(sp.Path) {
+		return fmt.Errorf("space %q has no absolute path: its data cannot be purged", sp.Name)
+	}
+	if filepath.Clean(sp.Path) == filepath.Clean(w.opts.Home) {
+		return fmt.Errorf("space %q is the home directory: its data cannot be purged", sp.Name)
+	}
+	for _, other := range w.opts.Spaces.List() {
+		if other.Name != sp.Name && filepath.Clean(other.Path) == filepath.Clean(sp.Path) {
+			return fmt.Errorf("space %q uses the same directory %s: its data cannot be purged", other.Name, sp.Path)
+		}
+	}
+	return nil
+}
+
+// closeStoresAt closes and forgets the open stores of a space directory, so its
+// files can be removed.
+func (w *Workspace) closeStoresAt(path string) error {
+	w.mu.Lock()
+	s, ok := w.stores[path]
+	delete(w.stores, path)
+	w.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return errors.Join(s.mem.Close(), s.aud.Close())
+}
+
+// purgeSpaceData deletes <space path>/.groot: the memory database and the audit
+// log. Nothing else in the directory is touched.
+func (w *Workspace) purgeSpaceData(sp space.Space) (string, error) {
+	if err := w.closeStoresAt(sp.Path); err != nil {
+		return "", err
+	}
+	dir := filepath.Join(sp.Path, ".groot")
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return "nothing to remove, " + dir + " does not exist", nil
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return "", fmt.Errorf("remove %s: %w", dir, err)
+	}
+	return "removed " + dir + " (memory database and audit log)", nil
 }
 
 // renameAgentInDatabase renames an agent in the database of a space, if the
@@ -134,10 +242,18 @@ func (w *Workspace) renameAgentInDatabase(ctx context.Context, sp space.Space, o
 	return st.mem.RenameAgent(ctx, oldName, newName)
 }
 
-// DeleteSpace removes a space from spaces.yaml. Its directory and its .groot
-// data stay. The root space is never deleted. When the space was the active
-// one, the selection moves to root.
+// DeleteSpace removes a space from spaces.yaml now, without a report. Its
+// directory and its .groot data stay. The root space is never deleted. When the
+// space was the active one, the selection moves to root.
 func (w *Workspace) DeleteSpace(name string) (string, error) {
+	return w.DeleteSpaceWithConfirm(name, true, false)
+}
+
+// DeleteSpaceWithConfirm is the two-step delete of a space. Without confirm it
+// changes nothing and returns the report: the agents assigned, the open tasks
+// per agent and what would stay on disk. With confirm it deletes the space, and
+// purge also deletes <space path>/.groot. purge is honoured only with confirm.
+func (w *Workspace) DeleteSpaceWithConfirm(name string, confirm, purge bool) (string, error) {
 	if name == rootSpaceName {
 		return "", fmt.Errorf("space %q is the home directory and cannot be deleted", rootSpaceName)
 	}
@@ -149,6 +265,14 @@ func (w *Workspace) DeleteSpace(name string) (string, error) {
 	open, err := w.openTasksOf(ctx, sp)
 	if err != nil {
 		return "", err
+	}
+	if !confirm {
+		return spaceDeleteReport(sp, open), nil
+	}
+	if purge {
+		if err := w.checkPurge(sp); err != nil {
+			return "", err
+		}
 	}
 	wasCurrent := false
 	if cur, ok := w.opts.Spaces.Current(); ok && cur.Name == name {
@@ -173,7 +297,15 @@ func (w *Workspace) DeleteSpace(name string) (string, error) {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "deleted space %s from spaces.yaml\n", name)
-	fmt.Fprintf(&b, "its directory %s and its .groot data were kept\n", sp.Path)
+	if purge {
+		msg, err := w.purgeSpaceData(sp)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&b, "its directory %s was kept; purged: %s\n", sp.Path, msg)
+	} else {
+		fmt.Fprintf(&b, "its directory %s and its .groot data were kept\n", sp.Path)
+	}
 	fmt.Fprintf(&b, "agents assigned: %s\n", agentList(sp.Agents))
 	fmt.Fprintf(&b, "open tasks: %d\n", len(open))
 	if wasCurrent {
@@ -255,6 +387,13 @@ func (w *Workspace) EditSpace(name, newName, path string) (string, error) {
 // assigns it. Its open conversations end. Its memory and sessions stay in each
 // space's database. Managed agents are never deleted.
 func (w *Workspace) DeleteAgent(name string) (string, error) {
+	return w.DeleteAgentWithConfirm(name, true)
+}
+
+// DeleteAgentWithConfirm is the two-step delete of an agent. Without confirm it
+// changes nothing and returns the report: the spaces the agent is assigned to
+// and the open tasks per space. With confirm it deletes the agent.
+func (w *Workspace) DeleteAgentWithConfirm(name string, confirm bool) (string, error) {
 	if isManaged(name) {
 		return "", fmt.Errorf("agent %q is managed and cannot be deleted", name)
 	}
@@ -262,7 +401,7 @@ func (w *Workspace) DeleteAgent(name string) (string, error) {
 		return "", fmt.Errorf("no agent named %q in the catalog", name)
 	}
 	ctx := context.Background()
-	var open []string
+	var assigned, open []string
 	for _, sp := range w.opts.Spaces.List() {
 		if !slices.Contains(sp.Agents, name) {
 			continue
@@ -277,7 +416,11 @@ func (w *Workspace) DeleteAgent(name string) (string, error) {
 				n++
 			}
 		}
+		assigned = append(assigned, sp.Name)
 		open = append(open, fmt.Sprintf("%s: %d", sp.Name, n))
+	}
+	if !confirm {
+		return agentDeleteReport(name, assigned, open), nil
 	}
 	if err := w.endConversations(ofAgent(name)); err != nil {
 		return "", err
@@ -452,7 +595,7 @@ func (w *Workspace) EditAgent(e AgentEdit) (string, error) {
 
 // MoveAgent takes an agent off one space and puts it on another, in one save.
 // The conversation in the old space ends; its sessions stay stored.
-func (w *Workspace) MoveAgent(agent, from, to string) (string, error) {
+func (w *Workspace) MoveAgent(agent, from, to string, withMemory bool) (string, error) {
 	if from == to {
 		return "", errors.New("from and to are the same space")
 	}
@@ -472,6 +615,15 @@ func (w *Workspace) MoveAgent(agent, from, to string) (string, error) {
 	}
 	if err := w.endConversations(func(key string) bool { return key == from+"/"+agent }); err != nil {
 		return "", err
+	}
+	// The copy runs before the move: if it fails, the agent stays where it was.
+	var copied *memory.CopyCounts
+	if withMemory {
+		c, err := w.copyAgentMemory(context.Background(), src, dst, agent)
+		if err != nil {
+			return "", err
+		}
+		copied = &c
 	}
 	if err := w.opts.Spaces.Move(agent, from, to); err != nil {
 		return "", err
@@ -495,8 +647,44 @@ func (w *Workspace) MoveAgent(agent, from, to string) (string, error) {
 	if slices.Contains(a.Agents, agent) || !slices.Contains(b.Agents, agent) {
 		return "", fmt.Errorf("agent %q is not where the move put it", agent)
 	}
-	return fmt.Sprintf("moved agent %s from %s to %s\n%s: %s\n%s: %s",
-		agent, from, to, from, agentList(a.Agents), to, agentList(b.Agents)), nil
+	var out strings.Builder
+	fmt.Fprintf(&out, "moved agent %s from %s to %s\n%s: %s\n%s: %s",
+		agent, from, to, from, agentList(a.Agents), to, agentList(b.Agents))
+	if copied != nil {
+		fmt.Fprintf(&out, "\n%s", copyReport(to, from, *copied))
+	}
+	return out.String(), nil
+}
+
+// copyAgentMemory copies the memory, sessions and tasks of agent from the
+// database of one space into the database of another. A source without a
+// database has nothing to copy, and none is created for it.
+func (w *Workspace) copyAgentMemory(ctx context.Context, from, to space.Space, agent string) (memory.CopyCounts, error) {
+	if !w.hasDatabase(from) {
+		return memory.CopyCounts{}, nil
+	}
+	w.mu.Lock()
+	src, err := w.storesFor(from.Path)
+	if err != nil {
+		w.mu.Unlock()
+		return memory.CopyCounts{}, err
+	}
+	dst, err := w.storesFor(to.Path)
+	w.mu.Unlock()
+	if err != nil {
+		return memory.CopyCounts{}, err
+	}
+	return src.mem.CopyAgentData(ctx, dst.mem, agent)
+}
+
+// copyReport says what was copied into the target space.
+func copyReport(to, from string, c memory.CopyCounts) string {
+	s := fmt.Sprintf("data copied to %s: memories %d, sessions %d (%d messages), tasks %d (%d evidence)",
+		to, c.Memories, c.Sessions, c.Messages, c.Tasks, c.Evidence)
+	if c.SkippedSessions > 0 {
+		s += fmt.Sprintf(", %d sessions skipped because %s already has them", c.SkippedSessions, to)
+	}
+	return s + fmt.Sprintf("; %s keeps its copies", from)
 }
 
 // CopyAgent makes a new catalog agent with the description, prompt, model,

@@ -5,6 +5,22 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.5.5-dev (unreleased)
 
+### Agents
+- `delete_space` and `delete_agent` take `confirm`. Without `confirm: true` they
+  change nothing and report what the delete would touch: the agents assigned to
+  a space, the spaces an agent is assigned to, and the open tasks of each. Call
+  again with `confirm: true` to delete. The confirmation prompt says whether the
+  call is the report or the delete.
+- `delete_space` takes `purge_data` (honoured only with `confirm`). It deletes
+  `<space dir>/.groot`, the memory database and the audit log, and nothing else
+  in the directory. It refuses the home directory, a relative path, and a
+  directory that another space uses.
+- `move_agent` takes `with_memory`. It copies the agent's memory, its sessions
+  (with their messages) and its tasks (with their evidence) into the target
+  space's database. Task ids are new there, and a task's parent link follows
+  them; a session the target already has is skipped. The source keeps its
+  copies, and the result lists the counts.
+
 ## 0.5.4 — 2026-10-25 (tagged, not published)
 
 ### UI

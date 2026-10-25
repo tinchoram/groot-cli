@@ -27,7 +27,7 @@ func TestGrootHasTheEditToolsAndKnowsThem(t *testing.T) {
 }
 
 func TestGrootPromptDescribesDeletesAndRenames(t *testing.T) {
-	for _, want := range []string{"delete, rename, move and copy", "never removes directories or data"} {
+	for _, want := range []string{"delete, rename, move and copy", "confirm: true", "unless purge_data is set", "with_memory"} {
 		if !strings.Contains(grootPrompt, want) {
 			t.Errorf("groot prompt lacks %q", want)
 		}

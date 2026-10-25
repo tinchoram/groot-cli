@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/catalog"
 	"github.com/tinchoram/groot-cli/internal/flow"
 	"github.com/tinchoram/groot-cli/internal/inbox"
+	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/space"
 )
 
@@ -408,7 +410,7 @@ func TestMoveAgentIsAtomicAndUpdatesSelection(t *testing.T) {
 	}
 	f.ws.Chat()
 
-	out, err := f.ws.MoveAgent("reader", "default", "other")
+	out, err := f.ws.MoveAgent("reader", "default", "other", false)
 	if err != nil {
 		t.Fatalf("MoveAgent: %v", err)
 	}
@@ -434,16 +436,16 @@ func TestMoveAgentRefusesUnassignedAndAlreadyPresent(t *testing.T) {
 	if err := f.spaces.Add("other", t.TempDir(), t0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.ws.MoveAgent("reader", "other", "default"); err == nil {
+	if _, err := f.ws.MoveAgent("reader", "other", "default", false); err == nil {
 		t.Fatal("moving an agent that is not in from must fail")
 	}
 	if err := f.spaces.Assign("other", "reader"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.ws.MoveAgent("reader", "default", "other"); err == nil {
+	if _, err := f.ws.MoveAgent("reader", "default", "other", false); err == nil {
 		t.Fatal("moving onto a space that has the agent must fail")
 	}
-	if _, err := f.ws.MoveAgent("reader", "default", "default"); err == nil {
+	if _, err := f.ws.MoveAgent("reader", "default", "default", false); err == nil {
 		t.Fatal("moving within the same space must fail")
 	}
 }
@@ -489,5 +491,294 @@ func TestCopyAgentRefusesExistingManagedAndUnknownSpace(t *testing.T) {
 	}
 	if catalog.Exists(f.home, "lost") {
 		t.Fatal("a refused copy must not write the file")
+	}
+}
+
+func TestDeleteSpaceWithoutConfirmReportsAndChangesNothing(t *testing.T) {
+	f := newFixture(t)
+	addRoot(t, f)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.spaces.Add("extra", dir, t0); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.spaces.Assign("extra", "reader"); err != nil {
+		t.Fatal(err)
+	}
+	openTask(t, f, "extra", dir, "reader")
+	before, err := os.ReadFile(filepath.Join(f.home, "spaces.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := f.ws.DeleteSpaceWithConfirm("extra", false, false)
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	after, err := os.ReadFile(filepath.Join(f.home, "spaces.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("the report changed spaces.yaml")
+	}
+	if _, ok := reread(t, f).Get("extra"); !ok {
+		t.Fatal("the report deleted the space")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "keep.txt")); err != nil {
+		t.Fatal("the report touched the directory")
+	}
+	for _, want := range []string{"reader", "open tasks: reader 1", dir, "Call again with confirm: true to delete."} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("report lacks %q:\n%s", want, out)
+		}
+	}
+
+	if _, err := f.ws.DeleteSpaceWithConfirm("extra", true, false); err != nil {
+		t.Fatalf("confirmed delete: %v", err)
+	}
+	if _, ok := reread(t, f).Get("extra"); ok {
+		t.Fatal("the confirmed delete kept the space on disk")
+	}
+}
+
+func TestDeleteAgentWithoutConfirmReportsSpacesAndChangesNothing(t *testing.T) {
+	f := newFixture(t)
+	openTask(t, f, "default", f.dir, "reader")
+	before, err := os.ReadFile(filepath.Join(f.home, "spaces.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentFile, err := os.ReadFile(catalog.Path(f.home, "reader"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := f.ws.DeleteAgentWithConfirm("reader", false)
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if after, _ := os.ReadFile(filepath.Join(f.home, "spaces.yaml")); !bytes.Equal(before, after) {
+		t.Fatal("the report changed spaces.yaml")
+	}
+	if again, _ := os.ReadFile(catalog.Path(f.home, "reader")); !bytes.Equal(agentFile, again) {
+		t.Fatal("the report changed the agent file")
+	}
+	if !catalog.Exists(f.home, "reader") {
+		t.Fatal("the report deleted the agent")
+	}
+	for _, want := range []string{"default: 1", "Call again with confirm: true to delete."} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("report lacks %q:\n%s", want, out)
+		}
+	}
+
+	if _, err := f.ws.DeleteAgentWithConfirm("reader", true); err != nil {
+		t.Fatalf("confirmed delete: %v", err)
+	}
+	if catalog.Exists(f.home, "reader") {
+		t.Fatal("the confirmed delete kept the agent")
+	}
+}
+
+// spaceWithData makes a space whose directory holds a user file and a .groot
+// database with one open task.
+func spaceWithData(t *testing.T, f *fixture, name string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, keep := range []string{"keep.txt", "sub/keep2.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, keep), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.spaces.Add(name, dir, t0); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.spaces.Assign(name, "reader"); err != nil {
+		t.Fatal(err)
+	}
+	openTask(t, f, name, dir, "reader")
+	if _, err := os.Stat(filepath.Join(dir, ".groot")); err != nil {
+		t.Fatalf("setup: no .groot data: %v", err)
+	}
+	return dir
+}
+
+func TestDeleteSpaceReportDoesNotCreateAnAuditLog(t *testing.T) {
+	f := newFixture(t)
+	addRoot(t, f)
+	dir := spaceWithData(t, f, "extra")
+	if err := f.ws.closeStoresAt(dir); err != nil {
+		t.Fatal(err)
+	}
+	audit := filepath.Join(dir, ".groot", "audit.jsonl")
+	if err := os.Remove(audit); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	if _, err := f.ws.DeleteSpaceWithConfirm("extra", false, false); err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if _, err := os.Stat(audit); !os.IsNotExist(err) {
+		t.Fatal("the report created an audit log: it must change nothing on disk")
+	}
+}
+
+func TestDeleteSpacePurgeRemovesOnlyDotGroot(t *testing.T) {
+	f := newFixture(t)
+	addRoot(t, f)
+	dir := spaceWithData(t, f, "extra")
+
+	out, err := f.ws.DeleteSpaceWithConfirm("extra", true, true)
+	if err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".groot")); !os.IsNotExist(err) {
+		t.Fatal("the purge left .groot on disk")
+	}
+	for _, keep := range []string{"keep.txt", "sub/keep2.txt"} {
+		if _, err := os.Stat(filepath.Join(dir, keep)); err != nil {
+			t.Fatalf("the purge removed %s: %v", keep, err)
+		}
+	}
+	f.ws.mu.Lock()
+	_, open := f.ws.stores[dir]
+	f.ws.mu.Unlock()
+	if open {
+		t.Fatal("the stores of the purged space are still open")
+	}
+	if !strings.Contains(out, "purged") || !strings.Contains(out, filepath.Join(dir, ".groot")) {
+		t.Fatalf("result must say what was removed:\n%s", out)
+	}
+}
+
+func TestDeleteSpaceWithoutPurgeKeepsDotGroot(t *testing.T) {
+	f := newFixture(t)
+	addRoot(t, f)
+	dir := spaceWithData(t, f, "extra")
+
+	out, err := f.ws.DeleteSpaceWithConfirm("extra", true, false)
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".groot")); err != nil {
+		t.Fatal("a delete without purge removed .groot")
+	}
+	if !strings.Contains(out, "kept") {
+		t.Fatalf("result must say the data was kept:\n%s", out)
+	}
+}
+
+// moveSetup gives the reader agent a memory entry and an open task in the
+// default space, and adds a second space named other.
+func moveSetup(t *testing.T, f *fixture) {
+	t.Helper()
+	if err := f.spaces.Add("other", t.TempDir(), t0); err != nil {
+		t.Fatal(err)
+	}
+	openTask(t, f, "default", f.dir, "reader")
+	f.ws.mu.Lock()
+	st, err := f.ws.storesFor(f.dir)
+	f.ws.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.mem.Remember(context.Background(), memory.Entry{
+		Kind: memory.KindFact, Scope: memory.ScopeAgent, Agent: "reader", Text: "reader fact", Source: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// targetStores opens the memory database of a space for the test to read.
+func targetStores(t *testing.T, f *fixture, name string) *spaceStores {
+	t.Helper()
+	sp, ok := f.spaces.Get(name)
+	if !ok {
+		t.Fatalf("no space %s", name)
+	}
+	f.ws.mu.Lock()
+	defer f.ws.mu.Unlock()
+	st, err := f.ws.storesFor(sp.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+func TestMoveAgentWithMemoryCopiesDataAndTheSourceKeepsIt(t *testing.T) {
+	f := newFixture(t)
+	moveSetup(t, f)
+	ctx := context.Background()
+
+	out, err := f.ws.MoveAgent("reader", "default", "other", true)
+	if err != nil {
+		t.Fatalf("MoveAgent: %v", err)
+	}
+	dst := targetStores(t, f, "other")
+	if tasks, err := dst.mem.Tasks().List(ctx, "default", "reader", 10); err != nil || len(tasks) != 1 {
+		t.Fatalf("copied tasks = %+v, %v", tasks, err)
+	}
+	if ov, err := dst.mem.Overview(ctx, "reader"); err != nil || ov.Visible != 1 {
+		t.Fatalf("copied memory = %+v, %v", ov, err)
+	}
+	src := targetStores(t, f, "default")
+	if tasks, err := src.mem.Tasks().List(ctx, "default", "reader", 10); err != nil || len(tasks) != 1 {
+		t.Fatalf("the source lost its tasks: %+v, %v", tasks, err)
+	}
+	if ov, err := src.mem.Overview(ctx, "reader"); err != nil || ov.Visible != 1 {
+		t.Fatalf("the source lost its memory: %+v, %v", ov, err)
+	}
+	if !strings.Contains(out, "copied") || !strings.Contains(out, "tasks 1") || !strings.Contains(out, "keeps its copies") {
+		t.Fatalf("result must say what was copied:\n%s", out)
+	}
+}
+
+func TestMoveAgentWithoutMemoryCopiesNothing(t *testing.T) {
+	f := newFixture(t)
+	moveSetup(t, f)
+	ctx := context.Background()
+
+	out, err := f.ws.MoveAgent("reader", "default", "other", false)
+	if err != nil {
+		t.Fatalf("MoveAgent: %v", err)
+	}
+	dst := targetStores(t, f, "other")
+	if tasks, err := dst.mem.Tasks().List(ctx, "default", "reader", 10); err != nil || len(tasks) != 0 {
+		t.Fatalf("a move without with_memory copied tasks: %+v, %v", tasks, err)
+	}
+	if ov, err := dst.mem.Overview(ctx, "reader"); err != nil || ov.Visible != 0 {
+		t.Fatalf("a move without with_memory copied memory: %+v, %v", ov, err)
+	}
+	if strings.Contains(out, "copied") {
+		t.Fatalf("a move without with_memory must not report a copy:\n%s", out)
+	}
+}
+
+func TestDeleteSpacePurgeRefusesHomeAndSharedDirectories(t *testing.T) {
+	f := newFixture(t)
+	addRoot(t, f)
+	if err := f.spaces.Add("homey", f.home, t0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.ws.DeleteSpaceWithConfirm("homey", true, true); err == nil {
+		t.Fatal("purging the home directory must be refused")
+	}
+	if _, ok := reread(t, f).Get("homey"); !ok {
+		t.Fatal("a refused purge must not delete the space")
+	}
+	if err := f.spaces.Add("twin", f.dir, t0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.ws.DeleteSpaceWithConfirm("twin", true, true); err == nil {
+		t.Fatal("purging a directory that another space uses must be refused")
+	}
+	if _, ok := reread(t, f).Get("twin"); !ok {
+		t.Fatal("a refused purge must not delete the space")
 	}
 }
