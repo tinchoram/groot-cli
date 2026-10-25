@@ -3,7 +3,21 @@
 All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
-## 0.5.0-dev (unreleased)
+## 0.5.1 — 2026-10-25
+
+### Fixed
+- `grant_tool`, `revoke_tool` and `/agent tools <name> add|remove` saved the
+  agent file but the running process kept the old definition: `list_agents`
+  and the sidebar still showed the previous tools, and a conversation opened
+  afterwards was built from the stale list. The catalog cache now reloads after
+  every edit.
+- A tool granted to an agent reached it only after restarting groot, because a
+  conversation built its tool registry once and `/clear` kept it. Open
+  conversations of the edited agent now rebuild their registry in place, so the
+  tool is callable on the next turn and the session and its context are kept.
+  Closes FEAT-012.
+
+## 0.5.0 — 2026-10-25
 
 ### Audit
 - `/audit` shows the last records of the active space as a table: time, agent,
