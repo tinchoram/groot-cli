@@ -153,8 +153,8 @@ func TestBannerShowsTaglineAndMascot(t *testing.T) {
 		if strings.Index(out, "v0.5.4-dev") < strings.Index(out, "GROOT") && strings.Index(out, "v0.5.4-dev") < strings.Index(out, "██") {
 			t.Errorf("width %d: the version goes under the name, not before it", width)
 		}
-		if strings.Index(out, "v0.5.4-dev") > strings.Index(out, tagline) {
-			t.Errorf("width %d: the version goes above the tagline", width)
+		if strings.Index(out, "v0.5.4-dev") < strings.Index(out, tagline) || strings.Index(out, "v0.5.4-dev") < strings.Index(out, "type a message") {
+			t.Errorf("width %d: the version goes under the tagline and the hint", width)
 		}
 		// Left aligned with the tagline: both lines start at the same column.
 		if col(out, "v0.5.4-dev") != col(out, tagline) {

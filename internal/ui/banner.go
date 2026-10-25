@@ -220,36 +220,39 @@ func renderBannerRow(line string, row, shine int) string {
 	return sb.String()
 }
 
-// versionTag is the version as the banner prints it next to the tagline, or
-// "" when the build carries no version.
+// bannerHint is the key hint printed under the tagline.
+const bannerHint = "type a message · /help for commands · ctrl-d to exit"
+
+// versionTag is the version as the banner prints it, or "" when the build
+// carries no version. A terminal has one font size, so "smaller" is faint.
 func versionTag(version string) string {
 	if strings.TrimSpace(version) == "" {
 		return ""
 	}
-	return styleSubtitle.Render("v" + version)
+	return styleDim.Render("v" + version)
 }
 
 // underName are the lines printed under the name, left aligned with it: the
-// version when the build has one, then the tagline.
-func underName(version string) []string {
-	var lines []string
+// tagline, the hint, then the version when the build has one.
+func underName(version, hint string) []string {
+	lines := []string{styleDim.Render(tagline), styleDim.Render(hint)}
 	if v := versionTag(version); v != "" {
 		lines = append(lines, v)
 	}
-	return append(lines, styleDim.Render(tagline))
+	return lines
 }
 
 // bannerView renders the banner for a terminal of the given width. shine is
 // the sweep column; pass shineDisabled for the settled frame. version is
-// printed under the name, above the tagline.
+// printed under the two text lines.
 func bannerView(width, shine int, version string) string {
 	if width < wordmarkMinWidth {
 		var sb strings.Builder
 		sb.WriteString("\n" + styleBanner.Render("  GROOT") + "\n")
-		for _, line := range underName(version) {
+		for _, line := range underName(version, "type a message or /help") {
 			sb.WriteString("  " + line + "\n")
 		}
-		sb.WriteString(styleDim.Render("  type a message or /help") + "\n\n")
+		sb.WriteString("\n")
 		return sb.String()
 	}
 	if width < bannerMinWidth {
@@ -260,18 +263,18 @@ func bannerView(width, shine int, version string) string {
 			sb.WriteString(renderBannerRow(line, row, shine))
 			sb.WriteString("\n")
 		}
-		for _, line := range underName(version) {
+		for _, line := range underName(version, bannerHint) {
 			sb.WriteString(line + "\n")
 		}
-		sb.WriteString(styleDim.Render("type a message · /help for commands · ctrl-d to exit") + "\n\n")
+		sb.WriteString("\n")
 		return sb.String()
 	}
 	// The mascot is taller than the wordmark: the letters sit beside its head
-	// and the version, tagline and hint beside its trunk and pot. The lines
+	// and the tagline, hint and version beside its trunk and pot. The lines
 	// under the name take the rows the mascot leaves, so the wordmark starts
-	// one row down when there is no version.
-	under := underName(version)
-	wordmarkTop := len(mascotArt) - len(bannerArt) - len(under) - 1
+	// one row higher when there is a version.
+	under := underName(version, bannerHint)
+	wordmarkTop := len(mascotArt) - len(bannerArt) - len(under)
 	gap := strings.Repeat(" ", mascotGap)
 	right := make([]string, len(mascotArt))
 	for row, line := range bannerArt {
@@ -280,7 +283,6 @@ func bannerView(width, shine int, version string) string {
 	for i, line := range under {
 		right[wordmarkTop+len(bannerArt)+i] = line
 	}
-	right[wordmarkTop+len(bannerArt)+len(under)] = styleDim.Render("type a message · /help for commands · ctrl-d to exit")
 
 	var sb strings.Builder
 	sb.WriteString("\n")
