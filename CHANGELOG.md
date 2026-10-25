@@ -48,6 +48,16 @@ built in one day of live testing, so they are grouped by what shipped.
 - The flow tables gain `task_specs`, added on open for older databases; copy and
   rename of agents carry the specs with their tasks.
 
+### Fixes
+- An agent that used up its turn budget returned `agent reached max turns without
+  a final answer` and the user got nothing, even after dozens of useful tool calls.
+  When the budget runs out, the agent now makes one more model call with no tools
+  and asks for the findings so far, what it could not finish, and the next step.
+  The UI prints `turn budget reached (N): asking for a final answer; raise
+  max_turns for this agent if it needs more`. Only a failed final call returns
+  the error.
+- The default `max_turns` rises from 20 to 40 model calls per request.
+
 ## 0.5.5-dev (unreleased)
 
 ### Time

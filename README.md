@@ -66,8 +66,8 @@ mock
 A turn runs like this: compact the history, call the model with streaming, and
 for each `tool_use` block ask the gate. If the call is allowed, run the tool.
 Otherwise return a `tool_result` marked `denied by user`. Persist every message,
-and audit every call. Repeat until the model stops asking for tools or
-`max_turns` is reached.
+and audit every call. Repeat until the model stops asking for tools. When
+`max_turns` is reached, the agent is asked for a final answer without tools.
 
 The package map, the per-turn wiring, the gate chain and the storage layout are
 in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -210,7 +210,7 @@ directory, Groot adds it to the system prompt under "Project context".
 |---|---|---|
 | `provider.name` | `anthropic` | Only `anthropic` in this release |
 | `provider.model` | `claude-sonnet-5-5` | Model id |
-| `max_turns` | `20` | Model calls allowed per request |
+| `max_turns` | `40` | Model calls allowed per request; at the limit the agent answers once more without tools |
 | `compaction.strategy` | `none` | `none`, `window` (keep N) or `summarize` |
 | `compaction.max_context_percent` | `80` | Compact before a call once the last context fills this share of the window; `0` turns it off. See Context |
 | `models.context_window` | empty | Map of model id or prefix to context window in tokens. Overrides the built-in table (200000) |
@@ -662,7 +662,7 @@ name: groot
 description: "Groot: your guide. Creates spaces and agents"
 model: sonnet                  # optional: a full id, or opus | sonnet | haiku | inherit
 tools: [list_spaces, recall]   # optional: a list or a comma-separated string
-max_turns: 20                  # optional
+max_turns: 40                  # optional
 ---
 You are Groot, the administrator of this CLI.
 ```

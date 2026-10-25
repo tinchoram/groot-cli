@@ -209,7 +209,60 @@ func TestUnknownToolIsErrorResult(t *testing.T) {
 	}
 }
 
-func TestMaxTurnsStopsLoop(t *testing.T) {
+func TestMaxTurnsAsksForFinalAnswerWithoutTools(t *testing.T) {
+	echo := &echoTool{risk: tool.RiskRead, out: "ok"}
+	const answer = "findings so far: x; not finished: y; next: z"
+	mock := provider.NewMock(
+		toolUseResponse("a", "echo", `{}`),
+		toolUseResponse("b", "echo", `{}`),
+		textResponse(answer),
+	)
+	a := newAgent(mock, registry(t, echo), gate.AutoApprove{})
+	a.MaxTurns = 2
+	var notes []string
+	a.OnWarning = func(msg string) { notes = append(notes, msg) }
+
+	got, err := a.Send(context.Background(), "loop forever")
+	if err != nil {
+		t.Fatalf("want the wrap-up answer, got error %v", err)
+	}
+	if got != answer {
+		t.Fatalf("got %q, want %q", got, answer)
+	}
+	if len(mock.Calls) != 3 {
+		t.Fatalf("made %d model calls, want 2 turns plus one wrap-up", len(mock.Calls))
+	}
+	wrap := mock.Calls[2]
+	if len(wrap.Tools) != 0 {
+		t.Fatalf("wrap-up request offered %d tools, want none", len(wrap.Tools))
+	}
+	last := wrap.Messages[len(wrap.Messages)-1]
+	if last.Role != api.RoleUser || !strings.Contains(last.Content[0].Text, "Turn budget reached (2 model calls)") {
+		t.Fatalf("wrap-up user message wrong: %+v", last)
+	}
+	if !containsNote(notes, "turn budget reached (2)") {
+		t.Fatalf("no turn budget note in %q", notes)
+	}
+}
+
+func TestMaxTurnsFailedWrapUpWrapsErrMaxTurns(t *testing.T) {
+	echo := &echoTool{risk: tool.RiskRead, out: "ok"}
+	boom := errors.New("provider unavailable")
+	mock := provider.NewMock(
+		toolUseResponse("a", "echo", `{}`),
+		toolUseResponse("b", "echo", `{}`),
+		provider.Step{Err: boom},
+	)
+	a := newAgent(mock, registry(t, echo), gate.AutoApprove{})
+	a.MaxTurns = 2
+
+	_, err := a.Send(context.Background(), "loop forever")
+	if !errors.Is(err, ErrMaxTurns) || !errors.Is(err, boom) {
+		t.Fatalf("want ErrMaxTurns wrapping the call error, got %v", err)
+	}
+}
+
+func TestMaxTurnsWrapUpWithToolUseReturnsItsText(t *testing.T) {
 	echo := &echoTool{risk: tool.RiskRead, out: "ok"}
 	mock := provider.NewMock(
 		toolUseResponse("a", "echo", `{}`),
@@ -218,13 +271,58 @@ func TestMaxTurnsStopsLoop(t *testing.T) {
 	)
 	a := newAgent(mock, registry(t, echo), gate.AutoApprove{})
 	a.MaxTurns = 2
+
+	got, err := a.Send(context.Background(), "loop forever")
+	if err != nil {
+		t.Fatalf("want the wrap-up text, got error %v", err)
+	}
+	if got != "working" {
+		t.Fatalf("got %q, want the wrap-up text", got)
+	}
+}
+
+func TestDefaultMaxTurnsIsForty(t *testing.T) {
+	if got := (&Agent{}).maxTurns(); got != 40 {
+		t.Fatalf("default max turns = %d, want 40", got)
+	}
+}
+
+func TestMaxTurnsWrapUpHonoursLimit(t *testing.T) {
+	echo := &echoTool{risk: tool.RiskRead, out: "ok"}
+	mock := provider.NewMock(
+		toolUseResponse("a", "echo", `{}`),
+		toolUseResponse("b", "echo", `{}`),
+		textResponse("never sent"),
+	)
+	a := newAgent(mock, registry(t, echo), gate.AutoApprove{})
+	a.MaxTurns = 2
+	limitErr := errors.New("budget exhausted")
+	checks := 0
+	// The first two checks are the turns; the third is the wrap-up.
+	a.Limit = func(context.Context) error {
+		checks++
+		if checks > 2 {
+			return limitErr
+		}
+		return nil
+	}
+
 	_, err := a.Send(context.Background(), "loop forever")
-	if !errors.Is(err, ErrMaxTurns) {
-		t.Fatalf("want ErrMaxTurns, got %v", err)
+	if !errors.Is(err, ErrMaxTurns) || !errors.Is(err, limitErr) {
+		t.Fatalf("want ErrMaxTurns wrapping the limit error, got %v", err)
 	}
 	if len(mock.Calls) != 2 {
-		t.Fatalf("made %d model calls, want 2", len(mock.Calls))
+		t.Fatalf("made %d model calls, want 2: the refused wrap-up must not reach the provider", len(mock.Calls))
 	}
+}
+
+func containsNote(notes []string, part string) bool {
+	for _, n := range notes {
+		if strings.Contains(n, part) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCompactionIsInvokedBeforeEachModelCall(t *testing.T) {

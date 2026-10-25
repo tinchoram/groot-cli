@@ -61,7 +61,7 @@ strategies), `messaging`, `admintool`, `agentimport`, `clipboard`.
    session once; `appendMessage` stores each message under the lock and
    persists it through `memory.Store`; the loop calls the provider, and for each
    `tool_use` it runs `runTool`: gate, then `Tool.Execute`, then the audit record.
-   The loop ends when the model stops asking for tools or `max_turns` is reached.
+   The loop ends when the model stops asking for tools or `max_turns` is reached; at the limit the agent is asked for a final answer without tools.
 
 The memory preamble is rebuilt, not built once: when a conversation is opened,
 on `/clear`, and after every change through the memory tools or `/memory`

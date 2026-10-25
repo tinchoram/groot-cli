@@ -221,7 +221,7 @@ type KubectlConfig struct {
 func Default() Config {
 	return Config{
 		Provider:   ProviderConfig{Name: "anthropic"},
-		MaxTurns:   20,
+		MaxTurns:   40,
 		Compaction: CompactionConfig{Strategy: "none", Keep: 40, Threshold: 60, MaxContextPercent: 80},
 		Memory:     MemoryConfig{Path: ".groot/groot.db", PreambleTokens: 1500, PreambleSummaries: 3},
 		Audit:      AuditConfig{Path: ".groot/audit.jsonl"},

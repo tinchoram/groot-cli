@@ -202,6 +202,10 @@ func toSDKMessages(msgs []api.Message) ([]anthropic.MessageParam, error) {
 }
 
 func toSDKTools(defs []api.ToolDef) ([]anthropic.ToolUnionParam, error) {
+	if len(defs) == 0 {
+		// A non-nil empty slice would serialize as "tools": [], so send no key.
+		return nil, nil
+	}
 	out := make([]anthropic.ToolUnionParam, 0, len(defs))
 	for i, d := range defs {
 		schema := map[string]any{"type": "object", "properties": map[string]any{}}

@@ -222,3 +222,22 @@ func TestSetModelChangesRequestedModel(t *testing.T) {
 		t.Fatalf("model not applied: %s", f.bodies[0])
 	}
 }
+
+func TestBuildParamsOmitsToolsKeyWhenNoDefinitions(t *testing.T) {
+	msgs := []api.Message{{Role: api.RoleUser, Content: []api.Block{{Type: api.BlockText, Text: "hi"}}}}
+	params, err := buildParams(Request{Messages: msgs}, "claude-haiku-5-5", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := body["tools"]; ok {
+		t.Fatalf("empty tool list must not be sent as a tools key: %s", raw)
+	}
+}

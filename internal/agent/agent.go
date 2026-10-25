@@ -25,11 +25,12 @@ import (
 	"github.com/tinchoram/groot-cli/internal/tool"
 )
 
-// ErrMaxTurns is returned when the model keeps requesting tools past MaxTurns.
+// ErrMaxTurns is returned when the model keeps requesting tools past MaxTurns
+// and the final answer requested afterwards fails.
 var ErrMaxTurns = errors.New("agent reached max turns without a final answer")
 
 const (
-	defaultMaxTurns = 20
+	defaultMaxTurns = 40
 	deniedMessage   = "denied by user"
 	// defaultEmergencyKeep matches the default compaction.keep.
 	defaultEmergencyKeep = 40
@@ -171,7 +172,33 @@ func (a *Agent) Send(ctx context.Context, prompt string) (string, error) {
 		// never keeps a call without its answer.
 		a.appendMessage(context.WithoutCancel(ctx), api.Message{Role: api.RoleUser, Content: results}, api.Usage{})
 	}
-	return "", ErrMaxTurns
+	return a.wrapUp(ctx, a.maxTurns())
+}
+
+// wrapUp is the last model call of a Send whose turn budget is spent. It asks
+// for a final answer with no tool definitions, so the model cannot request
+// tools. A failed call returns ErrMaxTurns wrapping the call error.
+func (a *Agent) wrapUp(ctx context.Context, budget int) (string, error) {
+	if a.Limit != nil {
+		if err := a.Limit(ctx); err != nil {
+			return "", fmt.Errorf("%w: final answer refused: %w", ErrMaxTurns, err)
+		}
+	}
+	a.notify(fmt.Sprintf("turn budget reached (%d): asking for a final answer; raise max_turns for this agent if it needs more", budget))
+	a.appendMessage(ctx, api.Message{
+		Role: api.RoleUser,
+		Content: []api.Block{{Type: api.BlockText, Text: fmt.Sprintf(
+			"Turn budget reached (%d model calls). Answer now with what you have: the findings so far, what you could not finish, and the next step. Do not request tools.", budget)}},
+	}, api.Usage{})
+
+	turn, msgs := a.nextTurn()
+	resp, err := a.call(ctx, msgs, nil)
+	if err != nil {
+		return "", fmt.Errorf("%w: final answer: %w", ErrMaxTurns, err)
+	}
+	a.appendWithTurn(ctx, turn, api.Message{Role: api.RoleAssistant, Content: resp.Content}, resp.Usage)
+	a.recordContext(ctx, resp.Usage)
+	return resp.Text(), nil
 }
 
 // Compact applies the configured strategy to the history now, instead of

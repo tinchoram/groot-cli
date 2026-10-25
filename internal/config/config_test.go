@@ -24,7 +24,7 @@ func TestDefaultsWhenFileMissing(t *testing.T) {
 	if cfg.Provider.Name != "anthropic" || cfg.Provider.Model != "" {
 		t.Errorf("provider defaults wrong: %+v", cfg.Provider)
 	}
-	if cfg.MaxTurns != 20 {
+	if cfg.MaxTurns != 40 {
 		t.Errorf("max_turns default = %d", cfg.MaxTurns)
 	}
 	if cfg.Compaction.Strategy != "none" {
