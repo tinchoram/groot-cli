@@ -564,10 +564,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.input.SetValue(m.hist.Reset())
 		}
 		return m, nil
-	case tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd:
+	case tea.KeyPgUp, tea.KeyPgDown:
 		var cmd tea.Cmd
 		m.vp, cmd = m.vp.Update(msg)
 		return m, cmd
+	case tea.KeyHome, tea.KeyEnd:
+		// With text in the box, home and end (fn+← and fn+→ on a Mac) move
+		// the cursor inside the input below. With an empty box they scroll
+		// the transcript.
+		if m.input.Value() == "" {
+			var cmd tea.Cmd
+			m.vp, cmd = m.vp.Update(msg)
+			return m, cmd
+		}
 	}
 	var cmd tea.Cmd
 	before := m.input.Value()

@@ -13,6 +13,13 @@ built in one day of live testing, so they are grouped by what shipped.
 - The banner prints the version in deep green under the tagline and the key
   hint, left aligned with them. The tagline now reads "Terminal Agent for Devs and
   Platform engineering".
+- `home` and `end` (`fn-←` and `fn-→` on a Mac) move the cursor to the start
+  or the end of the line when the input has text. With an empty input they
+  scroll the transcript, as before.
+- When `/readinbox` finds nothing unread for the active agent, its note says
+  where the unread messages are (`3 unread elsewhere: groot-cli/debug (1), …`),
+  so a badge on another agent or space is explained, and the badges are
+  re-read at the same time.
 
 ## 0.5.3 — 2026-10-25
 

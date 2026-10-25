@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -68,10 +69,40 @@ func (m Model) runReadInbox() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if counts[m.ws.ConversationKey()] == 0 {
-		m.append(styleDim.Render(fmt.Sprintf("no unread messages for %s; /inbox lists the last %d", m.ws.ActiveAgent(), inboxListLimit)))
+		note := fmt.Sprintf("no unread messages for %s; /inbox lists the last %d", m.ws.ActiveAgent(), inboxListLimit)
+		if elsewhere := unreadElsewhere(counts, m.ws.ConversationKey()); elsewhere != "" {
+			note += "; " + elsewhere
+		}
+		m.append(styleDim.Render(note))
+		// The badges were read from the same counts: a stale one goes away.
+		m.unread = counts
 		return m, nil
 	}
 	return m.sendPrompt(readInboxPrompt, readInboxPrompt, nil)
+}
+
+// unreadElsewhere describes the unread messages of the other conversations,
+// so a badge on another agent or space is explained: "3 unread elsewhere:
+// groot-cli/debug (1), root/groot (2)". Empty when there are none.
+func unreadElsewhere(counts map[string]int, except string) string {
+	var keys []string
+	total := 0
+	for k, n := range counts {
+		if k == except || n == 0 {
+			continue
+		}
+		keys = append(keys, k)
+		total += n
+	}
+	if total == 0 {
+		return ""
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = fmt.Sprintf("%s (%d)", k, counts[k])
+	}
+	return fmt.Sprintf("%d unread elsewhere: %s", total, strings.Join(parts, ", "))
 }
 
 // showInbox prints the newest messages of the active agent, read or not. The

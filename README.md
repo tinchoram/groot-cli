@@ -441,6 +441,7 @@ columns) start with the sidebar hidden.
 | `enter` in the input | send the message |
 | `shift-enter`, `alt-enter`, `ctrl-j` | insert a newline in the input; the box grows to 8 lines, then scrolls |
 | `↑` / `↓` in the input | recall history from the first line (↑) or the last line (↓); elsewhere they move the cursor |
+| `home` / `end` (`fn-←` / `fn-→` on a Mac), `ctrl-a` | start or end of the line when the input has text; with an empty input, `home` / `end` scroll the transcript |
 | `s` / `a` | jump to SPACES / AGENTS |
 | `ctrl-b` | show or hide the sidebar |
 | `ctrl-e` | show or hide the chat; the sidebar then shows the space path and each agent's model and tools |
