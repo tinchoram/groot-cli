@@ -27,6 +27,7 @@ under `internal/`:
 | `space` | The list of spaces, the active space and the agents assigned to each (`space.go`). |
 | `home` | Resolves the global state directory, `~/.groot` or `GROOT_HOME`. |
 | `feedback` | Backlog of bugs and feature requests about groot. |
+| `changelog` (repo root, `changelog.go`) | Embeds `CHANGELOG.md`; `go:embed` cannot reach a parent directory, so the file sits at the root. `Section` finds one version's entry. Used by `read_changelog` and by the version check in `cmd/groot`. |
 | `config` | `groot.yaml` schema, defaults, `${VAR}` expansion, system prompt composition, `AGENTS.md`. |
 
 Supporting packages: `api` (provider-neutral messages and blocks), `audit` (JSONL

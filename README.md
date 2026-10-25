@@ -1013,7 +1013,7 @@ Work mode decides by tool:
 | `bash`, unless it matches `work.always_ask` | `bash` matching `work.always_ask` (defaults: `rm -rf` outside the space, `sudo`, `git push --force`, `git reset --hard`, `git clean`, `kubectl apply/delete/patch/edit/scale/rollout`, `docker rm/rmi/system prune`, `terraform apply/destroy`, `curl`/`wget` writing a file) |
 | `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent` |
 | `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_delegation`, `set_space_budget`, `set_agent_budget`, `set_context_window`, `set_work_mode` |
-| `get_context`, `get_cost`, `list_tasks` (read-only, not asked) | none; they answer as text |
+| `get_context`, `get_cost`, `list_tasks`, `read_changelog` (read-only, not asked) | none; they answer as text |
 | `task_classify`, `task_open`, `task_advance`, `task_status` | `set_work_mode` |
 
 Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.
@@ -1118,11 +1118,12 @@ area, reported_at, space, agent, version) and its description.
   `feedback_report` or `feedback_update`; they report by messaging debug.
 - `/backlog [open|done|all]` prints the index (open items by default).
 - Release sweep: when you ask debug to "sweep the backlog" or "close the release",
-  it reads `CHANGELOG.md` at the root of its space and marks each open item that a
-  shipped entry covers as done, with the note `shipped in <version>: <line>`. Test
-  probes become wontfix. Items it cannot match stay open and are listed in its
-  answer. Debug sees only the files of its own space, so assign it to the project
-  space (`/space assign debug` there) for that project's changelog.
+  it calls `read_changelog`, which returns the `CHANGELOG.md` embedded in the groot
+  binary, so the sweep works from any space. It marks each open item that a shipped
+  entry covers as done, with the note `shipped in <version>: <line>`. Entries under
+  a heading marked `(unreleased)` or with a `-dev` version are not shipped and close
+  nothing. Test probes become wontfix. Items it cannot match stay open and are
+  listed in its answer.
 - Statuses are open, in_progress, done and wontfix.
 
 ## Messaging

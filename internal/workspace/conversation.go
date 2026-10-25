@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	changelog "github.com/tinchoram/groot-cli"
 	"github.com/tinchoram/groot-cli/internal/admintool"
 	"github.com/tinchoram/groot-cli/internal/agent"
 	"github.com/tinchoram/groot-cli/internal/api"
@@ -277,6 +278,8 @@ func (w *Workspace) newTool(name, root string, mem memory.Store, msg tool.Messen
 		return tool.NewFeedbackReport(w.feedback, w.spaceNameFor(root), agentName, w.opts.Version), nil
 	case "feedback_list":
 		return tool.NewFeedbackList(w.feedback), nil
+	case "read_changelog":
+		return tool.NewReadChangelog(changelog.Text), nil
 	case "fetch_url":
 		fc := w.opts.Config.Fetch
 		return tool.NewFetch(w.opts.Version, tool.FetchPolicy{

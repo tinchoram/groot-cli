@@ -30,7 +30,7 @@ func debugDef() catalog.AgentDef {
 	return catalog.AgentDef{
 		Name:        debugAgent,
 		Description: "Debug: reports bugs and feature requests about Groot into the backlog",
-		Tools:       []string{"feedback_report", "feedback_list", "feedback_update", "read_file", "send_message", "recall", "remember"},
+		Tools:       []string{"feedback_report", "feedback_list", "feedback_update", "read_changelog", "send_message", "recall", "remember"},
 	}
 }
 
@@ -59,7 +59,7 @@ func debugReplyRule(confirm bool) string {
 // debugSweepRule is the release sweep. It is appended to the system prompt of
 // every debug conversation, like the reply rule, so homes with a stored prompt
 // from an older version follow it too.
-const debugSweepRule = `Release sweep: when the user asks to sweep the backlog or to close the release, read CHANGELOG.md at the root of the space with read_file. If there is none, say so and stop. Then go through the open items from feedback_list:
+const debugSweepRule = `Release sweep: when the user asks to sweep the backlog or to close the release, call read_changelog without a version. It returns the changelog of Groot itself, embedded in the program, so it does not depend on the space. If it is empty, say so and stop. An entry under a heading that says (unreleased), or whose version ends in -dev, is not shipped: never use it to close an item. Then go through the open items from feedback_list:
 - If a shipped entry of the changelog covers the request of an item, call feedback_update with status done and the note "shipped in <version>: <one line>", using the version of that entry.
 - If an item is a test (a probe of the reporting flow, not a request about groot), call feedback_update with status wontfix and a note that says it was a test.
 - If you cannot match an item to a shipped entry, change nothing for it and list those items in your answer with their IDs.
