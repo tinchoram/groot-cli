@@ -41,7 +41,8 @@ built in one day of live testing, so they are grouped by what shipped.
 - Existing homes keep their debug file, its assignments and their groot prompt.
   The new line about debug in groot's prompt reaches fresh homes only.
 
-## 0.5.4 — 2026-10-25 (tagged, not published)
+The entries below were first written under 0.5.4, a version that was tagged by
+mistake and never published; its tag was removed and they ship here.
 
 ### UI
 - The status line above the input starts with the active agent as a badge:
