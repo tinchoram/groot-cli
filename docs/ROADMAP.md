@@ -42,6 +42,52 @@ handled by the `debug` agent.
   data, not instructions (done).
 - `/audit` in the UI and export of audit records to an external sink (done).
 
+## 0.5.1 to 0.5.3 (done): fixes from live use
+
+Three patch releases on 2026-10-25, each from a problem found while using
+groot to run groot. The backlog items they close are in CHANGELOG.md.
+
+- 0.5.1: a tool granted with `grant_tool` or `/agent tools add` never reached
+  the running process. The catalog cache is reloaded after every edit and open
+  conversations swap their tool registry in place, keeping their session.
+- 0.5.2: `/clear` keeps the agent's memory in view by rebuilding the prompt
+  from stored memory; `/memory` and `/memory <query>`; `/readinbox`.
+- 0.5.3: the changelog is embedded in the binary and debug sweeps the backlog
+  with `read_changelog` from any space.
+
+## Status at 2026-10-25
+
+What is verified where. "Live" means the user exercised it in a real session;
+"tests" means unit, race and CI coverage only, including the Linux sandbox job.
+
+| Area | Verified | Notes |
+|---|---|---|
+| Spaces, agents, terminal, memory, messaging, ODD flow, work mode | live | since 0.3.0 |
+| Routes, budgets, context gauge, delegation, hidden cost | live | 0.4.0, e2e run against the API |
+| Tool grants reaching open conversations | tests | 0.5.1, restart pending |
+| `bash` sandbox (macOS `sandbox-exec`, Linux `bwrap`) | tests | network is off by default: `bash.sandbox.network`, `extra_writable` for the Go cache |
+| Prompt-injection guard, tainted calls always prompt | tests | 0.5.0 |
+| `/audit`, `audit_query`, sinks | tests | 0.5.0 |
+| `/clear` memory refresh, `/memory`, `/readinbox` | tests | 0.5.2 |
+| Backlog sweep with `read_changelog` | tests | 0.5.3 |
+
+Known limits carried forward:
+
+- Delegation runs in the same space only; the manager needs `list_tasks`
+  granted by hand.
+- `/audit stats` streams the whole file; audit records carry no taint field.
+- A message to an agent is read on its next turn; only work mode starts a
+  turn by itself.
+- The memory block of the prompt is rebuilt on open and on `/clear`, not on
+  every `remember`.
+
+Decisions waiting on the user before 0.6.0 is planned:
+
+- An ACP client so an external agent engine (AWS Kiro: `kiro-cli acp`) can be
+  used from groot. Kiro has no token API, so this is the only integration path;
+  the Bedrock adapter stays the way to control cost.
+- Skills as prompt fragments attached to agents.
+
 ## 0.6.0: connectivity
 
 - MCP client with an explicit allowlist of servers and tools.
@@ -49,6 +95,7 @@ handled by the `debug` agent.
   time-range guards.
 - Bedrock, Vertex, Ollama and OpenAI-compatible adapters, chosen by the model
   id prefix. Only when asked: Anthropic stays the single provider until then.
+- Candidates, see the decisions above: ACP client, skills.
 
 ## Later
 
