@@ -4,6 +4,9 @@ package memory
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tinchoram/groot-cli/internal/api"
@@ -32,18 +35,89 @@ func (k Kind) Valid() bool {
 type Scope string
 
 const (
-	ScopeGlobal  Scope = "global"
-	ScopeProject Scope = "project"
-	ScopeAgent   Scope = "agent"
+	// ScopeAgent is visible only to the agent that wrote it, in its space database.
+	ScopeAgent Scope = "agent"
+	// ScopeSpace is visible to every agent of the space database.
+	ScopeSpace Scope = "space"
+	// ScopeGlobal lives in the root space database. It is visible only to a
+	// reader that may see global entries (Reader.Global).
+	ScopeGlobal Scope = "global"
 )
 
 // Valid reports whether s is one of the known scopes.
 func (s Scope) Valid() bool {
 	switch s {
-	case ScopeGlobal, ScopeProject, ScopeAgent:
+	case ScopeAgent, ScopeSpace, ScopeGlobal:
 		return true
 	}
 	return false
+}
+
+// Reader says who reads memory: the agent, and whether it may see global entries.
+type Reader struct {
+	// Agent is the reading agent. An empty name matches no agent-scoped entry.
+	Agent string
+	// Global lets the reader see global entries.
+	Global bool
+}
+
+// Entry states, computed when an entry is read.
+const (
+	StateActive      = "active"
+	StateNeedsReview = "needs_review"
+)
+
+// Outcome says what Remember did with an entry.
+type Outcome string
+
+const (
+	OutcomeCreated   Outcome = "created"   // a new row
+	OutcomeUpdated   Outcome = "updated"   // the row with the same topic key was revised
+	OutcomeDuplicate Outcome = "duplicate" // the same content already exists; nothing was inserted
+)
+
+// Result is what Remember reports: the row that holds the entry and what happened to it.
+type Result struct {
+	ID      int64
+	Outcome Outcome
+}
+
+// Budget bounds the Preamble. Zero fields take the defaults.
+//
+// A line costs its rune count divided by four tokens. That is a rough
+// heuristic, close enough for prose, and it avoids shipping a tokenizer.
+type Budget struct {
+	Tokens       int // total estimated tokens; default DefaultBudgetTokens
+	MaxSummaries int // session summaries kept, newest first; default DefaultBudgetSummaries
+	EntryRunes   int // runes kept of each entry text; default DefaultBudgetEntryRunes
+}
+
+// Default budget values.
+const (
+	DefaultBudgetTokens     = 1500
+	DefaultBudgetSummaries  = 3
+	DefaultBudgetEntryRunes = 400
+)
+
+func (b Budget) withDefaults() Budget {
+	if b.Tokens <= 0 {
+		b.Tokens = DefaultBudgetTokens
+	}
+	if b.MaxSummaries <= 0 {
+		b.MaxSummaries = DefaultBudgetSummaries
+	}
+	if b.EntryRunes <= 0 {
+		b.EntryRunes = DefaultBudgetEntryRunes
+	}
+	return b
+}
+
+// Patch changes the given fields of an entry. Nil fields are left as they are.
+type Patch struct {
+	Title    *string
+	Text     *string
+	Pinned   *bool
+	TopicKey *string
 }
 
 // Session is one agent conversation.
@@ -64,23 +138,37 @@ type Session struct {
 	ContextTokens int64
 }
 
-// Overview is how many entries an agent can read, and how many of them are
-// session summaries.
+// Overview counts the entries a reader can read.
 type Overview struct {
-	Visible   int
-	Summaries int
+	Visible     int
+	Summaries   int
+	Pinned      int
+	NeedsReview int
 }
 
 // Entry is one long-term memory.
 type Entry struct {
-	ID        int64
-	Kind      Kind
-	Scope     Scope
-	Agent     string
-	Text      string
-	Source    string
-	CreatedAt time.Time
+	ID             int64
+	Kind           Kind
+	Scope          Scope
+	Agent          string
+	Title          string
+	Text           string
+	TopicKey       string
+	Source         string
+	Pinned         bool
+	Tainted        bool
+	ReviewAfter    time.Time // zero when the kind has no review interval; on Remember, overrides the default
+	RevisionCount  int
+	DuplicateCount int
+	State          string // StateActive or StateNeedsReview, computed on read
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	Truncated      bool // Preamble cut Text to its budget
 }
+
+// ErrNotFound is returned when an entry does not exist or the reader cannot see it.
+var ErrNotFound = errors.New("memory entry not found")
 
 // Store is the port the agent and tools use to persist state.
 type Store interface {
@@ -97,16 +185,27 @@ type Store interface {
 	// SpendByAgent is the total spend of each agent in this store.
 	SpendByAgent(ctx context.Context) (map[string]float64, error)
 	AppendMessage(ctx context.Context, sessionID string, turn int, m api.Message, u api.Usage) error
-	Remember(ctx context.Context, e Entry) error
-	// Recall searches the entries visible to agent (see Visible).
-	Recall(ctx context.Context, query, agent string, limit int) ([]Entry, error)
-	// Preamble returns the most recent visible entries to agent, newest first,
-	// as a text block of at most limit entries.
-	Preamble(ctx context.Context, agent string, limit int) (string, error)
-	// PreambleEntries returns the entries Preamble formats, in the same order.
-	PreambleEntries(ctx context.Context, agent string, limit int) ([]Entry, error)
-	// Overview counts the entries visible to agent and the session summaries among them.
-	Overview(ctx context.Context, agent string) (Overview, error)
+	// Remember stores an entry, or revises or counts an existing one (see Result).
+	Remember(ctx context.Context, e Entry) (Result, error)
+	// Recall searches the entries visible to r, best match first.
+	Recall(ctx context.Context, r Reader, query string, limit int) ([]Entry, error)
+	// Preamble returns the entries visible to r that fit the budget, in the
+	// order the prompt wants them. FormatPreamble renders them as text.
+	Preamble(ctx context.Context, r Reader, b Budget) ([]Entry, error)
+	// Overview counts the entries visible to r.
+	Overview(ctx context.Context, r Reader) (Overview, error)
+	// Get returns one visible entry with its full text.
+	Get(ctx context.Context, id int64, r Reader) (Entry, error)
+	// Update changes the fields of a visible entry that the patch sets.
+	Update(ctx context.Context, id int64, r Reader, p Patch) error
+	// SetPinned pins or unpins a visible entry.
+	SetPinned(ctx context.Context, id int64, r Reader, pinned bool) error
+	// MarkReviewed moves the review date of a visible entry one interval ahead.
+	MarkReviewed(ctx context.Context, id int64, r Reader) error
+	// Forget soft-deletes a visible entry. It leaves every read path.
+	Forget(ctx context.Context, id int64, r Reader) error
+	// NeedsReview returns the visible entries whose review date has passed, oldest review date first.
+	NeedsReview(ctx context.Context, r Reader, limit int) ([]Entry, error)
 	// LatestSession returns the most recently started session of agent,
 	// cleared or not. ok is false when the agent has no session.
 	LatestSession(ctx context.Context, agent string) (s Session, ok bool, err error)
@@ -116,6 +215,25 @@ type Store interface {
 	SessionTimes(ctx context.Context, id string) ([]time.Time, error)
 	// MarkCleared records that the user cleared a session.
 	MarkCleared(ctx context.Context, id string) error
+}
+
+// FormatPreamble renders entries as the "- [kind] text" lines of the prompt.
+// An entry with a title reads "- [kind] title: text".
+func FormatPreamble(entries []Entry) string {
+	var sb strings.Builder
+	for _, e := range entries {
+		sb.WriteString(preambleLine(e))
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+func preambleLine(e Entry) string {
+	body := e.Text
+	if e.Title != "" {
+		body = e.Title + ": " + e.Text
+	}
+	return fmt.Sprintf("- [%s] %s", e.Kind, body)
 }
 
 // NoMemory is a Store that persists nothing.
@@ -137,15 +255,25 @@ func (NoMemory) AppendMessage(context.Context, string, int, api.Message, api.Usa
 	return nil
 }
 
-func (NoMemory) Remember(context.Context, Entry) error { return nil }
+func (NoMemory) Remember(context.Context, Entry) (Result, error) { return Result{}, nil }
 
-func (NoMemory) Recall(context.Context, string, string, int) ([]Entry, error) { return nil, nil }
+func (NoMemory) Recall(context.Context, Reader, string, int) ([]Entry, error) { return nil, nil }
 
-func (NoMemory) Preamble(context.Context, string, int) (string, error) { return "", nil }
+func (NoMemory) Preamble(context.Context, Reader, Budget) ([]Entry, error) { return nil, nil }
 
-func (NoMemory) PreambleEntries(context.Context, string, int) ([]Entry, error) { return nil, nil }
+func (NoMemory) Overview(context.Context, Reader) (Overview, error) { return Overview{}, nil }
 
-func (NoMemory) Overview(context.Context, string) (Overview, error) { return Overview{}, nil }
+func (NoMemory) Get(context.Context, int64, Reader) (Entry, error) { return Entry{}, ErrNotFound }
+
+func (NoMemory) Update(context.Context, int64, Reader, Patch) error { return ErrNotFound }
+
+func (NoMemory) SetPinned(context.Context, int64, Reader, bool) error { return ErrNotFound }
+
+func (NoMemory) MarkReviewed(context.Context, int64, Reader) error { return ErrNotFound }
+
+func (NoMemory) Forget(context.Context, int64, Reader) error { return ErrNotFound }
+
+func (NoMemory) NeedsReview(context.Context, Reader, int) ([]Entry, error) { return nil, nil }
 
 func (NoMemory) LatestSession(context.Context, string) (Session, bool, error) {
 	return Session{}, false, nil
@@ -157,9 +285,14 @@ func (NoMemory) SessionTimes(context.Context, string) ([]time.Time, error) { ret
 
 func (NoMemory) MarkCleared(context.Context, string) error { return nil }
 
-// Visible is the SQL condition that selects the entries an agent may read:
-// global entries; project entries written by that agent, plus project rows
-// without an agent (written before per-agent memory existed); and agent entries
-// written for that agent. Entries of other agents stay private, and an empty
-// agent name matches no agent-scoped entry. Parameters: agent, agent.
-const Visible = "(m.scope = 'global' OR (m.scope = 'project' AND (m.agent = ? OR m.agent = '')) OR (m.scope = 'agent' AND m.agent <> '' AND m.agent = ?))"
+// VisibleSQL is the condition that selects the live (not soft-deleted) entries
+// a reader may see, for a query that names the memories table as m: space
+// entries; agent entries of the reader's own agent; and global entries when the
+// reader may see them. It returns the condition and its parameters.
+func VisibleSQL(r Reader) (string, []any) {
+	cond := "(m.deleted_at = '' AND (m.scope = 'space' OR (m.scope = 'agent' AND m.agent <> '' AND m.agent = ?)"
+	if r.Global {
+		cond += " OR m.scope = 'global'"
+	}
+	return cond + "))", []any{r.Agent}
+}

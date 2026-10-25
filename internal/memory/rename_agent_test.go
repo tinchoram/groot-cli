@@ -14,12 +14,17 @@ func TestRenameAgentMovesTasksMemoriesAndSessions(t *testing.T) {
 	if _, err := st.Tasks().Open(ctx, newTask("payments", "developer", base)); err != nil {
 		t.Fatal(err)
 	}
+	managed := newTask("payments", "lead", base)
+	managed.Delegation = flow.Delegation{Manager: "developer"}
+	if _, err := st.Tasks().Open(ctx, managed); err != nil {
+		t.Fatal(err)
+	}
 	delegated := newTask("payments", "reviewer", base)
 	delegated.Delegation = flow.Delegation{Delegate: "developer"}
 	if _, err := st.Tasks().Open(ctx, delegated); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeAgent, Agent: "developer", Text: "the developer keeps a changelog", Source: "test"}); err != nil {
+	if _, err := st.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeAgent, Agent: "developer", Text: "the developer keeps a changelog", Source: "test"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.StartSession(ctx, Session{ID: "s1", Agent: "developer", Model: "m", StartedAt: base}); err != nil {
@@ -40,12 +45,15 @@ func TestRenameAgentMovesTasksMemoriesAndSessions(t *testing.T) {
 	if moved[0].Delegation.Delegate != "" {
 		t.Fatal("the delegate of another agent must not change")
 	}
+	if led, err := st.Tasks().List(ctx, "payments", "lead", 10); err != nil || len(led) != 1 || led[0].Delegation.Manager != "coder" {
+		t.Fatalf("manager of another agent's task = %+v, %v; want coder", led, err)
+	}
 	reviewer, _ := st.Tasks().List(ctx, "payments", "reviewer", 10)
 	if len(reviewer) != 1 || reviewer[0].Delegation.Delegate != "coder" {
 		t.Fatalf("delegation to the renamed agent = %+v", reviewer)
 	}
 
-	entries, err := st.PreambleEntries(ctx, "coder", 10)
+	entries, err := st.Preamble(ctx, Reader{Agent: "coder"}, Budget{})
 	if err != nil || len(entries) != 1 || entries[0].Text != "the developer keeps a changelog" {
 		t.Fatalf("memory of the renamed agent = %+v, %v", entries, err)
 	}

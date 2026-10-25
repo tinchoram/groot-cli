@@ -121,7 +121,7 @@ func TestClearRefreshesTheMemoryPreamble(t *testing.T) {
 		t.Fatal(err)
 	}
 	st, _ := f.ws.storesFor(f.dir)
-	if err := st.mem.Remember(ctx, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeProject, Agent: "reader", Text: "pager rota lives in ops-calendar"}); err != nil {
+	if _, err := st.mem.Remember(ctx, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeAgent, Agent: "reader", Text: "pager rota lives in ops-calendar"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := conv.Clear()(ctx); err != nil {
@@ -145,7 +145,7 @@ func TestChatMemoryListsThePreambleAndRecalls(t *testing.T) {
 	conv := f.ws.Chat()
 	st, _ := f.ws.storesFor(f.dir)
 	for _, text := range []string{"first note about backups", "second note about backups", "third note about dns"} {
-		if err := st.mem.Remember(ctx, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeProject, Agent: "reader", Text: text}); err != nil {
+		if _, err := st.mem.Remember(ctx, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeAgent, Agent: "reader", Text: text}); err != nil {
 			t.Fatal(err)
 		}
 	}

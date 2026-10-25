@@ -209,7 +209,8 @@ func TestCloseWritesSessionSummaryToSpaceMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	pre, err := st.Preamble(context.Background(), "reader", 10)
+	entries, err := st.Preamble(context.Background(), memory.Reader{Agent: "reader"}, memory.Budget{})
+	pre := memory.FormatPreamble(entries)
 	if err != nil || !strings.Contains(pre, "Read one file") {
 		t.Fatalf("summary not stored in the space memory: %q (%v)", pre, err)
 	}

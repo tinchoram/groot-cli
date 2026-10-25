@@ -36,10 +36,11 @@ func storedSummaries(t *testing.T, dir, agent string) string {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	out, err := st.Preamble(context.Background(), agent, 10)
+	entries, err := st.Preamble(context.Background(), memory.Reader{Agent: agent}, memory.Budget{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	out := memory.FormatPreamble(entries)
 	return out
 }
 

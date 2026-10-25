@@ -56,7 +56,7 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("migrate sessions: add context_tokens: %w", err)
 		}
 	}
-	return nil
+	return migrateMemories(db)
 }
 
 func hasColumn(db *sql.DB, table, column string) (bool, error) {

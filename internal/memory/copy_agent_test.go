@@ -13,10 +13,10 @@ func TestCopyAgentDataCopiesOneAgentAndRemapsIDs(t *testing.T) {
 	src := openTempSQLite(t)
 	dst := openTempSQLite(t)
 
-	if err := src.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeAgent, Agent: "developer", Text: "the developer keeps a changelog", Source: "test"}); err != nil {
+	if _, err := src.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeAgent, Agent: "developer", Text: "the developer keeps a changelog", Source: "test"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := src.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeAgent, Agent: "reviewer", Text: "the reviewer reads diffs", Source: "test"}); err != nil {
+	if _, err := src.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeAgent, Agent: "reviewer", Text: "the reviewer reads diffs", Source: "test"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := src.StartSession(ctx, Session{ID: "s1", Agent: "developer", Model: "m", StartedAt: base}); err != nil {
@@ -154,5 +154,37 @@ func TestCopyAgentDataRefusesTheSameDatabase(t *testing.T) {
 	src := openTempSQLite(t)
 	if _, err := src.CopyAgentData(context.Background(), src, "developer"); err == nil {
 		t.Fatal("copying an agent into its own database must be refused")
+	}
+}
+
+func TestCopyAgentDataTwiceDoesNotDuplicateMemories(t *testing.T) {
+	ctx := context.Background()
+	src := openTempSQLite(t)
+	dst := openTempSQLite(t)
+	setClock(src, base)
+	if _, err := src.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeAgent, Agent: "developer", Title: "Changelog", Text: "the developer keeps a changelog", TopicKey: "dev/changelog"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeAgent, Agent: "developer", Text: "the developer runs gofmt"}); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := src.CopyAgentData(ctx, dst, "developer")
+	if err != nil || first.Memories != 2 || first.SkippedMemories != 0 {
+		t.Fatalf("first copy = %+v, %v; want 2 memories copied", first, err)
+	}
+	second, err := src.CopyAgentData(ctx, dst, "developer")
+	if err != nil || second.Memories != 0 || second.SkippedMemories != 2 {
+		t.Fatalf("second copy = %+v, %v; want both memories skipped", second, err)
+	}
+	if got := allVisible(t, dst, Reader{Agent: "developer"}); len(got) != 2 {
+		t.Fatalf("target has %d memories after two copies, want 2", len(got))
+	}
+	copied, err := dst.Get(ctx, 1, Reader{Agent: "developer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copied.Title != "Changelog" || copied.TopicKey != "dev/changelog" {
+		t.Fatalf("new columns not copied: %+v", copied)
 	}
 }

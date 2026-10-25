@@ -35,13 +35,14 @@ func (c *Conversation) endLocal(ctx context.Context) error {
 	}
 	var errs []error
 	if text := c.localSummary(); text != "" {
-		errs = append(errs, c.store.Remember(ctx, memory.Entry{
+		_, err := c.store.Remember(ctx, memory.Entry{
 			Kind:   memory.KindSessionSummary,
-			Scope:  memory.ScopeProject,
+			Scope:  memory.ScopeAgent,
 			Agent:  c.name,
 			Text:   text,
 			Source: "session:" + c.SessionID(),
-		}))
+		})
+		errs = append(errs, err)
 	}
 	errs = append(errs, c.Agent.End(ctx))
 	return errors.Join(errs...)
@@ -113,9 +114,9 @@ var ErrSummaryFallback = errors.New("summary fallback")
 // model summary was skipped.
 func (c *Conversation) keepLocalSummary(ctx context.Context, id, local string, cause error) error {
 	if local != "" {
-		if err := c.store.Remember(ctx, memory.Entry{
+		if _, err := c.store.Remember(ctx, memory.Entry{
 			Kind:   memory.KindSessionSummary,
-			Scope:  memory.ScopeProject,
+			Scope:  memory.ScopeAgent,
 			Agent:  c.name,
 			Text:   local,
 			Source: "session:" + id,
@@ -137,11 +138,12 @@ func (c *Conversation) writeLocalSummary(ctx context.Context) error {
 	if text == "" {
 		return nil
 	}
-	return c.store.Remember(ctx, memory.Entry{
+	_, err := c.store.Remember(ctx, memory.Entry{
 		Kind:   memory.KindSessionSummary,
-		Scope:  memory.ScopeProject,
+		Scope:  memory.ScopeAgent,
 		Agent:  c.name,
 		Text:   text,
 		Source: "session:" + c.SessionID(),
 	})
+	return err
 }

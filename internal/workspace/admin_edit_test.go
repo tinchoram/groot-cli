@@ -686,7 +686,7 @@ func moveSetup(t *testing.T, f *fixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.mem.Remember(context.Background(), memory.Entry{
+	if _, err := st.mem.Remember(context.Background(), memory.Entry{
 		Kind: memory.KindFact, Scope: memory.ScopeAgent, Agent: "reader", Text: "reader fact", Source: "test",
 	}); err != nil {
 		t.Fatal(err)
@@ -722,14 +722,14 @@ func TestMoveAgentWithMemoryCopiesDataAndTheSourceKeepsIt(t *testing.T) {
 	if tasks, err := dst.mem.Tasks().List(ctx, "default", "reader", 10); err != nil || len(tasks) != 1 {
 		t.Fatalf("copied tasks = %+v, %v", tasks, err)
 	}
-	if ov, err := dst.mem.Overview(ctx, "reader"); err != nil || ov.Visible != 1 {
+	if ov, err := dst.mem.Overview(ctx, memory.Reader{Agent: "reader"}); err != nil || ov.Visible != 1 {
 		t.Fatalf("copied memory = %+v, %v", ov, err)
 	}
 	src := targetStores(t, f, "default")
 	if tasks, err := src.mem.Tasks().List(ctx, "default", "reader", 10); err != nil || len(tasks) != 1 {
 		t.Fatalf("the source lost its tasks: %+v, %v", tasks, err)
 	}
-	if ov, err := src.mem.Overview(ctx, "reader"); err != nil || ov.Visible != 1 {
+	if ov, err := src.mem.Overview(ctx, memory.Reader{Agent: "reader"}); err != nil || ov.Visible != 1 {
 		t.Fatalf("the source lost its memory: %+v, %v", ov, err)
 	}
 	if !strings.Contains(out, "copied") || !strings.Contains(out, "tasks 1") || !strings.Contains(out, "keeps its copies") {
@@ -750,7 +750,7 @@ func TestMoveAgentWithoutMemoryCopiesNothing(t *testing.T) {
 	if tasks, err := dst.mem.Tasks().List(ctx, "default", "reader", 10); err != nil || len(tasks) != 0 {
 		t.Fatalf("a move without with_memory copied tasks: %+v, %v", tasks, err)
 	}
-	if ov, err := dst.mem.Overview(ctx, "reader"); err != nil || ov.Visible != 0 {
+	if ov, err := dst.mem.Overview(ctx, memory.Reader{Agent: "reader"}); err != nil || ov.Visible != 0 {
 		t.Fatalf("a move without with_memory copied memory: %+v, %v", ov, err)
 	}
 	if strings.Contains(out, "copied") {

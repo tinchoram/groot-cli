@@ -61,17 +61,14 @@ func (r *Remember) execute(ctx context.Context, input string) (string, bool) {
 	if !kind.Valid() || kind == memory.KindSessionSummary {
 		return fmt.Sprintf("kind %q is not allowed; use fact, decision or runbook", in.Kind), true
 	}
-	scope := memory.Scope(in.Scope)
-	if in.Scope == "" {
-		scope = memory.ScopeProject
-	}
-	if !scope.Valid() {
+	scope, ok := rememberScope(in.Scope)
+	if !ok {
 		return fmt.Sprintf("scope %q is not valid", in.Scope), true
 	}
 	if strings.TrimSpace(in.Text) == "" {
 		return "text is required", true
 	}
-	err := r.store.Remember(ctx, memory.Entry{
+	_, err := r.store.Remember(ctx, memory.Entry{
 		Kind: kind, Scope: scope, Agent: r.agent, Text: in.Text, Source: "tool:remember",
 	})
 	if err != nil {
@@ -130,7 +127,7 @@ func (r *Recall) execute(ctx context.Context, input string) (string, bool) {
 	if in.Limit <= 0 || in.Limit > 50 {
 		in.Limit = 10
 	}
-	entries, err := r.store.Recall(ctx, in.Query, r.agent, in.Limit)
+	entries, err := r.store.Recall(ctx, memory.Reader{Agent: r.agent}, in.Query, in.Limit)
 	if err != nil {
 		return err.Error(), true
 	}
@@ -147,3 +144,16 @@ func (r *Recall) execute(ctx context.Context, input string) (string, bool) {
 func (r *Remember) RiskFor(string) Risk { return r.Risk() }
 
 func (r *Recall) RiskFor(string) Risk { return r.Risk() }
+
+// rememberScope maps the scope named by the model onto the store's scopes. The
+// empty and legacy "project" scope were per-agent memory, so they map to agent;
+// the legacy "global" meant everyone in this database, which is space here.
+func rememberScope(name string) (memory.Scope, bool) {
+	switch name {
+	case "", "project", "agent":
+		return memory.ScopeAgent, true
+	case "space", "global":
+		return memory.ScopeSpace, true
+	}
+	return "", false
+}

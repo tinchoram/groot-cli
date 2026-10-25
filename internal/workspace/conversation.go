@@ -22,8 +22,6 @@ import (
 )
 
 const (
-	// preambleEntries is how many memory entries the prompt carries.
-	preambleEntries = 10
 	// recallEntries is how many matches /memory <query> shows.
 	recallEntries   = 10
 	summaryTimeout  = 30 * time.Second
@@ -102,14 +100,14 @@ func (c *Conversation) refreshSystem(ctx context.Context) error {
 	return nil
 }
 
-// PromptMemory returns the entries of the prompt preamble of this agent, newest first,
-// and how many entries the agent can read in all.
+// PromptMemory returns the entries of the prompt preamble of this agent, within
+// the default budget, and how many entries the agent can read in all.
 func (c *Conversation) PromptMemory(ctx context.Context) ([]memory.Entry, memory.Overview, error) {
-	entries, err := c.store.PreambleEntries(ctx, c.name, preambleEntries)
+	entries, err := c.store.Preamble(ctx, memory.Reader{Agent: c.name}, memory.Budget{})
 	if err != nil {
 		return nil, memory.Overview{}, err
 	}
-	ov, err := c.store.Overview(ctx, c.name)
+	ov, err := c.store.Overview(ctx, memory.Reader{Agent: c.name})
 	if err != nil {
 		return nil, memory.Overview{}, err
 	}
@@ -118,7 +116,7 @@ func (c *Conversation) PromptMemory(ctx context.Context) ([]memory.Entry, memory
 
 // RecallMemory searches the entries this agent can read, newest matches first.
 func (c *Conversation) RecallMemory(ctx context.Context, query string) ([]memory.Entry, error) {
-	return c.store.Recall(ctx, query, c.name, recallEntries)
+	return c.store.Recall(ctx, memory.Reader{Agent: c.name}, query, recallEntries)
 }
 
 // Send runs one turn. When the agent has unread messages, the prompt is
@@ -225,13 +223,14 @@ func (c *Conversation) summarize(ctx context.Context, id, transcript string) err
 	if text == "" {
 		return nil
 	}
-	return c.store.Remember(sctx, memory.Entry{
+	_, err = c.store.Remember(sctx, memory.Entry{
 		Kind:   memory.KindSessionSummary,
-		Scope:  memory.ScopeProject,
+		Scope:  memory.ScopeAgent,
 		Agent:  c.name,
 		Text:   text,
 		Source: "session:" + id,
 	})
+	return err
 }
 
 // tail keeps the last n runes so long sessions stay within the summary budget.

@@ -11,10 +11,13 @@ import (
 // CopyCounts says what CopyAgentData copied into the target database.
 type CopyCounts struct {
 	Memories int
-	Sessions int
-	Messages int
-	Tasks    int
-	Evidence int
+	// SkippedMemories counts the memories the target already has: the same
+	// content hash, or the same topic key in the same scope and agent.
+	SkippedMemories int
+	Sessions        int
+	Messages        int
+	Tasks           int
+	Evidence        int
 	// SkippedSessions counts the sessions the target already has under the same
 	// id. They are not copied, and neither are their messages.
 	SkippedSessions int
@@ -23,7 +26,7 @@ type CopyCounts struct {
 // Columns copied for each table, in insert order. The task id and the evidence
 // task id are new in the target and come from the copy, so they are not listed.
 const (
-	copyMemoryCols  = "kind, scope, agent, text, source, created_at"
+	copyMemoryCols  = "kind, scope, agent, title, text, topic_key, source, normalized_hash, pinned, tainted, review_after, revision_count, duplicate_count, created_at, updated_at, deleted_at"
 	copySessionCols = "id, parent_id, agent, model, started_at, ended_at, cost_usd, cleared_at, context_tokens"
 	copyMessageCols = "session_id, turn, role, content_json, in_tokens, out_tokens, created_at"
 	copyTaskCols    = "space, agent, size, phase, goal, scope, done_when, plan_path, opened_at, phase_at, updated_at, closed_at, " +
@@ -46,7 +49,8 @@ func (s *SQLite) CopyAgentData(ctx context.Context, dst *SQLite, agent string) (
 		return c, errors.New("copy agent: source and target are the same database")
 	}
 	memories, err := selectAll(ctx, s.db,
-		`SELECT kind, scope, agent, text, source, created_at FROM memories WHERE agent = ? ORDER BY id`, agent)
+		`SELECT kind, scope, agent, title, text, topic_key, source, pinned, tainted, review_after, revision_count, duplicate_count,
+			created_at, updated_at, deleted_at FROM memories WHERE agent = ? AND deleted_at = '' ORDER BY id`, agent)
 	if err != nil {
 		return c, fmt.Errorf("copy agent: read memories: %w", err)
 	}
@@ -69,10 +73,28 @@ func (s *SQLite) CopyAgentData(ctx context.Context, dst *SQLite, agent string) (
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := copyRows(ctx, tx, `INSERT INTO memories (`+copyMemoryCols+`) VALUES (?, ?, ?, ?, ?, ?)`, memories); err != nil {
-		return c, fmt.Errorf("copy agent: memories: %w", err)
+	for _, m := range memories {
+		// Columns as selected: kind, scope, agent, title, text, topic_key, source,
+		// pinned, tainted, review_after, revision_count, duplicate_count,
+		// created_at, updated_at, deleted_at. The hash is recomputed rather than
+		// copied, so the copy never trusts the source's value.
+		kind, scope, agent := Kind(textOf(m[0])), Scope(textOf(m[1])), textOf(m[2])
+		title, text, topic := textOf(m[3]), textOf(m[4]), textOf(m[5])
+		hash := contentHash(kind, scope, agent, title, text)
+		row := []any{m[0], m[1], m[2], m[3], m[4], m[5], m[6], hash, m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14]}
+		exists, err := hasSameMemory(ctx, tx, scope, agent, topic, hash)
+		if err != nil {
+			return c, fmt.Errorf("copy agent: check memory: %w", err)
+		}
+		if exists {
+			c.SkippedMemories++
+			continue
+		}
+		if err := copyRows(ctx, tx, `INSERT INTO memories (`+copyMemoryCols+`) VALUES (`+placeholders(16)+`)`, [][]any{row}); err != nil {
+			return c, fmt.Errorf("copy agent: memories: %w", err)
+		}
+		c.Memories++
 	}
-	c.Memories = len(memories)
 
 	for _, sess := range sessions {
 		var exists int
@@ -176,4 +198,28 @@ func copyRows(ctx context.Context, tx *sql.Tx, stmt string, rows [][]any) error 
 // placeholders is the "?, ?, ..." list of n values.
 func placeholders(n int) string {
 	return strings.TrimSuffix(strings.Repeat("?, ", n), ", ")
+}
+
+// hasSameMemory reports whether tx already holds a live memory with the same
+// content hash, or with the same topic key in the same scope and agent.
+func hasSameMemory(ctx context.Context, tx *sql.Tx, scope Scope, agent, topic, hash string) (bool, error) {
+	var n int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM memories WHERE normalized_hash = ? AND deleted_at = ''`, hash).Scan(&n); err != nil {
+		return false, err
+	}
+	if n == 0 && topic != "" {
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM memories WHERE scope = ? AND agent = ? AND topic_key = ? AND deleted_at = ''`,
+			string(scope), agent, topic).Scan(&n); err != nil {
+			return false, err
+		}
+	}
+	return n > 0, nil
+}
+
+// textOf reads a text value as the driver returns it; nulls read as empty.
+func textOf(v any) string {
+	s, _ := v.(string)
+	return s
 }

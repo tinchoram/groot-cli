@@ -18,13 +18,13 @@ type recordingStore struct {
 	gotAgent string
 }
 
-func (r *recordingStore) Remember(_ context.Context, e memory.Entry) error {
+func (r *recordingStore) Remember(_ context.Context, e memory.Entry) (memory.Result, error) {
 	r.saved = append(r.saved, e)
-	return nil
+	return memory.Result{Outcome: memory.OutcomeCreated}, nil
 }
 
-func (r *recordingStore) Recall(_ context.Context, q, agent string, limit int) ([]memory.Entry, error) {
-	r.gotQ, r.gotLim, r.gotAgent = q, limit, agent
+func (r *recordingStore) Recall(_ context.Context, rd memory.Reader, q string, limit int) ([]memory.Entry, error) {
+	r.gotQ, r.gotLim, r.gotAgent = q, limit, rd.Agent
 	return r.results, nil
 }
 
@@ -44,7 +44,7 @@ func TestRememberToolStoresEntry(t *testing.T) {
 		t.Fatalf("expected one saved entry, got %d", len(st.saved))
 	}
 	e := st.saved[0]
-	if e.Kind != memory.KindRunbook || e.Scope != memory.ScopeProject || e.Agent != "payments-agent" || e.Source != "tool:remember" {
+	if e.Kind != memory.KindRunbook || e.Scope != memory.ScopeAgent || e.Agent != "payments-agent" || e.Source != "tool:remember" {
 		t.Fatalf("unexpected entry: %+v", e)
 	}
 }

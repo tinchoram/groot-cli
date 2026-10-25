@@ -13,8 +13,8 @@ func TestMemoryCommandListsThePromptEntriesAndFooter(t *testing.T) {
 	chat := &fakeSession{
 		model: "m",
 		promptMemory: []memory.Entry{
-			{ID: 7, Kind: memory.KindFact, Scope: memory.ScopeProject, Text: "pager rota lives in ops-calendar", CreatedAt: now.Add(-2 * time.Hour)},
-			{ID: 6, Kind: memory.KindSessionSummary, Scope: memory.ScopeProject, Text: "Asked about the cluster", CreatedAt: now.Add(-72 * time.Hour)},
+			{ID: 7, Kind: memory.KindFact, Scope: memory.ScopeSpace, Text: "pager rota lives in ops-calendar", CreatedAt: now.Add(-2 * time.Hour)},
+			{ID: 6, Kind: memory.KindSessionSummary, Scope: memory.ScopeSpace, Text: "Asked about the cluster", CreatedAt: now.Add(-72 * time.Hour)},
 		},
 		memoryOverview: memory.Overview{Visible: 5, Summaries: 2},
 	}
@@ -22,8 +22,8 @@ func TestMemoryCommandListsThePromptEntriesAndFooter(t *testing.T) {
 	m = sendLine(t, m, "/memory")
 	out := stripANSI(m.transcriptText())
 	for _, want := range []string{
-		"7 fact project 2h pager rota lives in ops-calendar",
-		"6 session_summary project 3d Asked about the cluster",
+		"7 fact space 2h pager rota lives in ops-calendar",
+		"6 session_summary space 3d Asked about the cluster",
 		"5 entries visible to this agent · 2 session summaries",
 	} {
 		if !strings.Contains(out, want) {

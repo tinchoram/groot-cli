@@ -6,11 +6,13 @@ import (
 )
 
 // renameStatements rename an agent in the columns that name agents: the task
-// owner, the delegate and the origin of a handed-over task, the memory entries
-// and the sessions.
+// owner, the delegate, the manager that tracks a handover and the origin of a
+// handed-over task, the memory entries and the sessions. parent_space is left
+// alone: it names a space, not an agent.
 var renameStatements = []string{
 	`UPDATE tasks SET agent = ? WHERE agent = ?`,
 	`UPDATE tasks SET delegate = ? WHERE delegate = ?`,
+	`UPDATE tasks SET manager = ? WHERE manager = ?`,
 	`UPDATE tasks SET parent_agent = ? WHERE parent_agent = ?`,
 	`UPDATE memories SET agent = ? WHERE agent = ?`,
 	`UPDATE sessions SET agent = ? WHERE agent = ?`,

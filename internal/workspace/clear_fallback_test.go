@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/provider"
 )
 
@@ -31,7 +32,7 @@ func TestClearKeepsALocalSummaryWhenTheModelSummaryFails(t *testing.T) {
 	}
 
 	st, _ := f.ws.storesFor(f.dir)
-	entries, err := st.mem.Recall(ctx, "first question", "reader", 10)
+	entries, err := st.mem.Recall(ctx, memory.Reader{Agent: "reader"}, "first question", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

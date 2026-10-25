@@ -542,10 +542,11 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	// rebuildSystem composes the prompt from the memory stored at the time of the
 	// call. It runs at open and again on /clear.
 	rebuildSystem := func(ctx context.Context) (string, error) {
-		preamble, err := st.mem.Preamble(ctx, agentName, preambleEntries)
+		entries, err := st.mem.Preamble(ctx, memory.Reader{Agent: agentName}, memory.Budget{})
 		if err != nil {
 			return "", fmt.Errorf("load memory preamble: %w", err)
 		}
+		preamble := memory.FormatPreamble(entries)
 		projectCtx, err := config.LoadProjectContext(sp.Path)
 		if err != nil {
 			return "", fmt.Errorf("read AGENTS.md: %w", err)
