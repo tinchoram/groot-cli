@@ -28,6 +28,26 @@ built in one day of live testing, so they are grouped by what shipped.
   reports, `/bug`, `/feat` and the bare `debug` address follow it to the space
   it lives in.
 
+### Distribution
+- `groot auth login` stores the Anthropic key: in the macOS keychain, or in
+  `~/.groot/credentials` (mode 0600) when the keychain is unavailable and on
+  Linux. It prompts with echo off, or reads the first line with `--stdin`.
+  `groot auth status` shows the source and the last four characters;
+  `groot auth logout` removes the stored key.
+- The key is found in this order: `ANTHROPIC_API_KEY` in the environment, in
+  `.env` in the working directory, the keychain, the credentials file. A
+  startup without a key names `groot auth login` instead of failing on the
+  variable alone.
+- Global configuration: `~/.groot/groot.yaml` (or under `GROOT_HOME`) is read
+  under the project `groot.yaml`. The project file wins; lists are replaced
+  whole and maps merge by key. Writes go to the project file when it exists,
+  otherwise to the global one.
+- `groot doctor` prints the version, home, the config files loaded, the key
+  source, the sandbox backend, kubectl and the data, and exits 1 when startup
+  would be blocked.
+- The sandbox warning on linux names the install command of the detected
+  distribution (apt, dnf, pacman or zypper) instead of always apt.
+
 ## 0.5.3 — 2026-10-25
 
 ### Backlog sweep

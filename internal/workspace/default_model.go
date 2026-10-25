@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"os"
 
 	"github.com/tinchoram/groot-cli/internal/config"
 )
@@ -23,12 +24,20 @@ func (w *Workspace) defaultModelLocked() string {
 	return w.opts.NewProvider("").Model()
 }
 
-// ConfigFile is the configuration file that SetDefaultModel writes.
+// ConfigFile is the configuration file that the workspace writes: the project
+// file when it exists, otherwise the global file in the groot home.
 func (w *Workspace) ConfigFile() string {
-	if w.opts.ConfigPath == "" {
-		return "groot.yaml"
+	project := w.opts.ConfigPath
+	if project == "" {
+		project = "groot.yaml"
 	}
-	return w.opts.ConfigPath
+	if w.opts.GlobalConfigPath == "" {
+		return project
+	}
+	if _, err := os.Stat(project); err == nil {
+		return project
+	}
+	return w.opts.GlobalConfigPath
 }
 
 // SetDefaultModel makes model the default. The id is checked like /model's, unless

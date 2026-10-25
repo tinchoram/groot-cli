@@ -42,6 +42,33 @@ func LoadDotEnv(path string) error {
 	return nil
 }
 
+// DotEnvValue returns the value that the file at path sets for key, without
+// touching the environment. found is false when the file is missing or does not
+// set the key. Credential resolution uses it to tell a key that came from .env
+// apart from one exported in the shell.
+func DotEnvValue(path, key string) (value string, found bool, err error) {
+	f, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("config: open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		k, v, ok := parseDotEnvLine(scanner.Text())
+		if ok && k == key {
+			return v, true, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", false, fmt.Errorf("config: read %s: %w", path, err)
+	}
+	return "", false, nil
+}
+
 func parseDotEnvLine(line string) (key, value string, ok bool) {
 	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, "#") {

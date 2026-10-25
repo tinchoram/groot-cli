@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -72,19 +73,35 @@ type host struct {
 	exists   func(string) bool
 	isDir    func(string) bool
 	resolve  func(string) string
+	// osRelease is the content of /etc/os-release, empty when unknown.
+	osRelease string
 }
 
 // defaultHost reads the real platform. home is the user's home directory.
 func defaultHost(home string) host {
 	return host{
-		goos:     runtime.GOOS,
-		home:     home,
-		tmp:      []string{os.TempDir(), "/tmp"},
-		lookPath: exec.LookPath,
-		exists:   exists,
-		isDir:    isDir,
-		resolve:  realPath,
+		goos:      runtime.GOOS,
+		home:      home,
+		tmp:       []string{os.TempDir(), "/tmp"},
+		lookPath:  exec.LookPath,
+		exists:    exists,
+		isDir:     isDir,
+		resolve:   realPath,
+		osRelease: ReadOSRelease(runtime.GOOS),
 	}
+}
+
+// ReadOSRelease returns the content of /etc/os-release on linux, and "" on other
+// platforms or when the file is missing.
+func ReadOSRelease(goos string) string {
+	if goos != "linux" {
+		return ""
+	}
+	raw, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 // Detect picks the backend for this platform. When none is available, auto
@@ -102,7 +119,7 @@ func detect(h host, cfg Config) (Runner, Warning) {
 	if r := backendFor(h); r != nil {
 		return r, ""
 	}
-	install := installHint(h.goos)
+	install := InstallHint(h.goos, h.osRelease)
 	if cfg.Mode == "strict" {
 		msg := "bash is refused: bash.sandbox is strict and no sandbox is available. " + install
 		return refusedRunner{reason: msg}, Warning(msg)
@@ -124,14 +141,62 @@ func backendFor(h host) Runner {
 	return nil
 }
 
-func installHint(goos string) string {
+// InstallHint names how to get the sandbox backend on goos. On linux the command
+// follows the distribution in osRelease (the content of /etc/os-release); when
+// the distribution is unknown it falls back to the apt command.
+func InstallHint(goos, osRelease string) string {
 	switch goos {
 	case "darwin":
 		return "Install the Xcode Command Line Tools (xcode-select --install) to get sandbox-exec."
 	case "linux":
+		if cmd := bubblewrapCommand(osRelease); cmd != "" {
+			return "Install bubblewrap (" + cmd + ") to enable the sandbox."
+		}
 		return "Install bubblewrap (apt install bubblewrap) to enable the sandbox."
 	}
 	return "No sandbox backend exists for " + goos + " yet."
+}
+
+// bubblewrapCommand returns the package-manager command for the distribution
+// named in osRelease, matching ID first and then ID_LIKE. It returns "" when no
+// known family matches.
+func bubblewrapCommand(osRelease string) string {
+	families := []struct {
+		names []string
+		cmd   string
+	}{
+		{[]string{"debian", "ubuntu"}, "sudo apt install bubblewrap"},
+		{[]string{"fedora", "rhel", "centos"}, "sudo dnf install bubblewrap"},
+		{[]string{"arch"}, "sudo pacman -S bubblewrap"},
+		{[]string{"suse", "opensuse", "sles", "opensuse-tumbleweed", "opensuse-leap"}, "sudo zypper install bubblewrap"},
+	}
+	for _, id := range osReleaseIDs(osRelease) {
+		for _, f := range families {
+			if slices.Contains(f.names, id) {
+				return f.cmd
+			}
+		}
+	}
+	return ""
+}
+
+// osReleaseIDs returns the ID value followed by the ID_LIKE values, lowercased.
+func osReleaseIDs(osRelease string) []string {
+	var ids []string
+	for _, line := range strings.Split(osRelease, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
+			continue
+		}
+		value = strings.ToLower(strings.Trim(value, `"'`))
+		switch key {
+		case "ID":
+			ids = append([]string{value}, ids...)
+		case "ID_LIKE":
+			ids = append(ids, strings.Fields(value)...)
+		}
+	}
+	return ids
 }
 
 // validate rejects specs that cannot be confined safely.

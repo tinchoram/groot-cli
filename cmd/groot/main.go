@@ -9,8 +9,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
+	"github.com/tinchoram/groot-cli/internal/auth"
 	"github.com/tinchoram/groot-cli/internal/config"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/home"
@@ -25,10 +27,24 @@ import (
 var version = "0.5.4-dev"
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, os.Getenv))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, os.Getenv))
 }
 
-func run(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
+// newKeychain builds the OS keychain store. Tests replace it with a fake.
+var newKeychain = func() auth.Keychain {
+	return auth.SystemKeychain(runtime.GOOS, auth.ExecCommand)
+}
+
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string) int {
+	if len(args) > 0 {
+		switch args[0] {
+		case "auth":
+			return runAuth(args[1:], stdin, stdout, stderr, getenv)
+		case "doctor":
+			return runDoctor(args[1:], stdout, stderr, getenv)
+		}
+	}
+
 	fs := flag.NewFlagSet("groot", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfgPath := fs.String("config", "groot.yaml", "path to the configuration file")
@@ -44,21 +60,37 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		return 0
 	}
 
+	// The key from the shell is read before .env fills in the variables the
+	// shell did not export, so that the source can be reported correctly.
+	envKey := getenv(auth.EnvVar)
 	// A .env in the working directory fills in variables the shell did not export.
 	if err := config.LoadDotEnv(".env"); err != nil {
 		fmt.Fprintf(stderr, "groot: %v\n", err)
 		return 1
 	}
 
-	if getenv("ANTHROPIC_API_KEY") == "" {
-		fmt.Fprintln(stderr, "groot: ANTHROPIC_API_KEY is not set.")
-		fmt.Fprintln(stderr, "  Set it in this shell or in a .env file in the working directory:")
-		fmt.Fprintln(stderr, "    export ANTHROPIC_API_KEY=<your key>")
-		fmt.Fprintln(stderr, "  groot reads the key only from the environment or .env. Do not put it in groot.yaml.")
+	groot, err := home.Resolve(getenv, os.UserHomeDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "groot: %v\n", err)
+		return 1
+	}
+	cred, err := resolveKey(envKey, groot)
+	if err != nil {
+		fmt.Fprintf(stderr, "groot: %v\n", err)
+		return 1
+	}
+	for _, w := range cred.Warnings {
+		fmt.Fprintf(stderr, "warning: %s\n", w)
+	}
+	if cred.Key == "" {
+		fmt.Fprintln(stderr, "groot: no Anthropic API key found.")
+		fmt.Fprintln(stderr, "  Run: groot auth login")
+		fmt.Fprintln(stderr, "  Or export ANTHROPIC_API_KEY=<your key> in this shell, or put it in a .env file in the working directory.")
+		fmt.Fprintln(stderr, "  groot never reads the key from groot.yaml.")
 		return 1
 	}
 
-	cfg, err := loadConfig(fs, *cfgPath)
+	cfg, err := loadConfig(explicitFlag(fs, "config"), *cfgPath, filepath.Join(groot, "groot.yaml"))
 	if err != nil {
 		fmt.Fprintf(stderr, "groot: %v\n", err)
 		return 1
@@ -74,28 +106,44 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		return 1
 	}
 
-	if err := runApp(cfg, *cfgPath, getenv); err != nil {
+	if err := runApp(cfg, *cfgPath, groot, cred.Key); err != nil {
 		fmt.Fprintf(stderr, "groot: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-// loadConfig loads the file. A path set explicitly on the command line must
-// exist; the default groot.yaml is optional.
-func loadConfig(fs *flag.FlagSet, path string) (config.Config, error) {
-	explicit := false
+// resolveKey finds the Anthropic key for groot home groot. envKey is the
+// variable as the shell had it, before .env was loaded.
+func resolveKey(envKey, groot string) (auth.Credential, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return auth.Credential{}, fmt.Errorf("working directory: %w", err)
+	}
+	return auth.Resolve(auth.Options{EnvKey: envKey, Cwd: cwd, Home: groot, Keychain: newKeychain()})
+}
+
+// explicitFlag reports whether the flag was set on the command line.
+func explicitFlag(fs *flag.FlagSet, name string) bool {
+	set := false
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "config" {
-			explicit = true
+		if f.Name == name {
+			set = true
 		}
 	})
+	return set
+}
+
+// loadConfig applies the global file in the groot home and then the project
+// file, each over the one before (see config.LoadLayers). A project path set
+// explicitly must exist; the default groot.yaml and the global file are optional.
+func loadConfig(explicit bool, projectPath, globalPath string) (config.Config, error) {
 	if explicit {
-		if _, err := os.Stat(path); err != nil {
-			return config.Config{}, fmt.Errorf("config file %s: %w", path, err)
+		if _, err := os.Stat(projectPath); err != nil {
+			return config.Config{}, fmt.Errorf("config file %s: %w", projectPath, err)
 		}
 	}
-	return config.Load(path)
+	return config.LoadLayers(globalPath, projectPath)
 }
 
 // buildGate maps the policy name to a gate. confirm is used only by the
@@ -114,11 +162,7 @@ func buildGate(policy string, confirm func(req gate.Request) bool) (gate.Gate, e
 
 // runApp resolves the groot home, bootstraps it on first run, builds the
 // workspace, and runs the terminal UI.
-func runApp(cfg config.Config, cfgPath string, getenv func(string) string) error {
-	groot, err := home.Resolve(getenv, os.UserHomeDir)
-	if err != nil {
-		return err
-	}
+func runApp(cfg config.Config, cfgPath, groot, apiKey string) error {
 	userHome, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("home directory: %w", err)
@@ -139,14 +183,15 @@ func runApp(cfg config.Config, cfgPath string, getenv func(string) string) error
 	}
 	runner, sandboxWarning := sandbox.Detect(sandbox.Config{Mode: cfg.Bash.Sandbox.Mode})
 	ws, err := workspace.New(workspace.Options{
-		Home:       groot,
-		UserHome:   userHome,
-		Version:    version,
-		Sandbox:    runner,
-		Config:     cfg,
-		ConfigPath: cfgPath,
-		Spaces:     spaces,
-		Gate:       g,
+		Home:             groot,
+		UserHome:         userHome,
+		Version:          version,
+		Sandbox:          runner,
+		Config:           cfg,
+		ConfigPath:       cfgPath,
+		GlobalConfigPath: filepath.Join(groot, "groot.yaml"),
+		Spaces:           spaces,
+		Gate:             g,
 		Hooks: workspace.Hooks{
 			OnText:     bridge.Text,
 			OnToolCall: bridge.ToolCall,
@@ -158,7 +203,7 @@ func runApp(cfg config.Config, cfgPath string, getenv func(string) string) error
 			OnAuto:     bridge.Auto,
 		},
 		NewProvider: func(model string) provider.Provider {
-			return provider.NewAnthropic(provider.AnthropicOptions{Model: model})
+			return provider.NewAnthropic(provider.AnthropicOptions{Model: model, APIKey: apiKey})
 		},
 	})
 	if err != nil {

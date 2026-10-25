@@ -74,18 +74,47 @@ Requirements: Go 1.26 (the toolchain downloads automatically with
 `GOTOOLCHAIN=auto`), and `kubectl` on `PATH` if you use the kubectl tool.
 
 ```sh
-export ANTHROPIC_API_KEY=<your key>   # or put it in a .env file in this directory
-make build                            # writes bin/groot
+make build                 # writes bin/groot
+bin/groot auth login       # prompts for the key with echo off, and stores it
+bin/groot doctor           # checks the key, config files, sandbox and data
 ```
 
+`groot auth login` stores the key in the macOS keychain (item `groot.anthropic`).
+When the keychain is not available, and always on Linux, it writes
+`~/.groot/credentials` with mode 0600. `--stdin` reads the key from the first line
+of standard input: `echo "$KEY" | groot auth login --stdin`. On macOS the key is
+passed to `security` as an argument, so it is briefly visible to `ps`.
+
+groot looks for the key in this order and uses the first one it finds:
+
+1. `ANTHROPIC_API_KEY` in the environment.
+2. `ANTHROPIC_API_KEY` in a `.env` file in the working directory.
+3. The macOS keychain.
+4. `~/.groot/credentials`, a YAML line `anthropic_api_key: <key>`. A file that
+   any other user can read is ignored, with a warning; fix it with `chmod 600`.
+
+`groot auth status` prints the source and the last four characters of the key.
+`groot auth logout` removes the stored key (keychain and credentials file). It never
+touches the environment or `.env`.
+
+`GROOT_HOME` moves the home directory (and so the credentials file and the global
+config) as usual.
+
 ## Run
+
+groot runs from any directory: it reads the global configuration in its home
+(`~/.groot/groot.yaml`) and the project file of the working directory. See
+Configuration.
 
 ```sh
 bin/groot                              # reads ./groot.yaml when present
 bin/groot --config ./prod.yaml --policy readonly
 bin/groot --model claude-opus-5-5
 bin/groot --version
+bin/groot doctor                       # what groot found: key, config files, sandbox, kubectl, data
 ```
+
+If no key is found, groot stops and names `groot auth login`.
 
 Slash commands inside the UI: `/help`, `/model <name> [--agent]`, `/models`,
 `/allow [clear]`, `/compact`, `/tokens`, `/clear`, `/exit`. Ctrl+C ends the session
@@ -129,7 +158,21 @@ directory, Groot adds it to the system prompt under "Project context".
 | `kubectl.namespaces` | empty (any) | Namespace allowlist |
 | `system_prompt` | built in | Replaces the base SRE prompt |
 
-Never put API keys in `groot.yaml`. The key comes from `ANTHROPIC_API_KEY`, exported in the shell or set in a `.env` file in the working directory (the shell wins). `.env` is git-ignored.
+Never put API keys in `groot.yaml`. Keys come from `groot auth login`, from
+`ANTHROPIC_API_KEY` in the environment, or from a `.env` file in the working
+directory (the environment wins). `.env` is git-ignored.
+
+Two files are loaded, in this order, and each one overrides the one before:
+
+1. `<home>/groot.yaml`, that is `~/.groot/groot.yaml` (or under `GROOT_HOME`), when it exists.
+2. The project file: `--config`, default `./groot.yaml`, when it exists. An explicit
+   `--config` that does not exist is an error.
+
+Scalars in the project file override the global ones, lists are replaced whole,
+and maps such as `models.context_window` merge key by key. Settings made from
+inside groot (`/model --default`, `set_context_window`) are written to the project
+file when it exists, and to the global file otherwise. `groot doctor` shows which
+files were loaded.
 
 ## Safety model
 

@@ -1,7 +1,8 @@
 # groot.yaml: copy to groot.yaml and adjust. Every field is optional; missing
 # fields use the defaults shown here. Strings support ${VAR} and
-# ${VAR:-default} expansion. Never write API keys in this file: the Anthropic
-# key is read from the ANTHROPIC_API_KEY environment variable.
+# ${VAR:-default} expansion. Never write API keys in this file: store the
+# Anthropic key with `groot auth login`, or set ANTHROPIC_API_KEY in the
+# environment or in a .env file.
 
 provider:
   name: anthropic                # only "anthropic" in this release

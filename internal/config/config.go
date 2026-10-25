@@ -220,22 +220,33 @@ func Default() Config {
 // Load reads path. A missing file yields the defaults; a present file is
 // parsed over the defaults, expanded, and validated.
 func Load(path string) (Config, error) {
-	cfg := Default()
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return cfg, cfg.Validate()
-	}
-	if err != nil {
-		return cfg, fmt.Errorf("read %s: %w", path, err)
-	}
+	return LoadLayers(path)
+}
 
-	var doc yaml.Node
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return cfg, fmt.Errorf("parse %s: %w", path, err)
-	}
-	expandNode(&doc, os.LookupEnv)
-	if err := doc.Decode(&cfg); err != nil {
-		return cfg, fmt.Errorf("decode %s: %w", path, err)
+// LoadLayers applies the files in order over the defaults: the global file
+// first, then the project file. A missing path is skipped, so callers decide
+// which files are required. Scalars in a later file override earlier ones, lists
+// are replaced whole, and maps merge key by key. The merged result is validated
+// once, at the end.
+func LoadLayers(paths ...string) (Config, error) {
+	cfg := Default()
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return cfg, fmt.Errorf("read %s: %w", path, err)
+		}
+
+		var doc yaml.Node
+		if err := yaml.Unmarshal(raw, &doc); err != nil {
+			return cfg, fmt.Errorf("parse %s: %w", path, err)
+		}
+		expandNode(&doc, os.LookupEnv)
+		if err := doc.Decode(&cfg); err != nil {
+			return cfg, fmt.Errorf("decode %s: %w", path, err)
+		}
 	}
 	// An unset ${VAR:-} expands to "", which must not become an allowlist entry.
 	cfg.Kubectl.Namespaces = dropEmpty(cfg.Kubectl.Namespaces)

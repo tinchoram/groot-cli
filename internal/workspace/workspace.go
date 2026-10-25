@@ -100,11 +100,14 @@ type Options struct {
 	Version  string // the groot version, written into feedback items
 	UserHome string // the user's home directory: the root space and "~" expansion
 	Config   config.Config
-	// ConfigPath is the configuration file in use; /model --default and
-	// set_default_model write provider.model into it. Empty means groot.yaml.
-	ConfigPath string
-	Spaces     *space.Store
-	Gate       gate.Gate
+	// ConfigPath is the project configuration file (-config, default
+	// ./groot.yaml). GlobalConfigPath is the file in the groot home. Writes
+	// (/model --default, set_context_window) go to ConfigPath when it exists,
+	// otherwise to GlobalConfigPath. Empty ConfigPath means groot.yaml.
+	ConfigPath       string
+	GlobalConfigPath string
+	Spaces           *space.Store
+	Gate             gate.Gate
 	// Sandbox confines the bash tool. Nil runs commands unwrapped.
 	Sandbox sandbox.Runner
 	Hooks   Hooks
