@@ -124,8 +124,10 @@ done on main too: servers from the global config, allowlisted tools, `/mcp` and
 
 ## 0.6.0: connectivity
 
-- Read-only log (LogQL) and metrics (PromQL) tools with namespace and
-  time-range guards.
+Decision (2026-10-25): 0.6.0 ships the base structure only. Domain tools are
+built when a real task needs them, not ahead of it. The first of those is in
+the backlog below.
+
 - Bedrock, Vertex, Ollama and OpenAI-compatible adapters, chosen by the model
   id prefix. Only when asked: Anthropic stays the single provider until then.
 - Candidates, see the decisions above: ACP client, skills.
@@ -135,6 +137,16 @@ done on main too: servers from the global config, allowlisted tools, `/mcp` and
   space and its gates, so a network protocol between opaque agents is the wrong
   layer there. Inbox rows should stay mappable to an A2A Message (message id,
   context id pointing at the flow task, parts), so a bridge is an adapter.
+
+## Backlog: domain tools, built on demand
+
+- Read-only log (LogQL) and metrics (PromQL) tools with namespace and
+  time-range guards. Design kept: four tools (`promql_query`, `promql_range`,
+  `logql_query`, `logql_labels`), `observability.prometheus|loki` config with
+  url, headers via `${VAR}`, `max_range`, `require_namespace` and a namespace
+  allowlist checked over the matcher blocks, compact output, a doctor section.
+  Postponed on 2026-10-25 until a task needs them; until then agents can reach
+  Prometheus and Loki through an MCP server.
 
 ## Later
 
