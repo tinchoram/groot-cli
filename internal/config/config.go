@@ -227,7 +227,7 @@ func Default() Config {
 		Audit:      AuditConfig{Path: ".groot/audit.jsonl"},
 		Gate:       GateConfig{Policy: "interactive"},
 		Work:       WorkConfig{MaxTurns: 50, MaxAutoTurns: 10, MaxUSD: 5.0, AlwaysAsk: DefaultAlwaysAsk()},
-		Bash:       BashConfig{Sandbox: SandboxConfig{Mode: "auto"}},
+		Bash:       BashConfig{Timeout: DefaultBashTimeout, MaxTimeout: DefaultBashMaxTimeout, Sandbox: SandboxConfig{Mode: "auto"}},
 		Guard:      GuardConfig{Mode: "warn"},
 		Updates:    UpdatesConfig{Check: true},
 		Flow: FlowConfig{Mode: "strict", Delegation: "auto", Manager: "project-manager", Routes: FlowRoutes{

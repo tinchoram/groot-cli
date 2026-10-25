@@ -269,7 +269,9 @@ files were loaded.
   (`--kubeconfig`, `--token`, `--as`, `--server`, ...) are refused. With an
   allowlist, `-A` is refused and a namespace is required. The kubectl tool runs
   outside the sandbox, since it needs your kubeconfig and the network.
-- **Limits.** Commands time out after 60 seconds. Output is capped (32 KB for
+- **Limits.** Commands time out after 60 seconds by default. A bash call can pass
+  `timeout_seconds` to run a test suite or build longer, up to `bash.max_timeout`.
+  Output is capped (32 KB for
   bash, 64 KB for kubectl). `read_file` returns 64 KB per call and takes `offset`
   and `limit` in bytes to read the rest of a larger file.
 - **Redaction.** Obvious secrets (`password=`, `token:`, `api_key=`, `Bearer`)
@@ -356,6 +358,8 @@ variables.
 
 ```yaml
 bash:
+  timeout: 60s            # default limit of one command; at least 1s
+  max_timeout: 10m        # ceiling for a call's timeout_seconds; at least timeout, at most 1h
   sandbox:
     mode: auto            # auto | strict | off; the scalar form `sandbox: strict` also works
     network: false        # let bash reach the network (kubectl, aws, curl, git push)

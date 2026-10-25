@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	defaultExecTimeout = 60 * time.Second
-	bashOutputLimit    = 32 * 1024
-	kubectlOutputLimit = 64 * 1024
+	defaultExecTimeout    = 60 * time.Second
+	defaultExecMaxTimeout = 10 * time.Minute
+	bashOutputLimit       = 32 * 1024
+	kubectlOutputLimit    = 64 * 1024
 )
 
 // cappedBuffer keeps at most limit bytes and records that it dropped the rest.
@@ -116,6 +117,7 @@ func runCmd(ctx context.Context, timeout time.Duration, outLimit int, build func
 type Bash struct {
 	Dir           string
 	Timeout       time.Duration
+	MaxTimeout    time.Duration // ceiling for a call's timeout_seconds
 	Runner        shellsandbox.Runner
 	Network       bool
 	ExtraWritable []string
@@ -134,18 +136,19 @@ func (b *Bash) SandboxName() string {
 
 // NewBash returns the bash tool. Commands run in dir (empty means the process cwd).
 func NewBash(dir string) *Bash {
-	return &Bash{Dir: dir, Timeout: defaultExecTimeout}
+	return &Bash{Dir: dir, Timeout: defaultExecTimeout, MaxTimeout: defaultExecMaxTimeout}
 }
 
 type commandInput struct {
-	Command string `json:"command"`
+	Command        string `json:"command"`
+	TimeoutSeconds *int   `json:"timeout_seconds"`
 }
 
 func (*Bash) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "bash",
-		Description: "Run a shell command with sh -c. Times out after 60 seconds; output is capped at 32 KB.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}`),
+		Description: "Run a shell command in the space. Default timeout 60s; pass timeout_seconds (up to the configured maximum, default 600) for test suites or builds instead of backgrounding them and polling.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer"}},"required":["command"]}`),
 	}
 }
 
@@ -176,10 +179,33 @@ func (b *Bash) execute(ctx context.Context, input string) (string, bool) {
 	if timeout <= 0 {
 		timeout = defaultExecTimeout
 	}
-	argv := []string{"sh", "-c", in.Command}
+	maxTimeout := b.MaxTimeout
+	if maxTimeout <= 0 {
+		maxTimeout = defaultExecMaxTimeout
+	}
+	var notice string
+	if in.TimeoutSeconds != nil {
+		secs := *in.TimeoutSeconds
+		if secs <= 0 {
+			return "invalid input: timeout_seconds must be a positive integer", true
+		}
+		maxSecs := int(maxTimeout / time.Second)
+		if secs > maxSecs {
+			notice = fmt.Sprintf("[bash: timeout_seconds %d clamped to %d]\n", secs, maxSecs)
+			timeout = maxTimeout
+		} else {
+			timeout = time.Duration(secs) * time.Second
+		}
+	}
+	out, isErr := b.run(ctx, in.Command, timeout, maxTimeout)
+	return notice + out, isErr
+}
+
+func (b *Bash) run(ctx context.Context, command string, timeout, maxTimeout time.Duration) (string, bool) {
+	argv := []string{"sh", "-c", command}
 	if b.Runner == nil {
 		res := runCapped(ctx, timeout, bashOutputLimit, b.Dir, argv[0], argv[1:]...)
-		return describeResult(res, timeout, "command")
+		return describeBash(res, timeout, maxTimeout)
 	}
 	dir := b.Dir
 	if dir == "" {
@@ -194,11 +220,28 @@ func (b *Bash) execute(ctx context.Context, input string) (string, bool) {
 	res := runCmd(ctx, timeout, bashOutputLimit, func(c context.Context) (*exec.Cmd, error) {
 		return b.Runner.Wrap(c, spec)
 	})
-	out, isErr := describeResult(res, timeout, "command")
+	out, isErr := describeBash(res, timeout, maxTimeout)
 	if b.Runner.Name() == shellsandbox.BackendNone && res.startErr == nil {
 		out = noSandboxNotice + "\n" + out
 	}
 	return out, isErr
+}
+
+// describeBash is describeResult with a timeout message that names the limit
+// and the call that raises it.
+func describeBash(res runResult, timeout, maxTimeout time.Duration) (string, bool) {
+	if res.timedOut {
+		return strings.TrimRight(res.output, "\n") + fmt.Sprintf("\n[command timed out after %s; rerun with timeout_seconds up to %d if it needs longer]", formatLimit(timeout), int(maxTimeout/time.Second)), true
+	}
+	return describeResult(res, timeout, "command")
+}
+
+// formatLimit prints whole seconds as "60s", not Duration's "1m0s".
+func formatLimit(d time.Duration) string {
+	if d%time.Second == 0 {
+		return fmt.Sprintf("%ds", int(d/time.Second))
+	}
+	return d.String()
 }
 
 func describeResult(res runResult, timeout time.Duration, what string) (string, bool) {

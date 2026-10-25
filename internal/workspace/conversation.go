@@ -377,6 +377,8 @@ func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messen
 		return trackedTool{Tool: tool.NewWriteFile(root), log: files}, nil
 	case "bash":
 		b := tool.NewBash(root)
+		b.Timeout = w.opts.Config.Bash.Timeout
+		b.MaxTimeout = w.opts.Config.Bash.MaxTimeout
 		b.Runner = w.opts.Sandbox
 		b.Network = w.opts.Config.Bash.Sandbox.Network
 		b.ExtraWritable = w.opts.Config.Bash.Sandbox.ExtraWritable

@@ -63,6 +63,14 @@ built in one day of live testing, so they are grouped by what shipped.
   file is larger than the window, the first line says which bytes came back and the
   `offset` to continue from, for example `[read_file: showing bytes 0-65535 of 68342;
   call again with offset=65536 to continue]`. Windows never split a UTF-8 rune.
+- A test suite run through bash hit the 60 second limit, so the agent backgrounded
+  it with `&` and polled with `sleep 30` and `sleep 40`, using four or five model
+  turns. The bash tool now takes `timeout_seconds` for one command, up to
+  `bash.max_timeout` (default 10m, at most 1h). Larger values are clamped and the
+  result starts with `[bash: timeout_seconds 900 clamped to 600]`. A timeout names
+  the limit and the fix: `command timed out after 60s; rerun with timeout_seconds
+  up to 600 if it needs longer`. `bash.timeout` (default 60s, at least 1s) sets the
+  limit for a call that names none.
 
 ## 0.5.5-dev (unreleased)
 
