@@ -1264,7 +1264,8 @@ Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.
 - when the task reaches deliver, work mode turns off and a review appears: the
   changes (`git diff --stat`, or the files written during the task), the evidence,
   and the agent's deliver note. `/task accept` closes the task, and `/task reject
-  <reason>` sends it back to implement with the reason.
+  <reason>` sends it back to implement with the reason. The delivery review lists
+  the test runs of the cycle with their exit codes.
 
 Approvals are one line in the box above the input, for example
 `allow write_file: notes/a.md (+3 −1)? (y/n/a)`. Press `d` or type `/diff` to see the

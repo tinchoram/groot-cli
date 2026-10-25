@@ -577,8 +577,12 @@ func (c *Controller) Status(context.Context) string {
 		return fmt.Sprintf("no open task; classified %s", c.classified)
 	}
 	t := c.active
-	return fmt.Sprintf("task #%d · %s · %s\ngoal: %s\nscope: %s\ndone when: %s\nevidence: %d",
+	out := fmt.Sprintf("task #%d · %s · %s\ngoal: %s\nscope: %s\ndone when: %s\nevidence: %d",
 		t.ID, t.Size, t.Phase, t.Goal, t.Scope, t.DoneWhen, len(t.Evidence)) + statusSuffix(*t) + specLines(*t)
+	if t.Phase == PhaseVerify || t.Phase == PhaseDeliver {
+		out += "\n" + FormatTestRuns(TestRuns(t.Evidence, CycleStart(t.Evidence)))
+	}
+	return out
 }
 
 // ContextBlock is the line prepended to the system prompt on every turn.

@@ -126,6 +126,7 @@ func reviewText(ctx context.Context, t flow.Task, space string, files []string) 
 			b.WriteString("  " + s.Line() + "\n")
 		}
 	}
+	b.WriteString(flow.FormatTestRuns(flow.TestRuns(t.Evidence, flow.CycleStart(t.Evidence))) + "\n")
 	b.WriteString("work mode is off. /task accept closes the task; /task reject <reason> sends it back to implement.")
 	return b.String()
 }

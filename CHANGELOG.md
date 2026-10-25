@@ -47,6 +47,10 @@ built in one day of live testing, so they are grouped by what shipped.
   current.
 - The flow tables gain `task_specs`, added on open for older databases; copy and
   rename of agents carry the specs with their tasks.
+- The delivery review lists the test runs of the implement cycle with their exit
+  codes, oldest first, and `/task status` shows the same block in verify and
+  deliver. The cycle starts at the newest note in implement. The block states no
+  verdict; the agent's per-turn context does not carry it.
 
 ### Fixes
 - An agent that used up its turn budget returned `agent reached max turns without

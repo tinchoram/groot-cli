@@ -109,3 +109,61 @@ func TestSetWorkModeOpensTheConversationAndTogglesIt(t *testing.T) {
 		t.Fatal("work mode is off again")
 	}
 }
+
+func TestReviewListsTheTestRunsOfTheCycleWithTheirExitCodes(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t,
+		classifyStep("tu_1", "medium", true, "two files"),
+		toolStep("tu_2", "task_open", map[string]string{"goal": "ship", "scope": "space", "done_when": "tests pass"}),
+		toolStep("tu_3", "bash", map[string]string{"command": "echo go test ./internal/memory/... && false"}),
+		toolStep("tu_4", "bash", map[string]string{"command": "echo go test ./internal/memory/..."}),
+		toolStep("tu_5", "task_advance", map[string]string{"phase": "verify"}),
+		toolStep("tu_6", "bash", map[string]string{"command": "echo go test ./..."}),
+		toolStep("tu_7", "task_advance", map[string]string{"phase": "deliver", "evidence": "changed a.txt; risk: none known"}),
+		text("delivered"),
+	)
+	flowAgent(t, f)
+	conv := f.ws.Chat()
+	conv.SetWorkMode(true)
+	if _, err := conv.Send(ctx, "build it"); err != nil {
+		t.Fatal(err)
+	}
+	review := conv.TakeReview()
+	for _, want := range []string{
+		"Test runs this cycle (oldest first):",
+		"1. exit non-zero",
+		"2. exit 0",
+		"go test ./internal/memory/...",
+		"3. exit 0",
+		"go test ./...   ",
+		"(verify)",
+	} {
+		if !strings.Contains(review, want) {
+			t.Fatalf("review misses %q:\n%s", want, review)
+		}
+	}
+	if strings.Index(review, "Test runs this cycle") > strings.Index(review, "work mode is off") {
+		t.Fatalf("the test block comes before the closing line:\n%s", review)
+	}
+}
+
+func TestReviewSaysWhenNoTestRunWasRecorded(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t,
+		classifyStep("tu_1", "medium", true, "two files"),
+		toolStep("tu_2", "task_open", map[string]string{"goal": "ship", "scope": "space", "done_when": "tests pass"}),
+		toolStep("tu_3", "bash", map[string]string{"command": "echo hi"}),
+		toolStep("tu_4", "task_advance", map[string]string{"phase": "verify"}),
+		toolStep("tu_5", "task_advance", map[string]string{"phase": "deliver", "evidence": "done"}),
+		text("delivered"),
+	)
+	flowAgent(t, f)
+	conv := f.ws.Chat()
+	conv.SetWorkMode(true)
+	if _, err := conv.Send(ctx, "go"); err != nil {
+		t.Fatal(err)
+	}
+	if review := conv.TakeReview(); !strings.Contains(review, "Test runs this cycle: none recorded") {
+		t.Fatalf("review = %s", review)
+	}
+}
