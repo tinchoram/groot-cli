@@ -42,6 +42,7 @@ type Config struct {
 	Bash         BashConfig       `yaml:"bash"`
 	Guard        GuardConfig      `yaml:"guard"`
 	Updates      UpdatesConfig    `yaml:"updates"`
+	MCP          MCPConfig        `yaml:"mcp"`
 }
 
 // UpdatesConfig controls the release check. Check (default true) asks GitHub
@@ -242,14 +243,16 @@ func Load(path string) (Config, error) {
 	return LoadLayers(path)
 }
 
-// LoadLayers applies the files in order over the defaults: the global file
-// first, then the project file. A missing path is skipped, so callers decide
-// which files are required. Scalars in a later file override earlier ones, lists
-// are replaced whole, and maps merge key by key. The merged result is validated
-// once, at the end.
+// LoadLayers applies the files in order over the defaults. The first path is
+// the global file; every later path is a project file. A missing path is
+// skipped, so callers decide which files are required. Scalars in a later file
+// override earlier ones, lists are replaced whole, and maps merge key by key.
+// A project file may not define mcp.servers. The mcp section keeps its ${VAR}
+// references literal here; they expand at connect time. The merged result is
+// validated once, at the end.
 func LoadLayers(paths ...string) (Config, error) {
 	cfg := Default()
-	for _, path := range paths {
+	for i, path := range paths {
 		raw, err := os.ReadFile(path)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
@@ -257,19 +260,47 @@ func LoadLayers(paths ...string) (Config, error) {
 		if err != nil {
 			return cfg, fmt.Errorf("read %s: %w", path, err)
 		}
+		if i > 0 {
+			if err := rejectProjectServers(path, raw); err != nil {
+				return cfg, err
+			}
+		}
 
 		var doc yaml.Node
 		if err := yaml.Unmarshal(raw, &doc); err != nil {
 			return cfg, fmt.Errorf("parse %s: %w", path, err)
 		}
-		expandNode(&doc, os.LookupEnv)
+		expandConfigNode(&doc, os.LookupEnv)
 		if err := doc.Decode(&cfg); err != nil {
 			return cfg, fmt.Errorf("decode %s: %w", path, err)
 		}
 	}
 	// An unset ${VAR:-} expands to "", which must not become an allowlist entry.
 	cfg.Kubectl.Namespaces = dropEmpty(cfg.Kubectl.Namespaces)
+	for name, s := range cfg.MCP.Servers {
+		if s.Timeout == 0 {
+			s.Timeout = DefaultMCPTimeout
+			cfg.MCP.Servers[name] = s
+		}
+	}
 	return cfg, cfg.Validate()
+}
+
+// rejectProjectServers refuses a project file that defines MCP servers. A
+// project file that cannot be probed is left to the decode that follows.
+func rejectProjectServers(path string, raw []byte) error {
+	var probe struct {
+		MCP struct {
+			Servers yaml.Node `yaml:"servers"`
+		} `yaml:"mcp"`
+	}
+	if err := yaml.Unmarshal(raw, &probe); err != nil {
+		return nil
+	}
+	if probe.MCP.Servers.Kind != 0 {
+		return fmt.Errorf("%s: mcp.servers can only be set in the global config (~/.groot/groot.yaml): a project file cannot start processes", path)
+	}
+	return nil
 }
 
 func dropEmpty(in []string) []string {
@@ -299,6 +330,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf("memory.preamble_summaries must not be negative, got %d", c.Memory.PreambleSummaries)
 	}
 	if err := validateBash(c.Bash); err != nil {
+		return err
+	}
+	if err := validateMCP(c.MCP); err != nil {
 		return err
 	}
 	for i, s := range c.Audit.Sinks {
@@ -387,6 +421,26 @@ func Expand(s string, lookup func(string) (string, bool)) string {
 		}
 		return ""
 	})
+}
+
+// expandConfigNode expands the document like expandNode, except the top-level
+// mcp section, whose references expand at connect time.
+func expandConfigNode(doc *yaml.Node, lookup func(string) (string, bool)) {
+	root := doc
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		root = root.Content[0]
+	}
+	if root.Kind != yaml.MappingNode {
+		expandNode(doc, lookup)
+		return
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "mcp" {
+			continue
+		}
+		expandNode(root.Content[i], lookup)
+		expandNode(root.Content[i+1], lookup)
+	}
 }
 
 // expandNode expands every scalar in the YAML tree.
