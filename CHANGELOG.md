@@ -3,6 +3,23 @@
 All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
+## 0.5.2 — 2026-10-25
+
+### Memory
+- `/clear` keeps the agent's memory in view. The "Long-term memory" block of
+  the system prompt was composed once when the conversation opened, so a
+  cleared session did not see the summary just written nor anything remembered
+  since. The prompt is now rebuilt on `/clear`, once right away and again after
+  the summary of the cleared session is stored. Closes FEAT-013.
+- `/memory` lists the entries the active agent carries in its prompt (id, kind,
+  scope, age, text) and how many entries it can read in all. `/memory <query>`
+  searches them.
+
+### Messaging
+- `/readinbox` makes the active agent read its unread messages in one turn and
+  report sender, subject, a one-line summary and which ones need an answer.
+  With nothing unread it prints a note and spends no turn. Closes BUG-004.
+
 ## 0.5.1 — 2026-10-25
 
 ### Fixed
