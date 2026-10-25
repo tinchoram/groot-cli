@@ -224,12 +224,13 @@ func renderBannerRow(line string, row, shine int) string {
 const bannerHint = "type a message · /help for commands · ctrl-d to exit"
 
 // versionTag is the version as the banner prints it, or "" when the build
-// carries no version. A terminal has one font size, so "smaller" is faint.
+// carries no version. It takes the deep green of the palette: quieter than
+// the wordmark, still green against the dim text above it.
 func versionTag(version string) string {
 	if strings.TrimSpace(version) == "" {
 		return ""
 	}
-	return styleDim.Render("v" + version)
+	return styleStatus.Render("v" + version)
 }
 
 // underName are the lines printed under the name, left aligned with it: the
