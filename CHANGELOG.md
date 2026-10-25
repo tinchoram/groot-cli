@@ -3,6 +3,17 @@
 All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
+## 0.5.3 — 2026-10-25
+
+### Backlog sweep
+- The changelog is embedded in the binary and debug reads it with the new
+  `read_changelog` tool, so the release sweep works from any space. Before,
+  the rule looked for `CHANGELOG.md` at the root of the space, and debug lives
+  in the root space, the home directory, where there is none. Entries marked
+  unreleased or `-dev` never close an item. Debug no longer needs `read_file`.
+- `read_changelog <version>` returns one entry; without a version, the whole
+  changelog. A test ties the version string to a changelog heading.
+
 ## 0.5.2 — 2026-10-25
 
 ### Memory
