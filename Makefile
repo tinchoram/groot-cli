@@ -3,7 +3,7 @@ PKG     := ./cmd/groot
 VERSION ?= 0.5.5-dev
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: all build test e2e lint vet fmt run clean release-check snapshot
+.PHONY: all build test e2e lint vet fmt run clean release-check snapshot install-check
 
 all: build test
 
@@ -44,3 +44,8 @@ release-check:
 snapshot:
 	@command -v goreleaser >/dev/null 2>&1 || { echo "goreleaser is required: brew install goreleaser"; exit 1; }
 	goreleaser release --snapshot --clean --skip=publish
+
+# install-check lints install.sh with shellcheck when it is installed. The
+# installer's tests run with `make test`.
+install-check:
+	@if command -v shellcheck >/dev/null 2>&1; then shellcheck install.sh; else echo "shellcheck not installed: skipping install-check (brew install shellcheck)"; fi

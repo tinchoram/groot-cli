@@ -48,7 +48,7 @@ is the plan for the first public release.
 
 | Path | Platform | Needs the repo public | Status |
 |---|---|---|---|
-| `curl -fsSL <url>/install.sh \| sh` | macOS, Linux | yes for anonymous download | planned, next |
+| `curl -fsSL https://raw.githubusercontent.com/tinchoram/groot-cli/main/install.sh \| sh` | macOS, Linux | yes: the raw URL answers 404 while the repo is private (use `gh api`, see README "Install") | done, `install.sh` at the repo root and in each release |
 | `brew tap tinchoram/groot && brew install groot` | macOS, Linux | yes | planned; goreleaser `brews:` pushes the formula to `tinchoram/homebrew-groot` |
 | Manual: download the archive, check the sum, move the binary | macOS, Linux | token while private | done, see README "Install" |
 | `.deb` / `.rpm` through goreleaser `nfpms:` | Linux | yes | later |
@@ -110,8 +110,8 @@ Consequences:
 
 ## Order of the remaining work
 
-1. `install.sh` for macOS and Linux (detect OS and arch, download, verify the
-   checksum, install to `~/.local/bin`, run `groot doctor`).
+1. `install.sh` for macOS and Linux (done: detects OS and arch, downloads, verifies
+   the checksum, installs to `~/.local/bin`, runs `groot doctor`).
 2. First public release: make the repository public, tag, let the workflow
    publish, verify `groot upgrade --check` against it.
 3. Homebrew tap through goreleaser.

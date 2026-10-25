@@ -30,6 +30,11 @@ built in one day of live testing, so they are grouped by what shipped.
   copies, and the result lists the counts.
 
 ### Distribution
+- `install.sh` at the repository root installs groot on macOS and Linux. It
+  detects the platform, downloads the release archive, checks its sha256 against
+  `checksums.txt`, installs `groot` into `~/.local/bin` (or `GROOT_INSTALL_DIR`),
+  and runs `groot doctor`. `GROOT_VERSION` pins a release. While the repository is
+  private it needs `GITHUB_TOKEN`. Each release carries the script.
 - A fresh home holds `root` and `groot` only. Bootstrap no longer creates or
   assigns the `debug` agent, the one that keeps the groot backlog. It ships in the
   built-in library: install it with `install_agent debug` or `/agent install debug`,

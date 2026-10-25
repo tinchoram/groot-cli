@@ -74,6 +74,32 @@ in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Install
 
+On macOS or Linux, one command installs the latest release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tinchoram/groot-cli/main/install.sh | sh
+groot auth login
+```
+
+The script downloads the archive for your platform, checks it against
+`checksums.txt`, installs `groot` into `~/.local/bin`, and runs `groot doctor`.
+Environment variables it reads:
+
+- `GROOT_VERSION`: a release to install, with or without the `v` (default: latest).
+- `GROOT_INSTALL_DIR`: where to put `groot` (default: `~/.local/bin`).
+- `GITHUB_TOKEN` (or `GH_TOKEN`): a token that can read the repository. Needed
+  while the repository is private.
+
+While the repository is private, the raw URL answers 404. Fetch the script with
+`gh` instead, and give it a token:
+
+```sh
+export GITHUB_TOKEN=$(gh auth token)
+gh api repos/tinchoram/groot-cli/contents/install.sh -H 'Accept: application/vnd.github.raw' | sh
+```
+
+### Manual install
+
 Each release is on the GitHub releases page of `tinchoram/groot-cli`: one archive
 per platform named `groot_<version>_<os>_<arch>.tar.gz` (`darwin` or `linux`,
 `amd64` or `arm64`), and `checksums.txt` with the sha256 of each archive.

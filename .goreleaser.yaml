@@ -46,6 +46,9 @@ release:
   github:
     owner: tinchoram
     name: groot-cli
+  # The installer ships with each release, so the script matches the archives.
+  extra_files:
+    - glob: ./install.sh
 
 changelog:
   disable: true
