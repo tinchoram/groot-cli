@@ -44,14 +44,14 @@ type AgentDef struct {
 var KnownTools = []string{
 	"read_file", "list_dir", "glob", "write_file", "bash", "kubectl", "remember", "recall", "memory_get", "forget", "update_memory",
 	"list_spaces", "create_space", "assign_agent", "unassign_agent", "list_agents", "create_agent",
-	"import_agent", "list_library", "install_agent", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "feedback_report", "feedback_list", "feedback_update", "read_changelog", "fetch_url", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model", "grant_global_memory", "revoke_global_memory",
+	"import_agent", "list_library", "install_agent", "send_message", "read_inbox", "current_time", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "feedback_report", "feedback_list", "feedback_update", "read_changelog", "fetch_url", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model", "grant_global_memory", "revoke_global_memory",
 	"delete_space", "edit_space", "delete_agent", "edit_agent", "move_agent", "copy_agent",
 }
 
 // DefaultTools is the tool set given to agents created with /agent new.
 // It is read-leaning: no file writes and no shell.
 func DefaultTools() []string {
-	return []string{"read_file", "kubectl", "recall", "remember", "memory_get", "forget", "update_memory", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "feedback_list"}
+	return []string{"read_file", "kubectl", "recall", "remember", "memory_get", "forget", "update_memory", "send_message", "read_inbox", "current_time", "task_classify", "task_open", "task_advance", "task_status", "feedback_list"}
 }
 
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)

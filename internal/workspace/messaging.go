@@ -54,6 +54,50 @@ func (m *messenger) Send(ctx context.Context, to, subject, body string) (string,
 	return space + "/" + agent, id, nil
 }
 
+// Ack delivers a confirmation. It is stored as an ack: it does not start a
+// turn in work mode, is not injected into one, and is not counted as unread.
+// The recipient sees it once as a note when its conversation is shown.
+func (m *messenger) Ack(ctx context.Context, to, body string) (string, int64, error) {
+	space, agent, err := m.w.resolveRecipient(m.space, to)
+	if err != nil {
+		return "", 0, err
+	}
+	id, err := m.w.inbox.Send(ctx, inbox.Message{
+		FromSpace: m.space, FromAgent: m.agent,
+		ToSpace: space, ToAgent: agent,
+		Body: body, Kind: inbox.KindAck,
+	})
+	if err != nil {
+		return "", 0, err
+	}
+	if h := m.w.opts.Hooks.OnInbox; h != nil {
+		h()
+	}
+	return space + "/" + agent, id, nil
+}
+
+// TakeAcks returns the acks of the active agent that have not been shown yet,
+// and marks them read: each ack is returned by one call only. The history keeps
+// them.
+func (w *Workspace) TakeAcks(ctx context.Context) ([]inbox.Message, error) {
+	cur, agent, err := w.activeAgent()
+	if err != nil {
+		return nil, err
+	}
+	acks, err := w.inbox.PendingAcks(ctx, cur, agent)
+	if err != nil || len(acks) == 0 {
+		return acks, err
+	}
+	ids := make([]int64, len(acks))
+	for i, a := range acks {
+		ids[i] = a.ID
+	}
+	if err := w.inbox.MarkAcksRead(ctx, ids); err != nil {
+		return nil, err
+	}
+	return acks, nil
+}
+
 // Unread returns the unread messages of the sender's agent.
 func (m *messenger) Unread(ctx context.Context) ([]inbox.Message, error) {
 	return m.w.inbox.Unread(ctx, m.space, m.agent)

@@ -2,7 +2,9 @@ package tool
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 // fakeMessenger records sends and serves a fixed inbox.
 type fakeMessenger struct {
 	sent     []string
+	acked    []string
 	unread   []inbox.Message
 	marked   []int64
 	sendErr  error
@@ -27,6 +30,74 @@ func (f *fakeMessenger) Send(_ context.Context, to, subject, body string) (strin
 	f.nextID++
 	f.sent = append(f.sent, to+"|"+subject+"|"+body)
 	return f.resolved, f.nextID, nil
+}
+
+func (f *fakeMessenger) Ack(_ context.Context, to, body string) (string, int64, error) {
+	if f.sendErr != nil {
+		return "", 0, f.sendErr
+	}
+	f.nextID++
+	f.acked = append(f.acked, to+"|"+body)
+	return f.resolved, f.nextID, nil
+}
+
+// TestSendMessageAckUsesTheAckPath checks that ack: true is delivered as an ack,
+// not as a message, and that the subject is optional for it.
+func TestSendMessageAckUsesTheAckPath(t *testing.T) {
+	f := &fakeMessenger{resolved: "payments/debug"}
+	out, isErr := NewSendMessage(f).Execute(context.Background(),
+		`{"to":"reviewer","body":"FEAT-016 recorded","ack":true}`)
+	if isErr {
+		t.Fatalf("ack failed: %s", out)
+	}
+	if len(f.acked) != 1 || f.acked[0] != "reviewer|FEAT-016 recorded" || len(f.sent) != 0 {
+		t.Fatalf("acked = %v, sent = %v", f.acked, f.sent)
+	}
+}
+
+func TestSendMessageAckBodyIsCappedAtTwoHundredRunes(t *testing.T) {
+	f := &fakeMessenger{}
+	ok := strings.Repeat("é", 200)
+	if out, isErr := NewSendMessage(f).Execute(context.Background(), `{"to":"reviewer","body":"`+ok+`","ack":true}`); isErr {
+		t.Fatalf("a 200-character ack must pass: %s", out)
+	}
+	long := strings.Repeat("x", 201)
+	out, isErr := NewSendMessage(f).Execute(context.Background(), `{"to":"reviewer","body":"`+long+`","ack":true}`)
+	if !isErr || !strings.Contains(out, "200") {
+		t.Fatalf("a 201-character ack must be an error naming the limit, got %q (isErr=%v)", out, isErr)
+	}
+	if len(f.acked) != 1 {
+		t.Fatalf("only the short ack may be delivered, acked = %d", len(f.acked))
+	}
+	if out, isErr := NewSendMessage(f).Execute(context.Background(), `{"to":"reviewer","body":"`+long+`"}`); isErr {
+		t.Fatalf("a long plain message is not limited by the ack cap: %s", out)
+	}
+}
+
+// TestSendMessageSchemaAcceptsAck checks the model-facing contract: an optional
+// boolean ack, described as the way to send short confirmations.
+func TestSendMessageSchemaAcceptsAck(t *testing.T) {
+	def := NewSendMessage(&fakeMessenger{}).Definition()
+	var schema struct {
+		Required   []string `json:"required"`
+		Properties map[string]struct {
+			Type        string `json:"type"`
+			Description string `json:"description"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
+		t.Fatalf("schema is not JSON: %v", err)
+	}
+	ack, ok := schema.Properties["ack"]
+	if !ok || ack.Type != "boolean" {
+		t.Fatalf("schema has no boolean ack property: %+v", schema.Properties)
+	}
+	if slices.Contains(schema.Required, "ack") {
+		t.Fatal("ack must be optional")
+	}
+	if !strings.Contains(def.Description, "ack") || !strings.Contains(ack.Description, "200") {
+		t.Fatalf("description must tell agents when to ack and the 200-character cap: %q / %q", def.Description, ack.Description)
+	}
 }
 
 func (f *fakeMessenger) Unread(context.Context) ([]inbox.Message, error) {

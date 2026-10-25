@@ -56,6 +56,8 @@ type Workspace interface {
 	Agent(name string) (workspace.AgentInfo, error)
 	UnreadCounts(ctx context.Context) (map[string]int, error)
 	Inbox(ctx context.Context, limit int) ([]inbox.Message, error)
+	// TakeAcks returns the acks of the active agent not shown yet, marking them shown.
+	TakeAcks(ctx context.Context) ([]inbox.Message, error)
 	SendByHand(ctx context.Context, to, subject, body string) (string, error)
 	UpgradeAgents(name string) ([]string, error)
 	SendFeedback(spaceName, agent, kind, text string, lines []string) (int64, string, error)

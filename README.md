@@ -1171,7 +1171,7 @@ Work mode decides by tool:
 | `bash`, unless it matches `work.always_ask` | `bash` matching `work.always_ask` (defaults: `rm -rf` outside the space, `sudo`, `git push --force`, `git reset --hard`, `git clean`, `kubectl apply/delete/patch/edit/scale/rollout`, `docker rm/rmi/system prune`, `terraform apply/destroy`, `curl`/`wget` writing a file) |
 | `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent`, `delete_space`, `edit_space`, `delete_agent`, `edit_agent`, `move_agent`, `copy_agent` |
 | `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_delegation`, `set_space_budget`, `set_agent_budget`, `set_context_window`, `set_work_mode` |
-| `get_context`, `get_cost`, `list_tasks`, `read_changelog` (read-only, not asked) | none; they answer as text |
+| `get_context`, `get_cost`, `list_tasks`, `read_changelog`, `current_time` (read-only, not asked) | none; they answer as text |
 | `task_classify`, `task_open`, `task_advance`, `task_status` | `set_work_mode` |
 
 Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.
@@ -1302,7 +1302,14 @@ capped at 16 KB and subjects at 200 characters.
   groot agent in the root space), `<agent>` (an agent in the sender's space), or
   `<space>/<agent>`. The recipient must be assigned to that space; otherwise the
   tool fails with `unknown recipient; use <space>/<agent>`.
-- `read_inbox` returns the agent's unread messages and marks them read.
+- `send_message {to, subject, body, ack}` with `ack: true` sends an
+  acknowledgement: a short confirmation that needs no answer, such as
+  `FEAT-016 recorded`. The body is limited to 200 characters. The recipient sees
+  it once as a one-line dim note (`ack from <agent>: ...`) when its conversation
+  is shown. An ack never enters a turn, never starts one in work mode, and is not
+  counted in the sidebar badges. `/inbox` lists it with an `ack` tag.
+- `read_inbox` returns the agent's unread messages and marks them read. Acks are
+  not included.
 - Unread messages are delivered into the next turn: up to five, oldest first, as
   `[inbox] from <space>/<agent> · <time>` blocks with their subject and body (8 KB
   at most). Delivered messages are marked read. The rest stay unread, and the turn

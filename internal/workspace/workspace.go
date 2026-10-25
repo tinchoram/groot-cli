@@ -616,6 +616,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	resumed := w.startOrResume(ctx, ag, st.mem, agentName)
 	conv = &Conversation{Agent: ag, prov: prov, store: mem.store, mem: mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, rebuildSystem: rebuildSystem, work: work, files: files, review: box,
 		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key), rebuildTools: rebuild,
+		clock:        w.opts.Now,
 		budgets:      func(ctx context.Context) ([]Budget, error) { return w.budgetsFor(ctx, st.mem, sp.Name, agentName) },
 		budgetNotice: keyedWarn(w.opts.Hooks, key)}
 	return conv, nil

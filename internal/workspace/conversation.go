@@ -12,6 +12,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/admintool"
 	"github.com/tinchoram/groot-cli/internal/agent"
 	"github.com/tinchoram/groot-cli/internal/api"
+	"github.com/tinchoram/groot-cli/internal/clock"
 	"github.com/tinchoram/groot-cli/internal/flow"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
@@ -78,6 +79,8 @@ type Conversation struct {
 	budgetWarned bool
 	// lastTurnUSD is what the last turn cost; it estimates the next one.
 	lastTurnUSD float64
+	// clock reads the time for the time line of each turn. Nil reads time.Now.
+	clock func() time.Time
 	// rebuildTools builds the registry of this conversation for a tool list,
 	// with the same flow, files, messenger, memory and guard it was opened with.
 	// Used when the agent's tools change while the conversation is open.
@@ -86,6 +89,24 @@ type Conversation struct {
 
 // Model returns the model used for the next call.
 func (c *Conversation) Model() string { return c.prov.Model() }
+
+// turnBlock is the context put in front of the base prompt on every turn: the
+// current time, then the flow line when there is a flow. It is rebuilt each
+// turn; the base prompt stays as it was cached.
+func (c *Conversation) turnBlock(ctx context.Context) string {
+	now := time.Now
+	if c.clock != nil {
+		now = c.clock
+	}
+	lines := []string{clock.PromptLine(now(), time.Local)}
+	if c.ctl != nil {
+		c.ctl.StartTurn()
+		if flowLine := c.ctl.ContextBlock(ctx); flowLine != "" {
+			lines = append(lines, flowLine)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
 
 // base returns the prompt before the flow block.
 func (c *Conversation) base() string {
@@ -181,10 +202,7 @@ func (c *Conversation) send(ctx context.Context, prompt string) (string, error) 
 	if err := c.checkBudget(ctx, c.lastTurnUSD); err != nil {
 		return "", err
 	}
-	if c.ctl != nil {
-		c.ctl.StartTurn()
-		c.Agent.System = withBlock(c.ctl.ContextBlock(ctx), c.base())
-	}
+	c.Agent.System = withBlock(c.turnBlock(ctx), c.base())
 	prompt = c.injectInbox(ctx, prompt)
 	if prompt == "" {
 		return "", nil
@@ -337,6 +355,8 @@ func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messen
 			return nil, errors.New("messaging is not available")
 		}
 		return tool.NewReadInbox(msg), nil
+	case "current_time":
+		return tool.NewCurrentTime(w.opts.Now), nil
 	case "read_file":
 		return tool.NewReadFile(root), nil
 	case "list_dir":

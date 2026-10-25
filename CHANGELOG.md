@@ -5,6 +5,24 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.5.5-dev (unreleased)
 
+### Time
+- Every turn starts with a `Current time:` line in local time, with the zone
+  (IANA name when the machine has one). It is rebuilt each turn; the cached base
+  prompt is unchanged. (FEAT-015)
+- New tool `current_time {timezone?}`: the current date, time, zone and unix
+  time, in the given IANA zone or in local time; with a zone it also shows the
+  local time for comparison. Read-only, no approval. An unknown zone is an error.
+  (FEAT-015)
+
+### Messaging
+- `send_message` takes `ack: true` for a short confirmation with no answer
+  (body up to 200 characters). Acks are kept in the inbox with kind `ack`: they
+  never enter a turn, never start one in work mode, and are not counted in the
+  unread badges. The recipient sees each one once as a note. `/inbox` tags them.
+  Older inbox databases are migrated on open; their rows stay messages.
+  (FEAT-016)
+- Debug sends its `<ID> recorded` and duplicate confirmations as acks. (FEAT-016)
+
 ### Memory
 - Scopes are `agent` (only its writer), `space` (every agent of the space, the
   default) and `global` (kept in the root database; groot writes it, and other

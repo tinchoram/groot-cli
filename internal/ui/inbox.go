@@ -32,9 +32,25 @@ func (m *Model) refreshUnread() {
 	counts, err := m.ws.UnreadCounts(context.Background())
 	if err != nil {
 		m.unread = nil
+	} else {
+		m.unread = counts
+	}
+	m.showAcks()
+}
+
+// showAcks writes the pending acks of the open conversation as one-line dim
+// notes. The workspace marks them shown when it hands them out, so each ack is
+// written once. Acks never count in the badges.
+func (m *Model) showAcks() {
+	acks, err := m.ws.TakeAcks(context.Background())
+	if err != nil {
+		m.append(styleError.Render("error: " + err.Error()))
 		return
 	}
-	m.unread = counts
+	for _, a := range acks {
+		body := strings.Join(strings.Fields(a.Body), " ")
+		m.append(styleDim.Render("ack from " + a.FromAgent + ": " + body))
+	}
 }
 
 // unreadBadge returns the badge for space/agent, or "" when nothing is unread.
@@ -125,8 +141,12 @@ func (m *Model) showInbox() {
 		if msg.ReadAt == nil {
 			state = "unread"
 		}
-		m.append(styleDim.Render(fmt.Sprintf("#%d · from %s/%s · %s · %s",
-			msg.ID, msg.FromSpace, msg.FromAgent, msg.CreatedAt.Format("2006-01-02 15:04"), state)))
+		tag := ""
+		if msg.IsAck() {
+			tag = " · ack"
+		}
+		m.append(styleDim.Render(fmt.Sprintf("#%d · from %s/%s · %s%s · %s",
+			msg.ID, msg.FromSpace, msg.FromAgent, msg.CreatedAt.Format("2006-01-02 15:04"), tag, state)))
 		if msg.Subject != "" {
 			m.append("Subject: " + msg.Subject)
 		}

@@ -187,6 +187,7 @@ type fakeWorkspace struct {
 	chat          *fakeSession
 	closed        bool
 	unread        map[string]int
+	acks          []inbox.Message // pending acks of the active agent, handed out by TakeAcks
 	workModes     map[string]bool
 	blockClose    bool
 	backlog       []feedback.Item
@@ -393,6 +394,13 @@ func (f *fakeWorkspace) UpgradeAgents(name string) ([]string, error) {
 }
 
 func (f *fakeWorkspace) Inbox(context.Context, int) ([]inbox.Message, error) { return f.inbox, nil }
+
+// TakeAcks hands out the pending acks once, as the workspace does.
+func (f *fakeWorkspace) TakeAcks(context.Context) ([]inbox.Message, error) {
+	out := f.acks
+	f.acks = nil
+	return out, nil
+}
 
 func (f *fakeWorkspace) SendByHand(_ context.Context, to, subject, body string) (string, error) {
 	f.handSent = append(f.handSent, to+"|"+subject+"|"+body)

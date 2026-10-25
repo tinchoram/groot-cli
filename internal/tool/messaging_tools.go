@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/tinchoram/groot-cli/internal/api"
 	"github.com/tinchoram/groot-cli/internal/guard"
@@ -18,6 +19,9 @@ type Messenger interface {
 	// Send delivers a message to "to" and returns the resolved recipient
 	// ("<space>/<agent>") and the message id.
 	Send(ctx context.Context, to, subject, body string) (recipient string, id int64, err error)
+	// Ack delivers a short confirmation to "to". It is shown to the recipient
+	// once as a note and never starts or enters a turn.
+	Ack(ctx context.Context, to, body string) (recipient string, id int64, err error)
 	// Unread returns the sender's unread messages, oldest first.
 	Unread(ctx context.Context) ([]inbox.Message, error)
 	// MarkRead marks the given messages as read.
@@ -36,13 +40,14 @@ type sendMessageInput struct {
 	To      string `json:"to"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
+	Ack     bool   `json:"ack"`
 }
 
 func (*SendMessage) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "send_message",
-		Description: "Send a message to another agent or to groot. Use \"groot\" for groot, \"<agent>\" for an agent in this space, or \"<space>/<agent>\". Keep requests concrete: goal, constraints, definition of done.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"to":{"type":"string"},"subject":{"type":"string"},"body":{"type":"string"}},"required":["to","body"]}`),
+		Description: "Send a message to another agent or to groot. Use \"groot\" for groot, \"<agent>\" for an agent in this space, or \"<space>/<agent>\". Keep requests concrete: goal, constraints, definition of done. Use ack: true for a short confirmation that needs no answer (for example \"FEAT-016 recorded\"): the recipient sees it once as a note, it does not start a turn, and it is limited to 200 characters.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"to":{"type":"string"},"subject":{"type":"string"},"body":{"type":"string"},"ack":{"type":"boolean","description":"Short confirmation that needs no answer; body up to 200 characters. Default false."}},"required":["to","body"]}`),
 	}
 }
 
@@ -82,7 +87,16 @@ func (s *SendMessage) execute(ctx context.Context, input string) (string, bool) 
 	if strings.TrimSpace(in.Body) == "" {
 		return "body is required", true
 	}
-	recipient, id, err := s.messenger.Send(ctx, in.To, in.Subject, in.Body)
+	if in.Ack && utf8.RuneCountInString(in.Body) > inbox.MaxAckRunes {
+		return fmt.Sprintf("ack body exceeds %d characters; send a message without ack for longer text", inbox.MaxAckRunes), true
+	}
+	send := s.messenger.Send
+	if in.Ack {
+		send = func(ctx context.Context, to, _, body string) (string, int64, error) {
+			return s.messenger.Ack(ctx, to, body)
+		}
+	}
+	recipient, id, err := send(ctx, in.To, in.Subject, in.Body)
 	if err != nil {
 		return err.Error(), true
 	}
