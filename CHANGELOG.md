@@ -3,6 +3,14 @@
 All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
+## 0.5.4-dev (unreleased)
+
+### UI
+- The status line above the input starts with the active agent as a badge:
+  dark text on the primary green. It stays while the agent thinks, while
+  others work in the background and while groot closes, so the name of the
+  agent you are writing to is always in view.
+
 ## 0.5.3 — 2026-10-25
 
 ### Backlog sweep

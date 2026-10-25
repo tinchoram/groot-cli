@@ -80,26 +80,41 @@ func (m Model) viewSidebar(w, h int, full bool) string {
 		Render(strings.Join(lines, "\n"))
 }
 
-// statusLine is the single row above the input box: a spinner while the
-// agent works, otherwise the model and the session usage in dim text.
+// statusLine is the single row above the input box. It starts with the agent
+// badge, then a spinner while the agent works, otherwise the model and the
+// session usage in dim text.
 func (m Model) statusLine() string {
+	lead := "  "
+	if b := m.agentBadge(); b != "" {
+		lead += b + " "
+	}
 	switch {
 	case m.closing:
-		return "  " + styleDim.Render("closing… (esc to skip summaries)")
+		return lead + styleDim.Render("closing… (esc to skip summaries)")
 	case m.pending != nil:
 		return ""
 	case m.busy:
-		return "  " + m.spin.View() + " " + styleDim.Render("thinking...")
+		return lead + m.spin.View() + " " + styleDim.Render("thinking...")
 	case m.othersBusy() > 0:
-		return "  " + styleDim.Render(strconv.Itoa(m.othersBusy())+" agents working in background")
+		return lead + styleDim.Render(strconv.Itoa(m.othersBusy())+" agents working in background")
 	case m.note != "" && time.Now().Before(m.noteUntil):
-		return "  " + styleDim.Render(m.note)
+		return lead + styleDim.Render(m.note)
 	}
 	parts := []string{m.session.Model()}
 	if usage := statusUsage(m.session.Usage(), m.session.CostUSD(), m.showCost); usage != "" {
 		parts = append(parts, usage)
 	}
-	return "  " + styleDim.Render(strings.Join(parts, " · "))
+	return lead + styleDim.Render(strings.Join(parts, " · "))
+}
+
+// agentBadge is the name of the active agent as a highlighted label, or ""
+// when no agent is selected.
+func (m Model) agentBadge() string {
+	agent := m.ws.ActiveAgent()
+	if agent == "" {
+		return ""
+	}
+	return styleAgentBadge.Render(agent)
 }
 
 // inputArea is the three-row bordered box plus its hint. An inline approval

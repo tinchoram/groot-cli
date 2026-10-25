@@ -38,4 +38,10 @@ var (
 	styleSubtitle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreenLight))
 	styleStatus      = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreenDeep))
 	styleModalBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+	// styleAgentBadge names the active agent above the input: dark text on the
+	// primary green, so it stands out from the dim status text around it.
+	styleAgentBadge = lipgloss.NewStyle().Background(lipgloss.Color(colorGreen)).Foreground(lipgloss.Color(colorBadgeText)).Bold(true).Padding(0, 1)
 )
+
+// colorBadgeText is the near-black text of the agent badge.
+const colorBadgeText = "#052E16"
