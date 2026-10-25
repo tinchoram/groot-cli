@@ -128,6 +128,12 @@ still marked open until debug is told or the 0.5.5 sweep runs.
   space and its gates, so a network protocol between opaque agents is the wrong
   layer there. Inbox rows should stay mappable to an A2A Message (message id,
   context id pointing at the flow task, parts), so a bridge is an adapter.
+- Flow candidates: a single classification test ("can the work be resumed from the
+  request plus the diff?") instead of the size heuristics; one feature document
+  per large task with numbered specs that quote the user verbatim, tasks linked
+  to specs, and a log whose first line is the original request; and a verify
+  step that checks every spec before any review starts. They fit the existing
+  `tasks` and `task_evidence` tables.
 
 ## Later
 
