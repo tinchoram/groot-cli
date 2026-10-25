@@ -459,6 +459,31 @@ Since 0.2.0 groot works in **spaces**, and inside a space you talk to **agents**
 - **Summary on exit**: when groot quits, every conversation that exchanged
   messages writes a three-line summary to its space's memory.
 
+### Deleting, renaming, moving and copying
+
+Groot does these with six admin tools, each a write that you confirm inline.
+The same operations are shortcuts in the UI.
+
+- `delete_space {name}`, `/space delete <name>`: removes the space from
+  `spaces.yaml`. Its directory and its `.groot` data stay on disk. `root` cannot
+  be deleted. Deleting the active space switches to `root`.
+- `edit_space {name, new_name?, path?}`, `/space rename <old> <new>`: renames a
+  space or points it at another directory. `root` cannot be renamed. A rename
+  keeps the selection and the unread messages; a new path does not move the
+  `.groot` data under the old path.
+- `delete_agent {name}`, `/agent delete <name>`: removes the agent from the
+  catalog and from every space. Its memory and sessions stay in each space's
+  database. `groot` and `debug` cannot be deleted.
+- `edit_agent {name, description?, prompt?, new_name?}`, `/agent rename <old> <new>`:
+  changes the description or the prompt, or renames the agent everywhere it is
+  assigned (assignments, routes, inbox, tasks, memory and sessions). Managed
+  agents keep their name.
+- `move_agent {agent, from, to}`: moves an agent between two spaces in one save.
+- `copy_agent {agent, new_name, space?}`: copies the description, prompt, model,
+  tools and `max_turns` under a new name, optionally assigned to a space.
+
+Every result is the state read back from `spaces.yaml` and the catalog.
+
 ### Files under `~/.groot`
 
 ```
@@ -554,6 +579,10 @@ while a long paste is collapsed, and when the sidebar or the terminal has focus.
 /space assign <agent>            add a catalog agent to the active space
 /space unassign <agent>          remove an agent from the active space
 /space routes [name]             show the mode, default model and routes of a space, with where each value comes from
+/space rename <old> <new>        rename a space; the selection and unread messages follow
+/space delete <name>             delete a space from spaces.yaml; its directory and data stay
+/agent rename <old> <new>        rename an agent everywhere it is assigned
+/agent delete <name>             delete an agent and unassign it from every space; its memory stays
 /budget [space|agent ...]        show or set spend budgets (see Budgets)
 /cost                            session cost, spend and budgets (see Budgets)
 /context [all|window <model> <tokens>]  context fill per agent (see Context)
@@ -1087,7 +1116,7 @@ Work mode decides by tool:
 | --- | --- |
 | `write_file` inside the space | `write_file` outside the space |
 | `bash`, unless it matches `work.always_ask` | `bash` matching `work.always_ask` (defaults: `rm -rf` outside the space, `sudo`, `git push --force`, `git reset --hard`, `git clean`, `kubectl apply/delete/patch/edit/scale/rollout`, `docker rm/rmi/system prune`, `terraform apply/destroy`, `curl`/`wget` writing a file) |
-| `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent` |
+| `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent`, `delete_space`, `edit_space`, `delete_agent`, `edit_agent`, `move_agent`, `copy_agent` |
 | `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_delegation`, `set_space_budget`, `set_agent_budget`, `set_context_window`, `set_work_mode` |
 | `get_context`, `get_cost`, `list_tasks`, `read_changelog` (read-only, not asked) | none; they answer as text |
 | `task_classify`, `task_open`, `task_advance`, `task_status` | `set_work_mode` |

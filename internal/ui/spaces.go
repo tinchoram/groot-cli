@@ -158,7 +158,7 @@ func (m *Model) syncConversation() {
 // runSpaceCommand handles /space and its subcommands.
 func (m *Model) runSpaceCommand(arg string) {
 	fields := strings.Fields(arg)
-	usage := "usage: /space list | new <name> [path] | use <name> | assign <agent> | unassign <agent> | routes [name]"
+	usage := "usage: /space list | new <name> [path] | use <name> | assign <agent> | unassign <agent> | rename <old> <new> | delete <name> | routes [name]"
 	if len(fields) == 0 {
 		m.append(styleError.Render(usage))
 		return
@@ -234,6 +234,23 @@ func (m *Model) runSpaceCommand(arg string) {
 		}
 		m.syncConversation()
 		m.append(styleDim.Render(fmt.Sprintf("%s %s", map[string]string{"assign": "assigned", "unassign": "unassigned"}[sub], rest[0])))
+	case "delete":
+		if len(rest) != 1 {
+			m.append(styleError.Render("usage: /space delete <name>"))
+			return
+		}
+		out, err := m.ws.DeleteSpace(rest[0])
+		m.finishEdit(out, err)
+	case "rename":
+		if len(rest) != 2 {
+			m.append(styleError.Render("usage: /space rename <old> <new>"))
+			return
+		}
+		out, err := m.ws.EditSpace(rest[0], rest[1], "")
+		if err == nil {
+			m.rekeyTranscripts(spaceRenamed(rest[0], rest[1]))
+		}
+		m.finishEdit(out, err)
 	default:
 		m.append(styleError.Render(usage))
 	}
@@ -358,13 +375,82 @@ func (m *Model) runAgentCommand(arg string) tea.Cmd {
 		if tools, err := m.ws.AgentTools(name); err == nil {
 			m.append(styleDim.Render("tools: " + strings.Join(tools, ", ")))
 		}
+	case "delete":
+		if len(rest) != 1 {
+			m.append(styleError.Render("usage: /agent delete <name>"))
+			return nil
+		}
+		out, err := m.ws.DeleteAgent(rest[0])
+		m.finishEdit(out, err)
+	case "rename":
+		if len(rest) != 2 {
+			m.append(styleError.Render("usage: /agent rename <old> <new>"))
+			return nil
+		}
+		out, err := m.ws.EditAgent(workspace.AgentEdit{Name: rest[0], NewName: rest[1]})
+		if err == nil {
+			m.rekeyTranscripts(agentRenamed(rest[0], rest[1]))
+		}
+		m.finishEdit(out, err)
 	default:
-		m.append(styleError.Render("usage: /agent list | new <name> [description] | show [name] | tools <name> add|remove <tool>[,<tool>…] | upgrade"))
+		m.append(styleError.Render("usage: /agent list | new <name> [description] | show [name] | tools <name> add|remove <tool>[,<tool>…] | upgrade | rename <old> <new> | delete <name>"))
 	}
 	return nil
 }
 
 // importAgentCmd fetches and saves an agent file in the background and reports the result.
+// finishEdit prints the report of a delete or rename, or its error, and brings
+// the open conversation up to date with the change.
+func (m *Model) finishEdit(out string, err error) {
+	if err != nil {
+		m.append(styleError.Render("error: " + err.Error()))
+		return
+	}
+	m.syncConversation()
+	m.append(styleDim.Render(out))
+}
+
+// rekeyTranscripts renames the transcript keys that a rename changed, the
+// parked ones and the open one, so a conversation keeps its transcript. newKey
+// returns the key after the rename and whether the key changed.
+func (m *Model) rekeyTranscripts(newKey func(key string) (string, bool)) {
+	moved := map[string][]string{}
+	for key, lines := range m.transcripts {
+		if k, ok := newKey(key); ok {
+			delete(m.transcripts, key)
+			moved[k] = lines
+		}
+	}
+	for k, lines := range moved {
+		m.transcripts[k] = lines
+	}
+	if k, ok := newKey(m.key); ok {
+		m.key = k
+	}
+}
+
+// spaceRenamed maps the keys "<space>/<agent>" of a renamed space.
+func spaceRenamed(oldName, newName string) func(string) (string, bool) {
+	return func(key string) (string, bool) {
+		sp, agent, ok := strings.Cut(key, "/")
+		if !ok || sp != oldName {
+			return key, false
+		}
+		return newName + "/" + agent, true
+	}
+}
+
+// agentRenamed maps the keys "<space>/<agent>" of a renamed agent, in every space.
+func agentRenamed(oldName, newName string) func(string) (string, bool) {
+	return func(key string) (string, bool) {
+		sp, agent, ok := strings.Cut(key, "/")
+		if !ok || agent != oldName {
+			return key, false
+		}
+		return sp + "/" + newName, true
+	}
+}
+
 func importAgentCmd(ws Workspace, source string, force bool) tea.Cmd {
 	return func() tea.Msg {
 		res, err := ws.ImportAgent(context.Background(), source, force)

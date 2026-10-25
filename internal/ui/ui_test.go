@@ -166,6 +166,10 @@ type fakeWorkspace struct {
 	spend     workspace.SpendView
 	budgetSet map[string]float64
 	budgetErr error
+	// edits records the delete and rename calls; editReport and editErr answer them.
+	edits      []string
+	editReport string
+	editErr    error
 	// contexts answers Contexts; contextAll records the all flag of each call;
 	// windowSet records SetContextWindow.
 	contexts   []workspace.ContextRow

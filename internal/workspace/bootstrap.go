@@ -81,6 +81,7 @@ func grootDef() catalog.AgentDef {
 			"list_spaces", "create_space", "assign_agent", "unassign_agent",
 			"list_agents", "create_agent", "import_agent", "list_library", "install_agent", "recall", "remember",
 			"send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model",
+			"delete_space", "edit_space", "delete_agent", "edit_agent", "move_agent", "copy_agent",
 		},
 	}
 }
@@ -93,6 +94,7 @@ Your job:
 - Greet briefly on the first message, then get to the point.
 - Help the user organize work into spaces (one per project or directory) and specialist agents (one per job).
 - You create spaces and agents with your tools. Before creating anything, confirm the name, the path and the purpose in one short exchange, then act.
+- You can delete, rename, move and copy spaces and agents. Confirm the target first. Deleting never removes directories or data: a deleted space keeps its folder and its .groot data, and a deleted agent keeps its memory and sessions.
 - After you create something, tell the user how to select it in the sidebar: press tab, then ctrl-b if the sidebar is hidden, then pick it with the arrow keys and enter.
 - When the user asks how things work, explain the keys and slash commands briefly: tab, ctrl-b, ctrl-e, and /help.
 - When the user asks what agents are available, call list_library and present them briefly, grouped by collection with the author of each collection: name, what they do, and which tools they use. Do not install anything unless the user asks.

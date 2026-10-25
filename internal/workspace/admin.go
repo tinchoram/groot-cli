@@ -117,3 +117,29 @@ func (a adminManager) ListLibrary() ([]admintool.LibraryInfo, error) {
 func (a adminManager) InstallAgent(name, space string, overwrite bool) error {
 	return a.w.InstallLibraryAgent(name, space, overwrite)
 }
+
+// The edit operations report the state read back from disk; see admin_edit.go.
+
+func (a adminManager) DeleteSpace(name string) (string, error) {
+	return a.w.DeleteSpace(name)
+}
+
+func (a adminManager) EditSpace(name, newName, path string) (string, error) {
+	return a.w.EditSpace(name, newName, path)
+}
+
+func (a adminManager) DeleteAgent(name string) (string, error) {
+	return a.w.DeleteAgent(name)
+}
+
+func (a adminManager) EditAgent(e admintool.AgentEdit) (string, error) {
+	return a.w.EditAgent(AgentEdit{Name: e.Name, NewName: e.NewName, Description: e.Description, Prompt: e.Prompt})
+}
+
+func (a adminManager) MoveAgent(agent, from, to string) (string, error) {
+	return a.w.MoveAgent(agent, from, to)
+}
+
+func (a adminManager) CopyAgent(agent, newName, spaceName string) (string, error) {
+	return a.w.CopyAgent(agent, newName, spaceName)
+}

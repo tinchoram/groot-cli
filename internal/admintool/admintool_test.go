@@ -14,6 +14,10 @@ import (
 )
 
 type fakeManager struct {
+	// edits records the six edit calls; editReport and editErr answer them.
+	edits      []string
+	editReport string
+	editErr    error
 	library    []LibraryInfo
 	installed  []string
 	installErr error
@@ -101,6 +105,12 @@ func TestToolsAreNamedAndRiskClassed(t *testing.T) {
 		"list_tasks":           tool.RiskRead,
 		"audit_query":          tool.RiskRead,
 		"set_context_window":   tool.RiskWrite,
+		"delete_space":         tool.RiskWrite,
+		"edit_space":           tool.RiskWrite,
+		"delete_agent":         tool.RiskWrite,
+		"edit_agent":           tool.RiskWrite,
+		"move_agent":           tool.RiskWrite,
+		"copy_agent":           tool.RiskWrite,
 	}
 	for _, tl := range All(m, "/home/sre") {
 		risk, ok := want[tl.Definition().Name]

@@ -43,6 +43,10 @@ type Workspace interface {
 	NewSpace(name, path string) error
 	AssignAgent(name string) error
 	UnassignAgent(name string) error
+	DeleteSpace(name string) (string, error)
+	EditSpace(name, newName, path string) (string, error)
+	DeleteAgent(name string) (string, error)
+	EditAgent(e workspace.AgentEdit) (string, error)
 	NewAgent(name, description string) (string, error)
 	ImportAgent(ctx context.Context, source string, overwrite bool) (workspace.ImportResult, error)
 	LibraryAgents() ([]workspace.LibraryInfo, error)

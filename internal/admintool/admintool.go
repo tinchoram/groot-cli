@@ -7,9 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/tinchoram/groot-cli/internal/agentimport"
@@ -41,6 +39,15 @@ type AgentSpec struct {
 	Prompt      string
 	Tools       []string
 	Model       string
+}
+
+// AgentEdit is a change to a catalog agent: a new description or prompt, or a
+// new name. A nil field is not changed.
+type AgentEdit struct {
+	Name        string
+	NewName     string
+	Description *string
+	Prompt      *string
 }
 
 // LibraryInfo describes an agent in the library of installable agents.
@@ -117,6 +124,20 @@ type Manager interface {
 	SessionModel() string
 	// SetDefaultModel writes the default model into the configuration file.
 	SetDefaultModel(ctx context.Context, model string) (string, error)
+	// DeleteSpace removes a space from the list; its directory and data stay.
+	// It returns the final state read back from disk.
+	DeleteSpace(name string) (string, error)
+	// EditSpace renames a space and/or points it at a directory; an empty
+	// newName or path keeps the current value.
+	EditSpace(name, newName, path string) (string, error)
+	// DeleteAgent removes an agent from the catalog and from every space.
+	DeleteAgent(name string) (string, error)
+	// EditAgent changes the description or prompt of an agent, or renames it.
+	EditAgent(edit AgentEdit) (string, error)
+	// MoveAgent moves an agent from one space to another.
+	MoveAgent(agent, from, to string) (string, error)
+	// CopyAgent makes a new agent from an existing one, optionally assigned to a space.
+	CopyAgent(agent, newName, space string) (string, error)
 }
 
 // All returns every admin tool. home is the user's home directory, used to
@@ -149,6 +170,12 @@ func All(m Manager, home string) []tool.Tool {
 		NewGrantTool(m),
 		NewRevokeTool(m),
 		NewSetDefaultModel(m),
+		NewDeleteSpace(m),
+		NewEditSpace(m, home),
+		NewDeleteAgent(m),
+		NewEditAgent(m),
+		NewMoveAgent(m),
+		NewCopyAgent(m),
 	}
 }
 
@@ -259,16 +286,7 @@ func (t createSpace) Execute(_ context.Context, input string) (string, bool) {
 }
 
 func (t createSpace) expand(p string) (string, error) {
-	switch {
-	case p == "~" || strings.HasPrefix(p, "~/"):
-		if t.home == "" {
-			return "", errors.New("cannot expand ~: home directory unknown")
-		}
-		return filepath.Join(t.home, strings.TrimPrefix(p, "~")), nil
-	case filepath.IsAbs(p):
-		return filepath.Clean(p), nil
-	}
-	return "", fmt.Errorf("path %q must be absolute or start with ~", p)
+	return expandPath(p, t.home)
 }
 
 // ---- assign_agent / unassign_agent ----

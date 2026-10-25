@@ -46,7 +46,7 @@ func (w *Workspace) newFlow(ctx context.Context, sp space.Space, agentName strin
 		Warn: keyedWarn(w.opts.Hooks, sp.Name+"/"+agentName),
 		// Admin tools change the catalog and the spaces, not the code, so the
 		// flow does not gate them.
-		Exempt: []string{"create_space", "assign_agent", "unassign_agent", "create_agent", "import_agent", "install_agent"},
+		Exempt: []string{"create_space", "assign_agent", "unassign_agent", "create_agent", "import_agent", "install_agent", "delete_space", "edit_space", "delete_agent", "edit_agent", "move_agent", "copy_agent"},
 		// Delegation: auto hands a route's agent the task, when it is assigned.
 		Delegation:  flow.DelegationMode(flowCfg.Delegation),
 		Manager:     flowCfg.Manager,

@@ -27,6 +27,22 @@ built in one day of live testing, so they are grouped by what shipped.
   placed in `root` only when it is assigned to no space at all. Bug and feature
   reports, `/bug`, `/feat` and the bare `debug` address follow it to the space
   it lives in.
+- Groot can delete, rename, move and copy spaces and agents, with six admin
+  tools: `delete_space`, `edit_space`, `delete_agent`, `edit_agent`,
+  `move_agent` and `copy_agent`. Each is a write that the user confirms inline,
+  and each result is the state read back from `spaces.yaml` and the catalog.
+  Deleting never removes a directory or the `.groot` data of a space, nor the
+  memory and sessions of an agent. `root`, `groot` and `debug` cannot be deleted,
+  and `groot` cannot be renamed.
+- A rename moves the assignments, the selection, the inbox (unread messages
+  included), and the tasks, memory and sessions of each space that holds the
+  agent. Open conversations of the old name end and resume under the new one.
+- The same operations are shortcuts in the UI: `/space delete <name>`,
+  `/space rename <old> <new>`, `/agent delete <name>` and `/agent rename <old> <new>`.
+  Work mode still asks for them.
+- Bootstrap does not rewrite the stored prompt of an existing `groot`, so homes
+  made before this release learn the new tools from the tool list, not from the
+  prompt; edit `~/.groot/agents/groot.md` to mention them.
 
 ### Distribution
 - `groot auth login` stores the Anthropic key: in the macOS keychain, or in
