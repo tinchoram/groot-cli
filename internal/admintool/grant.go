@@ -13,7 +13,7 @@ const toolEditSchema = `{"type":"object","properties":{"agent":{"type":"string"}
 // granted the same way, but only to agents the user has not protected.
 func NewGrantTool(m Manager) tool.Tool {
 	return toolEdit{base{"grant_tool",
-		"Give an agent one tool it does not have yet. The change is saved in the agent's file and applies to its next conversation.",
+		"Give an agent one tool it does not have yet. The change is saved in the agent's file and applies right away, including its open conversations, which keep their session.",
 		toolEditSchema, tool.RiskWrite}, m, true}
 }
 
@@ -21,7 +21,7 @@ func NewGrantTool(m Manager) tool.Tool {
 // required tools of the managed agents cannot be taken away.
 func NewRevokeTool(m Manager) tool.Tool {
 	return toolEdit{base{"revoke_tool",
-		"Take one tool away from an agent. The change is saved in the agent's file and applies to its next conversation.",
+		"Take one tool away from an agent. The change is saved in the agent's file and applies right away, including its open conversations, which keep their session.",
 		toolEditSchema, tool.RiskWrite}, m, false}
 }
 

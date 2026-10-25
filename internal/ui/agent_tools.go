@@ -25,5 +25,5 @@ func (m *Model) agentToolsCommand(rest []string) {
 		m.append(styleError.Render("error: " + err.Error()))
 		return
 	}
-	m.append(styleDim.Render("saved: " + op + " " + strings.Join(tools, ", ") + " for " + name + " (next conversation)"))
+	m.append(styleDim.Render("saved: " + op + " " + strings.Join(tools, ", ") + " for " + name + " (applied to open conversations)"))
 }

@@ -79,7 +79,9 @@ type Agent struct {
 	// strategy is none. Zero means defaultEmergencyKeep.
 	EmergencyKeep int
 
-	mu        sync.Mutex
+	mu sync.Mutex
+	// toolsMu guards Tools, which SetTools may replace while a turn runs.
+	toolsMu   sync.Mutex
 	history   []api.Message
 	sessionID string
 	turn      int
@@ -126,7 +128,6 @@ func (a *Agent) Send(ctx context.Context, prompt string) (string, error) {
 		Content: []api.Block{{Type: api.BlockText, Text: prompt}},
 	}, api.Usage{})
 
-	defs := a.registry().Definitions()
 	retried := false // the overflow retry is made once per Send
 	for step := 0; step < a.maxTurns(); step++ {
 		a.autoCompact(ctx)
@@ -137,6 +138,8 @@ func (a *Agent) Send(ctx context.Context, prompt string) (string, error) {
 			}
 		}
 
+		// The definitions are read every round, so SetTools takes effect on the next one.
+		defs := a.registry().Definitions()
 		turn, msgs := a.nextTurn()
 		resp, err := a.call(ctx, msgs, defs)
 		if err != nil && provider.IsContextOverflow(err) && !retried && a.compactForOverflow(ctx) {
@@ -685,11 +688,23 @@ func (a *Agent) maxTurns() int {
 	return a.MaxTurns
 }
 
+// registry returns the current tool registry, creating an empty one on first use.
 func (a *Agent) registry() *tool.Registry {
+	a.toolsMu.Lock()
+	defer a.toolsMu.Unlock()
 	if a.Tools == nil {
 		a.Tools = tool.NewRegistry()
 	}
 	return a.Tools
+}
+
+// SetTools replaces the tool registry. The next model call offers the new
+// definitions and the next tool call is dispatched through it. A call already
+// running keeps the registry it started with.
+func (a *Agent) SetTools(r *tool.Registry) {
+	a.toolsMu.Lock()
+	defer a.toolsMu.Unlock()
+	a.Tools = r
 }
 
 // gate fails closed: without a configured policy only reads are allowed.

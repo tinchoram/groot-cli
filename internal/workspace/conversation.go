@@ -59,6 +59,10 @@ type Conversation struct {
 	budgetWarned bool
 	// lastTurnUSD is what the last turn cost; it estimates the next one.
 	lastTurnUSD float64
+	// rebuildTools builds the registry of this conversation for a tool list,
+	// with the same flow, files, messenger, memory and guard it was opened with.
+	// Used when the agent's tools change while the conversation is open.
+	rebuildTools func(names []string) (*tool.Registry, error)
 }
 
 // Model returns the model used for the next call.

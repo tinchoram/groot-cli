@@ -30,6 +30,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/provider"
 	"github.com/tinchoram/groot-cli/internal/sandbox"
 	"github.com/tinchoram/groot-cli/internal/space"
+	"github.com/tinchoram/groot-cli/internal/tool"
 )
 
 // Chat is one running conversation as the UI sees it.
@@ -505,7 +506,16 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	if err != nil {
 		return nil, err
 	}
-	tools, err := w.buildTools(sp.Path, def.Tools, st.mem, w.messengerFor(sp.Name, agentName), ctl, files, agentName)
+	g := newConversationGuard(w.opts.Config.Guard.Mode)
+	rebuild := func(names []string) (*tool.Registry, error) {
+		reg, err := w.buildTools(sp.Path, names, st.mem, w.messengerFor(sp.Name, agentName), ctl, files, agentName)
+		if err != nil {
+			return nil, err
+		}
+		bindGuard(reg, g)
+		return reg, nil
+	}
+	tools, err := rebuild(def.Tools)
 	if err != nil {
 		return nil, err
 	}
@@ -536,8 +546,6 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	sess := gate.Session{Inner: confirmingGate(w.opts.Gate, w.opts.Hooks, key), Grants: w.grantsFor(key), Work: work}
 	// conv is set below; the limit reads it only once a turn runs.
 	var conv *Conversation
-	g := newConversationGuard(w.opts.Config.Guard.Mode)
-	bindGuard(tools, g)
 	ag := &agent.Agent{
 		Name:      agentName,
 		Provider:  prov,
@@ -563,7 +571,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	}
 	resumed := w.startOrResume(ctx, ag, st.mem, agentName)
 	conv = &Conversation{Agent: ag, prov: prov, store: st.mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, work: work, files: files, review: box,
-		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key),
+		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key), rebuildTools: rebuild,
 		budgets:      func(ctx context.Context) ([]Budget, error) { return w.budgetsFor(ctx, st.mem, sp.Name, agentName) },
 		budgetNotice: keyedWarn(w.opts.Hooks, key)}
 	return conv, nil

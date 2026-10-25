@@ -535,7 +535,7 @@ granted on purpose:
 - The managed agents `groot` and `debug` keep their required tools: removing one is
   refused. Groot can gain tools but never lose its admin tools.
 
-Changes are saved in the agent's file and apply to its next conversation.
+Changes are saved in the agent's file and apply right away, including open conversations, which keep their session.
 
 ### Importing agents
 
