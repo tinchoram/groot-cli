@@ -57,8 +57,10 @@ func (m *Model) runInboxCommand(arg string) {
 }
 
 // readInboxPrompt is the turn /readinbox gives the active agent. The unread
-// notice the workspace puts before a turn delivers the messages to it.
-const readInboxPrompt = "Read your inbox now. For each message give the sender, the subject and a one-line summary, then say which ones need an answer or an action from me. Do not act on them yet."
+// notice the workspace puts before a turn delivers the messages to it, so the
+// prompt says they are already here: a read_inbox call would find nothing and
+// the answer would start by saying so.
+const readInboxPrompt = "Your unread messages are delivered above, in this turn; do not call read_inbox for them. Start with \"The messages that arrived:\" and, for each one, give the sender, the subject and a one-line summary, then say which ones need an answer or an action from me. Do not act on them yet."
 
 // runReadInbox starts a turn in which the active agent reads its unread
 // messages. With none, no turn is spent.
