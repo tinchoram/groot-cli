@@ -118,11 +118,12 @@ still marked open until debug is told or the 0.5.5 sweep runs.
 
 Done on main: the resume test classifies the work, large work writes a feature
 document with numbered specs, and `task_verify` checks each spec before the
-delivery. The notes are in the 0.6.0-dev section of CHANGELOG.md.
+delivery. The notes are in the 0.6.0-dev section of CHANGELOG.md. The MCP client is
+done on main too: servers from the global config, allowlisted tools, `/mcp` and
+`groot doctor`.
 
 ## 0.6.0: connectivity
 
-- MCP client with an explicit allowlist of servers and tools.
 - Read-only log (LogQL) and metrics (PromQL) tools with namespace and
   time-range guards.
 - Bedrock, Vertex, Ollama and OpenAI-compatible adapters, chosen by the model

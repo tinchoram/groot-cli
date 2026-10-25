@@ -26,6 +26,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/flowgate"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
+	"github.com/tinchoram/groot-cli/internal/mcp"
 	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/provider"
 	"github.com/tinchoram/groot-cli/internal/sandbox"
@@ -126,6 +127,9 @@ type Options struct {
 	DisablePublic bool
 	NewProvider   func(model string) provider.Provider
 	Now           func() time.Time
+	// MCPTransport replaces the real MCP transports. Nil uses stdio and HTTP
+	// as configured; tests serve an in-memory server.
+	MCPTransport mcp.TransportFunc
 }
 
 // ImportResult reports an agent that was imported into the catalog.
@@ -181,6 +185,7 @@ type Workspace struct {
 type spaceStores struct {
 	mem *memory.SQLite
 	aud *audit.Log
+	mcp *mcp.Manager
 }
 
 // New builds a workspace over an existing home directory.
@@ -547,6 +552,13 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		if err != nil {
 			return nil, err
 		}
+		tools, warns := w.mcpTools(context.Background(), st.mcp, names)
+		for _, t := range tools {
+			if err := reg.Register(t); err != nil {
+				return nil, err
+			}
+		}
+		w.warnLater(key, warns)
 		bindGuard(reg, g)
 		return reg, nil
 	}
@@ -659,7 +671,14 @@ func (w *Workspace) storesFor(path string) (*spaceStores, error) {
 		return nil, fmt.Errorf("open audit log for %s: %w", path, err)
 	}
 	aud.SetFanout(w.sinks)
-	s := &spaceStores{mem: mem, aud: aud}
+	// One MCP manager per space: stdio servers start in the space directory.
+	// Connections are lazy, so opening it starts nothing.
+	mgr := mcp.New(w.opts.Config.MCP.EnabledServers(), mcp.Options{
+		Dir:       path,
+		Version:   w.opts.Version,
+		Transport: w.opts.MCPTransport,
+	})
+	s := &spaceStores{mem: mem, aud: aud, mcp: mgr}
 	w.stores[path] = s
 	return s, nil
 }

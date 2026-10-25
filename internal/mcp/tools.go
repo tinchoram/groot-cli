@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/tinchoram/groot-cli/internal/api"
 	"github.com/tinchoram/groot-cli/internal/tool"
@@ -104,6 +105,10 @@ func (t *remoteTool) RiskFor(string) tool.Risk { return t.Risk() }
 // Untrusted: remote servers write the text the model reads back.
 func (*remoteTool) Untrusted() bool { return true }
 
+// External: the server runs outside groot's sandbox, so work mode asks before a
+// write it does not know the effect of.
+func (*remoteTool) External() bool { return true }
+
 func (t *remoteTool) Preview(input string) string {
 	head := t.r.Server + " " + t.r.Name
 	args := compactJSON(input)
@@ -118,7 +123,23 @@ func (t *remoteTool) Execute(ctx context.Context, input string) (string, bool) {
 	if err != nil {
 		return fmt.Sprintf("mcp %s/%s: %v", t.r.Server, t.r.Name, err), true
 	}
-	return res.Text, res.IsError
+	return capOutput(res.Text), res.IsError
+}
+
+// maxOutputBytes caps the text one tool result returns to the model.
+const maxOutputBytes = 64 << 10
+
+// capOutput cuts text to maxOutputBytes on a rune boundary and notes how much
+// was dropped. Text under the cap comes back unchanged.
+func capOutput(s string) string {
+	if len(s) <= maxOutputBytes {
+		return s
+	}
+	cut := maxOutputBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + fmt.Sprintf("\n[truncated: %d more bytes]", len(s)-cut)
 }
 
 // compactJSON returns s without insignificant whitespace, or s trimmed when it

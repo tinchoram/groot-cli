@@ -325,7 +325,8 @@ func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
 		a.OnToolCall(use.Name, detail)
 	}
 
-	req := gate.Request{Tool: use.Name, Input: input, Risk: risk, Detail: detail, Tainted: tainted}
+	_, external := t.(tool.External)
+	req := gate.Request{Tool: use.Name, Input: input, Risk: risk, Detail: detail, Tainted: tainted, External: external}
 	decision := a.gate().Decide(ctx, req)
 	if decision == gate.Deny {
 		a.audit(use.Name, risk, decision, input, true, 0, "", nil)

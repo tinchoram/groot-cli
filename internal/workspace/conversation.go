@@ -16,6 +16,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/flow"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
+	"github.com/tinchoram/groot-cli/internal/mcp"
 	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/provider"
 	"github.com/tinchoram/groot-cli/internal/tool"
@@ -304,6 +305,10 @@ func tail(s string, n int) string {
 func (w *Workspace) buildTools(root string, names []string, mem *memoryState, msg tool.Messenger, ctl *flow.Controller, files *fileLog, agentName string) (*tool.Registry, error) {
 	reg := tool.NewRegistry()
 	for _, n := range names {
+		// MCP names are served by mcpTools, from the space's manager.
+		if _, _, ok := mcp.SplitToolName(n); ok {
+			continue
+		}
 		t, err := w.newTool(n, root, mem, msg, ctl, files, agentName)
 		if err != nil {
 			return nil, err

@@ -33,6 +33,9 @@ type Request struct {
 	// id of a recent guard envelope into the call. A tainted call is never
 	// auto-approved by work mode or a session grant, and always reaches the user.
 	Tainted bool
+	// External means the tool runs outside groot, such as an MCP server. Work
+	// mode never auto-approves its writes.
+	External bool
 }
 
 // CanGrant reports whether the user may approve this call for the rest of the

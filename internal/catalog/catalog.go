@@ -48,6 +48,19 @@ var KnownTools = []string{
 	"delete_space", "edit_space", "delete_agent", "edit_agent", "move_agent", "copy_agent",
 }
 
+// mcpToolName matches an MCP tool an agent may list: <server>__<tool> or
+// <server>__* for every allowlisted tool of the server. The server part follows
+// the config's server names. Whether the server is configured and the tool is
+// allowlisted is checked by the workspace, which knows the config.
+var mcpToolName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}__(\*|[A-Za-z0-9_.-]+)$`)
+
+// IsKnownTool reports whether an agent may list name: a builtin tool, or an MCP
+// tool name of the form the config allows. An MCP name is only checked for its
+// shape here.
+func IsKnownTool(name string) bool {
+	return slices.Contains(KnownTools, name) || mcpToolName.MatchString(name)
+}
+
 // DefaultTools is the tool set given to agents created with /agent new.
 // It is read-leaning: no file writes and no shell.
 func DefaultTools() []string {
@@ -85,7 +98,7 @@ func Validate(d AgentDef) error {
 		return fmt.Errorf("agent %q needs at least one tool", d.Name)
 	}
 	for _, t := range d.Tools {
-		if !slices.Contains(KnownTools, t) {
+		if !IsKnownTool(t) {
 			return fmt.Errorf("agent %q lists unknown tool %q", d.Name, t)
 		}
 	}

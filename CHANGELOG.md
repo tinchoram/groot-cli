@@ -5,6 +5,18 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.6.0-dev (unreleased)
 
+### MCP
+- MCP client: groot connects to the servers listed under `mcp.servers` in the
+  global config (stdio or streamable HTTP). A project file can only narrow them
+  with `mcp.enable`. Each server needs an explicit `tools` allowlist.
+- Tools appear as `<server>__<tool>`. Grant them per agent with `grant_tool` or
+  `/agent tools`, or the whole allowlist with `<server>__*`. Groot grants none by
+  default.
+- Work mode asks before any MCP tool that is not in `read_only`. Output is untrusted
+  and capped at 64 KiB per call. A failed server warns and contributes no tools.
+- `/mcp` lists the servers, their state and the tools each agent holds, and
+  `/mcp connect <name>` connects one now. `groot doctor` has an `mcp` section.
+
 ### Flow
 - Classification uses one test: could another agent resume the work from the
   request plus the git diff? `task_classify` takes `resumable_from_diff`, and the

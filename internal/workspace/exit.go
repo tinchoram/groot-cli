@@ -121,6 +121,9 @@ func (w *Workspace) shutdown(ctx context.Context, graceful bool) error {
 		if s.aud != nil {
 			note(s.aud.Close())
 		}
+		if s.mcp != nil {
+			note(s.mcp.Close())
+		}
 		note(s.mem.Close())
 	}
 	note(w.inbox.Close())

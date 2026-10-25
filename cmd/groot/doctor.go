@@ -32,6 +32,18 @@ type doctorEnv struct {
 	Keychain       auth.Keychain
 	LookPath       func(string) (string, error)
 	Detect         func(sandbox.Config) (sandbox.Runner, sandbox.Warning)
+	// ProbeMCP connects each enabled MCP server and reports it. Nil skips the
+	// probe; the report then names the servers as not probed.
+	ProbeMCP func(servers map[string]config.MCPServer) []mcpCheck
+}
+
+// mcpCheck is what doctor learns about one MCP server: its error, or the number
+// of allowlisted tools it offers and the ones it does not.
+type mcpCheck struct {
+	Name    string
+	Tools   int
+	Missing []string
+	Err     string
 }
 
 // doctorInput holds the facts that doctor reports, gathered from doctorEnv.
@@ -54,6 +66,10 @@ type doctorInput struct {
 	InboxPath    string
 	InboxFound   bool
 	Update       update.Status // from the cache only; doctor makes no network call
+	// MCP is the probe of each enabled server, in name order. MCPNone is set
+	// when no server is enabled.
+	MCP     []mcpCheck
+	MCPNone bool
 }
 
 // doctorLine is one line of the report. Blocks means groot cannot start.
@@ -100,6 +116,9 @@ func runDoctor(args []string, stdout, stderr io.Writer, getenv func(string) stri
 		Keychain:       newKeychain(),
 		LookPath:       exec.LookPath,
 		Detect:         sandbox.Detect,
+		ProbeMCP: func(servers map[string]config.MCPServer) []mcpCheck {
+			return probeMCP(servers, cwd, version)
+		},
 	})
 }
 
@@ -133,6 +152,13 @@ func gatherDoctor(env doctorEnv) doctorInput {
 
 	cfg, err := loadConfig(env.ExplicitConfig, env.ConfigPath, env.GlobalPath)
 	in.ConfigErr = err
+	if err == nil {
+		servers := cfg.MCP.EnabledServers()
+		in.MCPNone = len(servers) == 0
+		if !in.MCPNone && env.ProbeMCP != nil {
+			in.MCP = env.ProbeMCP(servers)
+		}
+	}
 	mode := "auto"
 	if err == nil {
 		mode = cfg.Bash.Sandbox.Mode
@@ -230,6 +256,7 @@ func doctorLines(in doctorInput) ([]doctorLine, bool) {
 		add("spaces", fmt.Sprintf("%d in %s", in.Spaces, filepath.Join(in.Home, "spaces.yaml")), false)
 	}
 	add("inbox", in.InboxPath+" ("+existence(in.InboxFound, "found", "missing")+")", false)
+	mcpLines(add, in)
 	add("update", updateValue(in.Update), false)
 	return lines, blocks
 }

@@ -12,7 +12,7 @@ import (
 // changed.
 func EditTools(d AgentDef, add, remove, required []string) (AgentDef, error) {
 	for _, t := range add {
-		if !slices.Contains(KnownTools, t) {
+		if !IsKnownTool(t) {
 			return d, fmt.Errorf("unknown tool %q", t)
 		}
 	}

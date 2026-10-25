@@ -162,6 +162,9 @@ func (s *WorkState) approves(req Request) bool {
 	if adminChanges[req.Tool] || req.Tainted {
 		return false
 	}
+	if req.External && req.Risk != tool.RiskRead {
+		return false
+	}
 	switch req.Tool {
 	case "write_file":
 		return insideSpace(s.cfg.Space, inputField(req.Input, "path"))

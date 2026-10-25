@@ -68,6 +68,9 @@ type Workspace interface {
 	SessionGrants(key string) []string
 	ClearSessionGrants(key string)
 	ListModels(ctx context.Context) ([]provider.ModelInfo, error)
+	// MCPServers lists the MCP servers of the active space; MCPConnect connects one.
+	MCPServers(ctx context.Context) ([]workspace.MCPServerInfo, error)
+	MCPConnect(ctx context.Context, name string) (int, error)
 	CheckModel(ctx context.Context, id string, force bool) (string, error)
 	SaveAgentModel(agent, model string) error
 	DefaultModel() string
@@ -813,6 +816,8 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		m.runTaskCommand(cmd.Arg)
 	case "tasks":
 		m.runTasksCommand(cmd.Arg)
+	case "mcp":
+		m.runMCPCommand(cmd.Arg)
 	case "audit":
 		m.runAuditCommand(cmd.Arg)
 	case "exit":

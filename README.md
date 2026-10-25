@@ -633,6 +633,8 @@ while a long paste is collapsed, and when the sidebar or the terminal has focus.
 /cost                            session cost, spend and budgets (see Budgets)
 /context [all|window <model> <tokens>]  context fill per agent (see Context)
 /tasks [space] [all]             open tasks across spaces; all adds done and failed of the last 7 days (see ODD flow)
+/mcp                             MCP servers of this space: state, and the tools each agent holds (see MCP servers)
+/mcp connect <name>              connect one MCP server now and report the tools it admits
 /audit [n|all|stats] [filters]   the audit records of the active space, or of all spaces (see Audit)
 /agent list                      list the catalog (✓ = assigned to the active space)
 /agent new <name> [description]  create agents/<name>.md with a starter prompt
@@ -687,6 +689,10 @@ granted on purpose:
   removing one is refused. Groot can gain tools but never lose its admin tools.
 
 Changes are saved in the agent's file and apply right away, including open conversations, which keep their session.
+
+MCP tools are granted the same way, by their model-facing name `<server>__<tool>`,
+or `<server>__*` for every allowlisted tool of a server. The server must be
+configured (see [MCP servers](#mcp-servers)). Groot never grants MCP tools by itself.
 
 ### Importing agents
 
@@ -1196,6 +1202,7 @@ Work mode decides by tool:
 | `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent`, `delete_space`, `edit_space`, `delete_agent`, `edit_agent`, `move_agent`, `copy_agent` |
 | `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_delegation`, `set_space_budget`, `set_agent_budget`, `set_context_window`, `set_work_mode` |
 | `get_context`, `get_cost`, `list_tasks`, `read_changelog`, `current_time` (read-only, not asked) | none; they answer as text |
+| MCP tools listed in their server's `read_only` | every other MCP tool, read or write, since groot cannot tell what it does |
 | `task_classify`, `task_open`, `task_advance`, `task_verify`, `task_status` | `set_work_mode` |
 
 Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.
@@ -1391,6 +1398,66 @@ fetch:
 
 Its output is untrusted content: it is wrapped and scanned like the other
 external reads. See [Untrusted content](#untrusted-content).
+
+## MCP servers
+
+Groot can call tools from [MCP](https://modelcontextprotocol.io) servers. Servers
+are defined in the global `~/.groot/groot.yaml` only: a project `groot.yaml`
+cannot start a process. A project file may narrow the set with `mcp.enable`, which
+names the global servers its space uses. Without `enable`, every global server is
+enabled.
+
+<!-- mcp-example:start -->
+```yaml
+mcp:
+  servers:
+    grafana:
+      transport: http
+      url: https://grafana.internal/mcp
+      headers:
+        Authorization: "Bearer ${GRAFANA_TOKEN}"
+      tools: [query_prometheus, search_dashboards, get_panel]
+      read_only: [query_prometheus, search_dashboards, get_panel]
+      timeout: 20s
+    kubectl-mcp:
+      transport: stdio
+      command: kubectl-mcp
+      args: ["--read-only"]
+      env:
+        LOG_LEVEL: "warn"
+      tools: [list_pods, get_pod_logs]
+      read_only: [list_pods, get_pod_logs]
+```
+<!-- mcp-example:end -->
+
+- `transport: stdio` starts `command` with `args`. `transport: http` connects to a
+  streamable HTTP endpoint at `url`. Plain `http://` is accepted only for localhost.
+- `tools` is the allowlist. A server without `tools` is refused, and groot never
+  offers a tool the list does not name.
+- `read_only` marks the tools that only read. Work mode runs them without asking.
+  Every other allowlisted tool counts as a write, and work mode asks before it runs.
+- Tool names are `<server>__<tool>`, for example `grafana__query_prometheus`. Any
+  character outside letters, digits, `_` and `-` becomes `_`, and the name is cut
+  to 64 characters.
+- Grant a tool with `/agent tools <agent> add grafana__query_prometheus`, or the
+  whole allowlist with `grafana__*`. Groot can do the same with `grant_tool`.
+- Trust: servers run outside the bash sandbox. A stdio server gets a clean
+  environment (`PATH`, `HOME` and the `env` you list, nothing else) and the space
+  directory as its working directory. Treat a server as trusted as the config
+  that lists it. Its output is untrusted content, wrapped and scanned like web
+  pages, and each result is capped at 64 KiB.
+- Secrets go in `${VAR}`, which is read from the environment when the server
+  connects and never written into the config. An unset variable is an error that
+  names it.
+- `timeout` bounds each call (default `30s`, at most `5m`). A server that fails to
+  connect is retried after 10 seconds. Its conversations still open, and show a
+  warning that names the server and the error.
+- `/mcp` lists the servers of the active space with their state, and for a
+  connected server each allowlisted tool with `ro` or `rw` and the agents that hold
+  it. `/mcp connect <name>` connects one now.
+- `groot doctor` has an `mcp` section: one line per enabled server, `ok` with the
+  tool count and any allowlisted tool the server does not offer, or `failed` with
+  the error. A failed server makes doctor exit with 1.
 
 ## Roadmap
 

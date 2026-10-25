@@ -37,6 +37,9 @@ func (w *Workspace) EditAgentTools(name string, add, remove []string) error {
 	if err != nil {
 		return err
 	}
+	if err := w.checkMCPTools(add); err != nil {
+		return err
+	}
 	up, err := catalog.EditTools(d, add, remove, requiredTools(name))
 	if err != nil {
 		return err

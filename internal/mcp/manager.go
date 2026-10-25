@@ -47,11 +47,18 @@ type Options struct {
 	// Version is reported to servers as the client version.
 	Version string
 
+	// Transport replaces the real transports when set.
+	Transport TransportFunc
+
 	// dial replaces the real transports in tests.
 	dial dialFunc
 }
 
 type dialFunc func(ctx context.Context, name string, r resolved) (sdk.Transport, error)
+
+// TransportFunc returns the transport of a server. It replaces the real stdio
+// and HTTP transports when set, which is how tests serve an in-memory server.
+type TransportFunc func(ctx context.Context, server string) (sdk.Transport, error)
 
 // Remote is one tool a server offers that the allowlist admits.
 type Remote struct {
@@ -172,9 +179,12 @@ func (m *Manager) dialSession(ctx context.Context, s *server) (*sdk.ClientSessio
 		return nil, err
 	}
 	var transport sdk.Transport
-	if m.opts.dial != nil {
+	switch {
+	case m.opts.dial != nil:
 		transport, err = m.opts.dial(ctx, s.name, r)
-	} else {
+	case m.opts.Transport != nil:
+		transport, err = m.opts.Transport(ctx, s.name)
+	default:
 		transport, err = newTransport(r)
 	}
 	if err != nil {

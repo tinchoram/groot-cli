@@ -179,3 +179,33 @@ func TestInvalidAlwaysAskPatternIsRefused(t *testing.T) {
 		t.Fatal("a broken pattern must be reported")
 	}
 }
+
+func TestWorkNeverAutoApprovesAWriteOfAnExternalTool(t *testing.T) {
+	s, _ := newWork(t, true, nil, 0, 0)
+	user := &asker{}
+	g := Work{Inner: user, State: s}
+	ctx := context.Background()
+
+	write := Request{Tool: "grafana__set_alert", Input: `{}`, Risk: tool.RiskWrite, External: true}
+	if g.Decide(ctx, write) != Deny || user.calls != 1 {
+		t.Fatal("an external write must go to the user even in work mode")
+	}
+}
+
+func TestWorkApprovesAReadOnlyExternalTool(t *testing.T) {
+	s, _ := newWork(t, true, nil, 0, 0)
+	user := &asker{}
+	g := Work{Inner: user, State: s}
+
+	read := Request{Tool: "grafana__echo", Input: `{}`, Risk: tool.RiskRead, External: true}
+	if g.Decide(context.Background(), read) != Allow || user.calls != 0 {
+		t.Fatal("a read_only external tool is approved in work mode like any read")
+	}
+	if !s.Would(read) {
+		t.Fatal("the transcript must label the read as auto-approved")
+	}
+	write := Request{Tool: "grafana__set_alert", Input: `{}`, Risk: tool.RiskWrite, External: true}
+	if s.Would(write) {
+		t.Fatal("the transcript must not label an external write as auto-approved")
+	}
+}

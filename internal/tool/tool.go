@@ -61,6 +61,12 @@ type SelfEnveloped interface {
 	SelfEnveloped() bool
 }
 
+// External marks a tool served by a process or endpoint outside groot, such as
+// an MCP server. Work mode never auto-approves its writes.
+type External interface {
+	External() bool
+}
+
 // Registry holds tools in registration order.
 type Registry struct {
 	mu    sync.RWMutex

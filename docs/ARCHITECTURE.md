@@ -16,6 +16,7 @@ under `internal/`:
 | `tool` | Tool port and registry (`tool.go`), builtin tools: `files.go`, `exec.go`, `fetch.go`, `memory_tools.go`, `flow_tools.go`, `messaging_tools.go`, `feedback_tools.go`, `readonly.go`, `listdir.go` and `glob.go` (read-only, confined to the space root). |
 | `gate` | Permission decisions: `Interactive`, `ReadOnly`, `AutoApprove` (`gate.go`), work mode (`work.go`), session grants (`grants.go`). |
 | `flowgate` | Puts the ODD flow rules in front of the user's gate (`gate.go`). |
+| `mcp` | MCP client (`manager.go`): one lazily connected session per configured server, the tool allowlist, call timeouts. `tools.go` adapts a remote tool to `tool.Tool` as `<server>__<tool>`: untrusted output, `External`, capped at 64 KiB. `mcptest` is an in-process fake server for tests. Config in `config/mcp.go`. |
 | `flow` | ODD task engine: sizes, phases, evidence, transitions (`flow.go`) and the per-conversation `Controller`. |
 | `memory` | Persistence port (`store.go`): sessions, messages, long-term memories, tasks. SQLite adapter in `sqlite.go`, `tasks.go`, `sessions.go`. `NoMemory` persists nothing. |
 | `workspace` | Runtime for spaces and agents: builds conversations, opens stores, composes the gate chain, messaging, library, review. |
@@ -81,6 +82,10 @@ flowgate.Gate            ODD flow rules: refuses calls the flow does not allow
 
 A `flowgate` denial returns a `tool_result` with the reason and never asks the
 user. Anything it allows goes down the chain.
+
+Work mode never auto-approves a write of an external tool. An MCP tool sets
+`gate.Request.External` through the `tool.External` marker, so `work.go` sends
+its writes to the user. A read_only MCP tool is approved like any read.
 
 ## ODD flow
 
@@ -150,6 +155,7 @@ Per space, `<space>/.groot/`, at the paths set by `memory.path` and `audit.path`
   to the sinks of `audit.sinks` (`sink_file.go`, `sink_http.go`, `sink_syslog.go`) through
   bounded queues; the workspace owns the fanout and flushes it on close (`internal/workspace/audit.go`).
 - Open tasks across spaces (`/tasks`, `list_tasks`, sidebar `⚑ N`): `workspace.ListTasks` reads each space's `tasks` through `memory.SQLite.TaskSummaries`, with the directory guard of `internal/workspace/context.go` (`internal/workspace/tasks.go`).
+- MCP: one `mcp.Manager` per space, built in `storesFor` from the enabled servers and closed with the space's other stores. Stdio servers start in the space directory. Connections are lazy: opening a space starts nothing. Conversations build their MCP tools in `rebuild` (`internal/workspace/mcp.go`), and warnings reach the transcript off the workspace lock.
 
 Relative `memory.path` and `audit.path` values resolve against the space
 directory (`memoryPathFor`, `auditPathFor` in `internal/workspace/workspace.go`).

@@ -199,8 +199,14 @@ type fakeWorkspace struct {
 	models        []provider.ModelInfo
 	modelErr      error
 	modelWarn     string
-	checkErr      error
-	audit         auditFake // the audit records and sink warnings of the /audit tests
+	// MCP: the servers /mcp lists, and the outcome of /mcp connect per name.
+	mcpServers      []workspace.MCPServerInfo
+	mcpErr          error
+	mcpConnects     []string
+	mcpConnectErr   map[string]error
+	mcpConnectTools int
+	checkErr        error
+	audit           auditFake // the audit records and sink warnings of the /audit tests
 	// defaultModel is the configured default; defaultSet records --default.
 	defaultModel string
 	defaultSet   string
