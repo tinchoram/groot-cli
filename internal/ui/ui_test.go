@@ -52,7 +52,14 @@ type fakeSession struct {
 	memoryOverview memory.Overview
 	recall         []memory.Entry
 	recallQueries  []string
-	memoryErr      error
+	// memoryByID answers MemoryEntry; pinCalls, forgotten and reviewed record the
+	// changes made through /memory, and reviewList answers MemoryReview.
+	memoryByID map[int64]memory.Entry
+	pinCalls   []string
+	forgotten  []int64
+	reviewed   []int64
+	reviewList []memory.Entry
+	memoryErr  error
 }
 
 func (f *fakeSession) PromptMemory(context.Context) ([]memory.Entry, memory.Overview, error) {
@@ -62,6 +69,42 @@ func (f *fakeSession) PromptMemory(context.Context) ([]memory.Entry, memory.Over
 func (f *fakeSession) RecallMemory(_ context.Context, query string) ([]memory.Entry, error) {
 	f.recallQueries = append(f.recallQueries, query)
 	return f.recall, f.memoryErr
+}
+
+func (f *fakeSession) MemoryEntry(_ context.Context, id int64) (memory.Entry, error) {
+	if f.memoryErr != nil {
+		return memory.Entry{}, f.memoryErr
+	}
+	e, ok := f.memoryByID[id]
+	if !ok {
+		return memory.Entry{}, memory.ErrNotFound
+	}
+	return e, nil
+}
+
+func (f *fakeSession) MemoryPin(_ context.Context, id int64, pinned bool) error {
+	f.pinCalls = append(f.pinCalls, fmt.Sprintf("%d=%v", id, pinned))
+	return f.memoryErr
+}
+
+func (f *fakeSession) MemoryForget(_ context.Context, id int64) error {
+	if f.memoryErr != nil {
+		return f.memoryErr
+	}
+	f.forgotten = append(f.forgotten, id)
+	return nil
+}
+
+func (f *fakeSession) MemoryReview(context.Context) ([]memory.Entry, error) {
+	return f.reviewList, f.memoryErr
+}
+
+func (f *fakeSession) MemoryReviewed(_ context.Context, id int64) error {
+	if f.memoryErr != nil {
+		return f.memoryErr
+	}
+	f.reviewed = append(f.reviewed, id)
+	return nil
 }
 
 func (f *fakeSession) Task() (flow.Task, bool) {

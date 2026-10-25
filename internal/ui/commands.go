@@ -68,6 +68,8 @@ var helpEntries = []helpEntry{
 	{"/readinbox", "have this agent read its unread messages in one turn"},
 	{"/memory", "the memory entries in this agent's prompt, and their counts"},
 	{"/memory <query>", "search the memory this agent can read"},
+	{"/memory show|pin|unpin|rm|reviewed <id>", "show one entry in full, pin or unpin it, forget it, or mark it reviewed"},
+	{"/memory review", "list the entries whose review date has passed"},
 	{"/model [name]", "show or change the model"},
 	{"/models", "list the models the provider offers, with their prices"},
 	{"/cost", "session cost, spend and budgets"},

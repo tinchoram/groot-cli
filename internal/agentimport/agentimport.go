@@ -31,7 +31,7 @@ const previewLines = 5
 var defaultClient = &http.Client{Timeout: 10 * time.Second}
 
 // defaultTools is used when a file declares no usable tools.
-var defaultTools = []string{"read_file", "write_file", "bash", "recall", "remember"}
+var defaultTools = []string{"read_file", "write_file", "bash", "recall", "remember", "memory_get", "forget", "update_memory"}
 
 // toolMap maps names used by Claude Code and OpenCode to builtin tools. A
 // name that is already a groot tool passes through unchanged. Anything else is

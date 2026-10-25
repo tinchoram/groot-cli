@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tinchoram/groot-cli/internal/api"
+	"github.com/tinchoram/groot-cli/internal/guard"
 )
 
 // Kind classifies a memory entry.
@@ -59,6 +60,9 @@ type Reader struct {
 	Agent string
 	// Global lets the reader see global entries.
 	Global bool
+	// globalOnly restricts the reader to global rows. Layered uses it on the
+	// root database, whose space and agent rows belong to the root space.
+	globalOnly bool
 }
 
 // Entry states, computed when an entry is read.
@@ -218,7 +222,10 @@ type Store interface {
 }
 
 // FormatPreamble renders entries as the "- [kind] text" lines of the prompt.
-// An entry with a title reads "- [kind] title: text".
+// An entry with a title reads "- [kind] title: text". A global entry names its
+// scope, "- [kind, global] text". An entry that needs review ends with
+// " (review)". Tainted text is wrapped in the untrusted-content envelope, so the
+// model reads it as data.
 func FormatPreamble(entries []Entry) string {
 	var sb strings.Builder
 	for _, e := range entries {
@@ -228,12 +235,26 @@ func FormatPreamble(entries []Entry) string {
 	return sb.String()
 }
 
+// preambleSource names the envelope of memory text in the prompt.
+const preambleSource = "memory"
+
 func preambleLine(e Entry) string {
 	body := e.Text
 	if e.Title != "" {
 		body = e.Title + ": " + e.Text
 	}
-	return fmt.Sprintf("- [%s] %s", e.Kind, body)
+	if e.Tainted {
+		body = guard.Wrap(preambleSource, body)
+	}
+	tag := string(e.Kind)
+	if e.Scope == ScopeGlobal {
+		tag += ", global"
+	}
+	line := fmt.Sprintf("- [%s] %s", tag, body)
+	if e.State == StateNeedsReview {
+		line += " (review)"
+	}
+	return line
 }
 
 // NoMemory is a Store that persists nothing.
@@ -290,6 +311,9 @@ func (NoMemory) MarkCleared(context.Context, string) error { return nil }
 // entries; agent entries of the reader's own agent; and global entries when the
 // reader may see them. It returns the condition and its parameters.
 func VisibleSQL(r Reader) (string, []any) {
+	if r.globalOnly {
+		return "(m.deleted_at = '' AND m.scope = 'global')", nil
+	}
 	cond := "(m.deleted_at = '' AND (m.scope = 'space' OR (m.scope = 'agent' AND m.agent <> '' AND m.agent = ?)"
 	if r.Global {
 		cond += " OR m.scope = 'global'"

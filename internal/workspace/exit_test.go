@@ -61,8 +61,11 @@ func TestFastCloseMakesNoModelCallAndWritesTheLocalSummary(t *testing.T) {
 		t.Fatalf("a fast close called the model %d times", len(f.mock.Calls)-calls)
 	}
 	got := storedSummaries(t, f.dir, "reader")
-	if !strings.Contains(got, "Last request: what is the question") || !strings.Contains(got, "Last answer: the answer to the question") {
+	if !strings.Contains(got, "Goal: what is the question") || !strings.Contains(got, "Done: the answer to the question") || !strings.Contains(got, "Next: unknown (fast close)") {
 		t.Fatalf("local summary missing:\n%s", got)
+	}
+	if !strings.Contains(got, "Session ") || !strings.Contains(got, "reader") {
+		t.Fatalf("the summary must be titled with its time and agent:\n%s", got)
 	}
 }
 
@@ -76,7 +79,7 @@ func TestLocalSummaryCapsTheAnswerAtThreeHundredCharacters(t *testing.T) {
 		t.Fatal(err)
 	}
 	summary := conv.(*Conversation).localSummary()
-	answer := summary[strings.Index(summary, "Last answer: ")+len("Last answer: "):]
+	answer := strings.SplitN(summary[strings.Index(summary, "Done: ")+len("Done: "):], "\n", 2)[0]
 	if n := len([]rune(answer)); n > localSummaryRunes+1 {
 		t.Fatalf("answer kept %d characters, want at most %d", n, localSummaryRunes)
 	}
@@ -101,7 +104,7 @@ func TestGracefulCloseFallsBackToTheLocalSummaryWhenTheModelIsSlow(t *testing.T)
 	if took := time.Since(start); took > time.Second {
 		t.Fatalf("close took %v; the budget was 150ms", took)
 	}
-	if got := storedSummaries(t, f.dir, "reader"); !strings.Contains(got, "Last request: slow question") {
+	if got := storedSummaries(t, f.dir, "reader"); !strings.Contains(got, "Goal: slow question") {
 		t.Fatalf("the fallback summary is missing:\n%s", got)
 	}
 }

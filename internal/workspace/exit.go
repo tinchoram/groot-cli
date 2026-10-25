@@ -6,25 +6,56 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/tinchoram/groot-cli/internal/memory"
 )
 
-// localSummaryRunes caps the answer text of a local summary.
-const localSummaryRunes = 300
+// Caps of a local summary: the goal is the last request, the done line is the
+// last answer.
+const (
+	localGoalRunes    = 200
+	localSummaryRunes = 300
+)
 
-// localSummary is the summary written without a model call: the last request
-// and the start of the last answer. It is empty when there was no exchange.
+// localSummary is the summary written without a model call. It uses the
+// headings of the model summary: Goal is the last request, Done the last
+// answer, and the rest is unknown because nothing was asked of the model. It is
+// empty when there was no exchange.
 func (c *Conversation) localSummary() string {
 	user, answer := c.LastExchange()
 	if user == "" && answer == "" {
 		return ""
 	}
-	if utf8.RuneCountInString(answer) > localSummaryRunes {
-		answer = string([]rune(answer)[:localSummaryRunes]) + "…"
+	return fmt.Sprintf("Goal: %s\nDone: %s\nDecisions: none\nNext: unknown (fast close)\nFiles: none",
+		cutRunes(strings.TrimSpace(user), localGoalRunes), cutRunes(strings.TrimSpace(answer), localSummaryRunes))
+}
+
+// cutRunes keeps the first n runes of s and marks the cut with an ellipsis.
+func cutRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) > n {
+		return string([]rune(s)[:n]) + "…"
 	}
-	return fmt.Sprintf("Last request: %s\nLast answer: %s", strings.TrimSpace(user), strings.TrimSpace(answer))
+	return s
+}
+
+// sessionTitle names a session summary by when it was written and by its agent.
+func sessionTitle(now time.Time, agent string) string {
+	return "Session " + now.Format("2006-01-02 15:04") + " " + agent
+}
+
+// storeSummary saves the summary of session id in the agent memory.
+func (c *Conversation) storeSummary(ctx context.Context, id, text string) error {
+	_, err := c.store.Remember(ctx, memory.Entry{
+		Kind:   memory.KindSessionSummary,
+		Scope:  memory.ScopeAgent,
+		Agent:  c.name,
+		Title:  sessionTitle(time.Now(), c.name),
+		Text:   text,
+		Source: "session:" + id,
+	})
+	return err
 }
 
 // endLocal writes the local summary of the conversation and ends its session,
@@ -35,14 +66,7 @@ func (c *Conversation) endLocal(ctx context.Context) error {
 	}
 	var errs []error
 	if text := c.localSummary(); text != "" {
-		_, err := c.store.Remember(ctx, memory.Entry{
-			Kind:   memory.KindSessionSummary,
-			Scope:  memory.ScopeAgent,
-			Agent:  c.name,
-			Text:   text,
-			Source: "session:" + c.SessionID(),
-		})
-		errs = append(errs, err)
+		errs = append(errs, c.storeSummary(ctx, c.SessionID(), text))
 	}
 	errs = append(errs, c.Agent.End(ctx))
 	return errors.Join(errs...)
@@ -114,13 +138,7 @@ var ErrSummaryFallback = errors.New("summary fallback")
 // model summary was skipped.
 func (c *Conversation) keepLocalSummary(ctx context.Context, id, local string, cause error) error {
 	if local != "" {
-		if _, err := c.store.Remember(ctx, memory.Entry{
-			Kind:   memory.KindSessionSummary,
-			Scope:  memory.ScopeAgent,
-			Agent:  c.name,
-			Text:   local,
-			Source: "session:" + id,
-		}); err != nil {
+		if err := c.storeSummary(ctx, id, local); err != nil {
 			return fmt.Errorf("local summary for %s: %w", c.name, err)
 		}
 	}
@@ -138,12 +156,5 @@ func (c *Conversation) writeLocalSummary(ctx context.Context) error {
 	if text == "" {
 		return nil
 	}
-	_, err := c.store.Remember(ctx, memory.Entry{
-		Kind:   memory.KindSessionSummary,
-		Scope:  memory.ScopeAgent,
-		Agent:  c.name,
-		Text:   text,
-		Source: "session:" + c.SessionID(),
-	})
-	return err
+	return c.storeSummary(ctx, c.SessionID(), text)
 }

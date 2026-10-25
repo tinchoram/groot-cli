@@ -38,7 +38,7 @@ func TestClearKeepsALocalSummaryWhenTheModelSummaryFails(t *testing.T) {
 	}
 	found := false
 	for _, e := range entries {
-		if e.Source == "session:"+oldID && strings.Contains(e.Text, "Last request: first question") {
+		if e.Source == "session:"+oldID && strings.Contains(e.Text, "Goal: first question") {
 			found = true
 		}
 	}

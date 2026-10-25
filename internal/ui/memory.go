@@ -2,40 +2,132 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/tinchoram/groot-cli/internal/memory"
 )
 
-// memoryTextRunes is how much of an entry's text a listing shows.
-const memoryTextRunes = 100
+// memoryTextRunes is how much of an entry's title or text a listing shows.
+const memoryTextRunes = 80
 
-// runMemoryCommand handles /memory, which lists the entries in the prompt of the
-// active agent, and /memory <query>, which searches the entries it can read.
+// memoryUsage lists the forms of /memory.
+const memoryUsage = "usage: /memory | /memory <query> | /memory show|pin|unpin|rm|reviewed <id> | /memory review"
+
+// runMemoryCommand handles /memory and its forms: the entries in the prompt, a
+// search, one entry in full, the pin, forget and review changes, and the
+// review list. An unknown word is a search query; a known verb with bad
+// arguments prints the usage.
 func (m *Model) runMemoryCommand(arg string) {
 	ctx := context.Background()
-	if arg != "" {
-		entries, err := m.session.RecallMemory(ctx, arg)
+	fields := strings.Fields(arg)
+	if len(fields) == 0 {
+		m.listPreamble(ctx)
+		return
+	}
+	switch fields[0] {
+	case "show", "pin", "unpin", "rm", "reviewed":
+		if len(fields) != 2 {
+			m.append(styleDim.Render(memoryUsage))
+			return
+		}
+		id, err := parseMemoryID(fields[1])
 		if err != nil {
 			m.append(styleError.Render("error: " + err.Error()))
 			return
 		}
-		if len(entries) == 0 {
-			m.append(styleDim.Render("no memory matches " + arg))
+		m.memoryAction(ctx, fields[0], id)
+	case "review":
+		if len(fields) != 1 {
+			m.append(styleDim.Render(memoryUsage))
 			return
 		}
-		m.appendMemoryLines(entries)
-		return
+		m.listReview(ctx)
+	default:
+		m.searchMemory(ctx, arg)
 	}
+}
+
+// parseMemoryID reads an entry id. Only positive whole numbers are ids.
+func parseMemoryID(s string) (int64, error) {
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errors.New("id must be a positive number, got " + s)
+	}
+	return id, nil
+}
+
+// listPreamble prints the entries in the prompt and the counts of the agent.
+func (m *Model) listPreamble(ctx context.Context) {
 	entries, ov, err := m.session.PromptMemory(ctx)
 	if err != nil {
 		m.append(styleError.Render("error: " + err.Error()))
 		return
 	}
 	m.appendMemoryLines(entries)
-	m.append(styleDim.Render(fmt.Sprintf("%d entries visible to this agent · %d session summaries", ov.Visible, ov.Summaries)))
+	m.append(styleDim.Render(fmt.Sprintf("%d visible · %d summaries · %d pinned · %d need review",
+		ov.Visible, ov.Summaries, ov.Pinned, ov.NeedsReview)))
+}
+
+// searchMemory prints the entries that match query.
+func (m *Model) searchMemory(ctx context.Context, query string) {
+	entries, err := m.session.RecallMemory(ctx, query)
+	if err != nil {
+		m.append(styleError.Render("error: " + err.Error()))
+		return
+	}
+	if len(entries) == 0 {
+		m.append(styleDim.Render("no memory matches " + query))
+		return
+	}
+	m.appendMemoryLines(entries)
+}
+
+// listReview prints the entries whose review date has passed.
+func (m *Model) listReview(ctx context.Context) {
+	entries, err := m.session.MemoryReview(ctx)
+	if err != nil {
+		m.append(styleError.Render("error: " + err.Error()))
+		return
+	}
+	if len(entries) == 0 {
+		m.append(styleDim.Render("nothing needs review"))
+		return
+	}
+	m.appendMemoryLines(entries)
+}
+
+// memoryAction runs one of the verbs that change or show a single entry.
+func (m *Model) memoryAction(ctx context.Context, verb string, id int64) {
+	var err error
+	var done string
+	switch verb {
+	case "show":
+		e, gerr := m.session.MemoryEntry(ctx, id)
+		if gerr != nil {
+			m.append(styleError.Render("error: " + gerr.Error()))
+			return
+		}
+		m.append(memoryLine(e, time.Now()))
+		m.append(e.Text)
+		return
+	case "pin":
+		err, done = m.session.MemoryPin(ctx, id, true), "pinned"
+	case "unpin":
+		err, done = m.session.MemoryPin(ctx, id, false), "unpinned"
+	case "rm":
+		err, done = m.session.MemoryForget(ctx, id), "forgot"
+	case "reviewed":
+		err, done = m.session.MemoryReviewed(ctx, id), "reviewed"
+	}
+	if err != nil {
+		m.append(styleError.Render("error: " + err.Error()))
+		return
+	}
+	m.append(styleDim.Render(fmt.Sprintf("%s #%d", done, id)))
 }
 
 func (m *Model) appendMemoryLines(entries []memory.Entry) {
@@ -45,14 +137,37 @@ func (m *Model) appendMemoryLines(entries []memory.Entry) {
 	}
 }
 
-// memoryLine is "<id> <kind> <scope> <age> <text>", with the text on one line
-// and cut to memoryTextRunes.
+// memoryLine is "#<id> <kind> <scope> <flags> <age> <title or text>", on one
+// line and cut to memoryTextRunes. Flags: ★ pinned, ? needs review, ! tainted,
+// G global.
 func memoryLine(e memory.Entry, now time.Time) string {
-	text := strings.Join(strings.Fields(e.Text), " ")
+	text := e.Text
+	if e.Title != "" {
+		text = e.Title
+	}
+	text = strings.Join(strings.Fields(text), " ")
 	if r := []rune(text); len(r) > memoryTextRunes {
 		text = string(r[:memoryTextRunes]) + "…"
 	}
-	return fmt.Sprintf("%d %s %s %s %s", e.ID, e.Kind, e.Scope, memoryAge(now.Sub(e.CreatedAt)), text)
+	return fmt.Sprintf("#%-4d %-15s %-6s %-4s %4s  %s", e.ID, e.Kind, e.Scope, memoryFlags(e), memoryAge(now.Sub(e.CreatedAt)), text)
+}
+
+// memoryFlags is the marks of an entry, in a fixed order.
+func memoryFlags(e memory.Entry) string {
+	var sb strings.Builder
+	if e.Pinned {
+		sb.WriteString("★")
+	}
+	if e.State == memory.StateNeedsReview {
+		sb.WriteString("?")
+	}
+	if e.Tainted {
+		sb.WriteString("!")
+	}
+	if e.Scope == memory.ScopeGlobal {
+		sb.WriteString("G")
+	}
+	return sb.String()
 }
 
 // memoryAge is a short age: minutes, hours, then days.

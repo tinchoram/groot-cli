@@ -27,7 +27,7 @@ type Config struct {
 	Provider     ProviderConfig   `yaml:"provider"`
 	MaxTurns     int              `yaml:"max_turns"`
 	Compaction   CompactionConfig `yaml:"compaction"`
-	Memory       PathConfig       `yaml:"memory"`
+	Memory       MemoryConfig     `yaml:"memory"`
 	Audit        AuditConfig      `yaml:"audit"`
 	Gate         GateConfig       `yaml:"gate"`
 	Kubectl      KubectlConfig    `yaml:"kubectl"`
@@ -145,6 +145,16 @@ type PathConfig struct {
 	Path string `yaml:"path"`
 }
 
+// MemoryConfig is the long-term memory of a space. Path is its database.
+// PreambleTokens and PreambleSummaries bound the memory the system prompt
+// carries: the estimated tokens of the whole preamble, and how many session
+// summaries it keeps, newest first.
+type MemoryConfig struct {
+	Path              string `yaml:"path"`
+	PreambleTokens    int    `yaml:"preamble_tokens"`
+	PreambleSummaries int    `yaml:"preamble_summaries"`
+}
+
 // AuditConfig is the local audit log and the sinks that receive a copy of each
 // record. Path is the local JSONL file of each space (the source of truth).
 // Sinks are optional exports; see SinkConfig.
@@ -211,7 +221,7 @@ func Default() Config {
 		Provider:   ProviderConfig{Name: "anthropic"},
 		MaxTurns:   20,
 		Compaction: CompactionConfig{Strategy: "none", Keep: 40, Threshold: 60, MaxContextPercent: 80},
-		Memory:     PathConfig{Path: ".groot/groot.db"},
+		Memory:     MemoryConfig{Path: ".groot/groot.db", PreambleTokens: 1500, PreambleSummaries: 3},
 		Audit:      AuditConfig{Path: ".groot/audit.jsonl"},
 		Gate:       GateConfig{Policy: "interactive"},
 		Work:       WorkConfig{MaxTurns: 50, MaxAutoTurns: 10, MaxUSD: 5.0, AlwaysAsk: DefaultAlwaysAsk()},
@@ -281,6 +291,12 @@ func (c Config) Validate() error {
 		if strings.TrimSpace(model) == "" || window <= 0 {
 			return fmt.Errorf("models.context_window: %q needs a positive token count, got %d", model, window)
 		}
+	}
+	if c.Memory.PreambleTokens <= 0 {
+		return fmt.Errorf("memory.preamble_tokens must be positive, got %d", c.Memory.PreambleTokens)
+	}
+	if c.Memory.PreambleSummaries < 0 {
+		return fmt.Errorf("memory.preamble_summaries must not be negative, got %d", c.Memory.PreambleSummaries)
 	}
 	if err := validateBash(c.Bash); err != nil {
 		return err

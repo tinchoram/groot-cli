@@ -30,6 +30,8 @@ type AgentInfo struct {
 	Description string
 	Model       string
 	Tools       []string
+	// GlobalMemory is whether the agent reads global memory.
+	GlobalMemory bool
 }
 
 // AgentSpec is the input for creating an agent.
@@ -112,6 +114,9 @@ type Manager interface {
 	// EditAgentTools adds and removes tools of an agent. The managed agents keep
 	// their required tools.
 	EditAgentTools(name string, add, remove []string) error
+	// SetAgentGlobalMemory lets an agent read global memory, or takes it away.
+	// groot always reads it, so turning it off for groot is refused.
+	SetAgentGlobalMemory(name string, on bool) error
 	// AuditReport is the audit records of a space that match q, as text; empty
 	// means the active space.
 	AuditReport(ctx context.Context, space string, q audit.Query) (string, error)
@@ -174,6 +179,8 @@ func All(m Manager, home string) []tool.Tool {
 		NewSetContextWindow(m),
 		NewGrantTool(m),
 		NewRevokeTool(m),
+		NewGrantGlobalMemoryTool(m),
+		NewRevokeGlobalMemoryTool(m),
 		NewSetDefaultModel(m),
 		NewDeleteSpace(m),
 		NewEditSpace(m, home),
@@ -390,7 +397,11 @@ func (t listAgents) Execute(context.Context, string) (string, bool) {
 		if model == "" {
 			model = fmt.Sprintf("default (%s)", t.m.DefaultModel())
 		}
-		lines = append(lines, fmt.Sprintf("%s  %s  model: %s  tools: %s", a.Name, a.Description, model, strings.Join(a.Tools, ", ")))
+		line := fmt.Sprintf("%s  %s  model: %s  tools: %s", a.Name, a.Description, model, strings.Join(a.Tools, ", "))
+		if a.GlobalMemory {
+			line += "  global memory: yes"
+		}
+		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n"), false
 }

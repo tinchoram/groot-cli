@@ -5,6 +5,29 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## 0.5.5-dev (unreleased)
 
+### Memory
+- Scopes are `agent` (only its writer), `space` (every agent of the space, the
+  default) and `global` (kept in the root database; groot writes it, and other
+  agents read it only when enabled with `grant_global_memory`).
+  **Migration:** entries saved as `project` now read `agent`; entries saved as
+  `global` now read `space`. Existing databases migrate once on open. A new
+  `global` entry needs the reader to be enabled.
+- `remember` upserts by `topic_key` and counts repeated content instead of
+  storing it twice. It accepts `title` and `topic_key`, and reports
+  `remembered #id (created)`, `updated #id (revision n)` or `duplicate of #id`.
+- New tools: `memory_get`, `forget`, `update_memory`, `grant_global_memory`,
+  `revoke_global_memory`. `recall` now returns one line per entry with its id.
+- Entries saved after reading untrusted output are marked tainted: they are
+  shown inside the untrusted-content envelope in the prompt.
+- The preamble is budgeted (`memory.preamble_tokens`, default 1500;
+  `memory.preamble_summaries`, default 3) and rebuilt after every memory change.
+- Session summaries follow one shape (goal, done, decisions, next, files) and are
+  titled `Session <time> <agent>`. `/clear` records the cleared session as the
+  parent of the new one.
+- `/memory` shows flags and a footer with pinned and review counts, and gains
+  `show`, `pin`, `unpin`, `rm`, `reviewed` and `review`.
+- `list_agents` shows `global memory: yes` for enabled agents.
+
 ### Sessions
 - A `/clear` whose model summary fails or times out keeps a local summary of
   the session and reports it as a note (`conversation cleared · summary for

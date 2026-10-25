@@ -62,9 +62,11 @@ strategies), `messaging`, `admintool`, `agentimport`, `clipboard`.
    `tool_use` it runs `runTool`: gate, then `Tool.Execute`, then the audit record.
    The loop ends when the model stops asking for tools or `max_turns` is reached.
 
-The memory preamble is built once, when a conversation is created
-(`internal/workspace/workspace.go`, `Preamble(ctx, agent, 10)`), and composed into
-the system prompt by `config.ComposeSystemPrompt`.
+The memory preamble is rebuilt, not built once: when a conversation is opened,
+on `/clear`, and after every change through the memory tools or `/memory`
+(`refreshSystem`, `internal/workspace/conversation.go`). It is budgeted by
+`memory.preamble_tokens` and `memory.preamble_summaries`, and composed into the
+system prompt by `config.ComposeSystemPrompt`. See `docs/MEMORY.md`.
 
 ## Gate chain
 
@@ -125,8 +127,9 @@ Per space, `<space>/.groot/`, at the paths set by `memory.path` and `audit.path`
 
 - `groot.db` (SQLite), tables:
   - `sessions`, `messages`: one row per conversation and per stored message.
-  - `memories`: long-term entries (`kind`, `scope`, `agent`, `text`).
-  - `memories_fts`: FTS5 index over `memories.text`, kept in sync by triggers.
+  - `memories`: long-term entries (`kind`, `scope` agent|space|global, `agent`, `title`, `text`, `topic_key`, `normalized_hash`, `pinned`, `tainted`, `review_after`, `revision_count`, `duplicate_count`, `deleted_at` for soft delete).
+  - `memories_fts`: FTS5 index over `memories.title` and `memories.text`, kept in sync by triggers.
+  - Global entries live in the root space's `groot.db`. A space that is not the root reads and writes them through `memory.Layered` (`internal/memory/layered.go`), which keeps everything else in its own database.
   - `tasks`, `task_evidence`: ODD flow tasks and their evidence. A handed-over task keeps its delegation record (`delegate`, `manager`, `delegation_status`), and a task taken over keeps its origin (`parent_space`, `parent_agent`, `parent_task`); `migrate` adds these columns to older databases.
   - The spend ledger is `sessions.cost_usd`, written after every model answer;
     budgets sum it (`memory.SpendUSD`, `SpendByAgent`; checks in `internal/workspace/budget.go`).

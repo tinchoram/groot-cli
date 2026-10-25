@@ -104,6 +104,12 @@ tag: the user's polish pass, then the repository goes public, the tag runs the
 release workflow for the first time, and `groot upgrade --check` is verified
 against a real release. After that, the Homebrew tap.
 
+Memory hygiene slice (in progress on the working tree): scopes agent, space and
+global with a root-database global store and per-agent enablement; upsert by
+topic key and dedupe by content; pin, review dates and taint; a budgeted,
+rebuilt preamble; fixed-shape session summaries; and the `/memory` subcommands.
+The model is in [MEMORY.md](MEMORY.md). Vector recall stays under Later.
+
 Session closed on 2026-10-25 at commit `74aef30` with everything above on
 main, verified and pushed. Backlog: BUG-005 and FEAT-014 are implemented and
 still marked open until debug is told or the 0.5.5 sweep runs.
@@ -116,6 +122,12 @@ still marked open until debug is told or the 0.5.5 sweep runs.
 - Bedrock, Vertex, Ollama and OpenAI-compatible adapters, chosen by the model
   id prefix. Only when asked: Anthropic stays the single provider until then.
 - Candidates, see the decisions above: ACP client, skills.
+- A2A (Agent2Agent, spec 1.0, Apache-2.0, Linux Foundation) as a client for
+  talking to remote agents outside groot, and later as an optional server behind
+  groot's gates. Not for the internal inbox: agents of one groot process share a
+  space and its gates, so a network protocol between opaque agents is the wrong
+  layer there. Inbox rows should stay mappable to an A2A Message (message id,
+  context id pointing at the flow task, parts), so a bridge is an adapter.
 
 ## Later
 

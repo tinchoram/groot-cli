@@ -55,7 +55,7 @@ func TestSplitToolsAcceptsCommasAndSpaces(t *testing.T) {
 }
 
 func TestBaseSetIsTheManagedToolsWithoutFetch(t *testing.T) {
-	want := []string{"send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "recall", "remember", "list_dir", "glob"}
+	want := []string{"send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "recall", "remember", "memory_get", "forget", "update_memory", "list_dir", "glob"}
 	if got := ManagedTools(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("base set = %v", got)
 	}

@@ -33,22 +33,25 @@ type AgentDef struct {
 	// collection it belongs to. Both are optional and kept on save.
 	Author     string
 	Collection string
+	// GlobalMemory lets the agent read the global memory of the root database.
+	// groot always reads it; other agents read it only when this is set.
+	GlobalMemory bool
 	// Prompt is the body of the Markdown file: the system prompt.
 	Prompt string
 }
 
 // KnownTools lists the builtin tool names an agent may use.
 var KnownTools = []string{
-	"read_file", "list_dir", "glob", "write_file", "bash", "kubectl", "remember", "recall",
+	"read_file", "list_dir", "glob", "write_file", "bash", "kubectl", "remember", "recall", "memory_get", "forget", "update_memory",
 	"list_spaces", "create_space", "assign_agent", "unassign_agent", "list_agents", "create_agent",
-	"import_agent", "list_library", "install_agent", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "feedback_report", "feedback_list", "feedback_update", "read_changelog", "fetch_url", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model",
+	"import_agent", "list_library", "install_agent", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "feedback_report", "feedback_list", "feedback_update", "read_changelog", "fetch_url", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model", "grant_global_memory", "revoke_global_memory",
 	"delete_space", "edit_space", "delete_agent", "edit_agent", "move_agent", "copy_agent",
 }
 
 // DefaultTools is the tool set given to agents created with /agent new.
 // It is read-leaning: no file writes and no shell.
 func DefaultTools() []string {
-	return []string{"read_file", "kubectl", "recall", "remember", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "feedback_list"}
+	return []string{"read_file", "kubectl", "recall", "remember", "memory_get", "forget", "update_memory", "send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "feedback_list"}
 }
 
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
@@ -97,14 +100,15 @@ func Validate(d AgentDef) error {
 
 // frontmatter is the YAML block at the top of an agent file. Unknown keys are ignored.
 type frontmatter struct {
-	Name        string    `yaml:"name"`
-	Description string    `yaml:"description"`
-	Model       string    `yaml:"model"`
-	Tools       yaml.Node `yaml:"tools"`
-	MaxTurns    int       `yaml:"max_turns"`
-	BudgetUSD   float64   `yaml:"budget_usd"`
-	Author      string    `yaml:"author"`
-	Collection  string    `yaml:"collection"`
+	Name         string    `yaml:"name"`
+	Description  string    `yaml:"description"`
+	Model        string    `yaml:"model"`
+	Tools        yaml.Node `yaml:"tools"`
+	MaxTurns     int       `yaml:"max_turns"`
+	BudgetUSD    float64   `yaml:"budget_usd"`
+	Author       string    `yaml:"author"`
+	Collection   string    `yaml:"collection"`
+	GlobalMemory bool      `yaml:"global_memory"`
 }
 
 // splitFrontmatter separates the frontmatter block from the body. It accepts
@@ -143,15 +147,16 @@ func ParseAgentFile(data []byte) (AgentDef, error) {
 		return AgentDef{}, err
 	}
 	return AgentDef{
-		Name:        strings.TrimSpace(fm.Name),
-		Description: fm.Description,
-		Model:       resolveModel(fm.Model),
-		Tools:       tools,
-		MaxTurns:    fm.MaxTurns,
-		BudgetUSD:   fm.BudgetUSD,
-		Author:      strings.TrimSpace(fm.Author),
-		Collection:  strings.TrimSpace(fm.Collection),
-		Prompt:      strings.TrimSpace(body),
+		Name:         strings.TrimSpace(fm.Name),
+		Description:  fm.Description,
+		Model:        resolveModel(fm.Model),
+		Tools:        tools,
+		MaxTurns:     fm.MaxTurns,
+		BudgetUSD:    fm.BudgetUSD,
+		Author:       strings.TrimSpace(fm.Author),
+		Collection:   strings.TrimSpace(fm.Collection),
+		GlobalMemory: fm.GlobalMemory,
+		Prompt:       strings.TrimSpace(body),
 	}, nil
 }
 
@@ -208,27 +213,29 @@ func parseTools(n yaml.Node) ([]string, error) {
 
 // renderFrontmatter is what RenderAgentFile writes.
 type renderFrontmatter struct {
-	Name        string   `yaml:"name"`
-	Description string   `yaml:"description"`
-	Model       string   `yaml:"model,omitempty"`
-	Tools       []string `yaml:"tools"`
-	MaxTurns    int      `yaml:"max_turns,omitempty"`
-	BudgetUSD   float64  `yaml:"budget_usd,omitempty"`
-	Author      string   `yaml:"author,omitempty"`
-	Collection  string   `yaml:"collection,omitempty"`
+	Name         string   `yaml:"name"`
+	Description  string   `yaml:"description"`
+	Model        string   `yaml:"model,omitempty"`
+	Tools        []string `yaml:"tools"`
+	MaxTurns     int      `yaml:"max_turns,omitempty"`
+	BudgetUSD    float64  `yaml:"budget_usd,omitempty"`
+	Author       string   `yaml:"author,omitempty"`
+	Collection   string   `yaml:"collection,omitempty"`
+	GlobalMemory bool     `yaml:"global_memory,omitempty"`
 }
 
 // RenderAgentFile writes a definition in the Markdown format.
 func RenderAgentFile(d AgentDef) ([]byte, error) {
 	front, err := yaml.Marshal(renderFrontmatter{
-		Name:        d.Name,
-		Description: d.Description,
-		Model:       d.Model,
-		Tools:       d.Tools,
-		MaxTurns:    d.MaxTurns,
-		BudgetUSD:   d.BudgetUSD,
-		Author:      d.Author,
-		Collection:  d.Collection,
+		Name:         d.Name,
+		Description:  d.Description,
+		Model:        d.Model,
+		Tools:        d.Tools,
+		MaxTurns:     d.MaxTurns,
+		BudgetUSD:    d.BudgetUSD,
+		Author:       d.Author,
+		Collection:   d.Collection,
+		GlobalMemory: d.GlobalMemory,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode frontmatter: %w", err)

@@ -74,10 +74,11 @@ func (a adminManager) ListAgents() []admintool.AgentInfo {
 	var out []admintool.AgentInfo
 	for _, d := range a.w.defs {
 		out = append(out, admintool.AgentInfo{
-			Name:        d.Name,
-			Description: d.Description,
-			Model:       d.Model,
-			Tools:       slices.Clone(d.Tools),
+			Name:         d.Name,
+			Description:  d.Description,
+			Model:        d.Model,
+			Tools:        slices.Clone(d.Tools),
+			GlobalMemory: readsGlobal(d.Name, d),
 		})
 	}
 	return out

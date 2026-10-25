@@ -89,8 +89,8 @@ func grootDef() catalog.AgentDef {
 		Description: "Groot: your guide. Creates spaces and agents and explains how things work",
 		Tools: []string{
 			"list_spaces", "create_space", "assign_agent", "unassign_agent",
-			"list_agents", "create_agent", "import_agent", "list_library", "install_agent", "recall", "remember",
-			"send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model",
+			"list_agents", "create_agent", "import_agent", "list_library", "install_agent", "recall", "remember", "memory_get", "forget", "update_memory",
+			"send_message", "read_inbox", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model", "grant_global_memory", "revoke_global_memory",
 			"delete_space", "edit_space", "delete_agent", "edit_agent", "move_agent", "copy_agent",
 		},
 	}

@@ -91,3 +91,5 @@ func TestSetAgentModelRefusesUnknownFields(t *testing.T) {
 		t.Fatalf("unknown fields must be refused: %q", out)
 	}
 }
+
+func (f *fakeManager) SetAgentGlobalMemory(string, bool) error { return nil }

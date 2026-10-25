@@ -69,7 +69,7 @@ func TestPlanUsesDefaultToolsWhenNoneDeclared(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "read_file,write_file,bash,recall,remember"
+	want := "read_file,write_file,bash,recall,remember,memory_get,forget,update_memory"
 	if strings.Join(p.Def.Tools, ",") != want || len(p.Warnings) != 0 {
 		t.Fatalf("default tools = %v warnings=%v", p.Def.Tools, p.Warnings)
 	}
@@ -80,7 +80,7 @@ func TestPlanFallsBackWhenEveryToolIsDropped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(p.Def.Tools, ",") != "read_file,write_file,bash,recall,remember" {
+	if strings.Join(p.Def.Tools, ",") != "read_file,write_file,bash,recall,remember,memory_get,forget,update_memory" {
 		t.Fatalf("tools = %v", p.Def.Tools)
 	}
 	if !strings.Contains(strings.Join(p.Warnings, " "), "default set") {

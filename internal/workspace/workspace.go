@@ -74,6 +74,16 @@ type Chat interface {
 	PromptMemory(ctx context.Context) ([]memory.Entry, memory.Overview, error)
 	// RecallMemory searches the entries this agent can read.
 	RecallMemory(ctx context.Context, query string) ([]memory.Entry, error)
+	// MemoryEntry returns one entry this agent can read, with its full text.
+	MemoryEntry(ctx context.Context, id int64) (memory.Entry, error)
+	// MemoryPin pins or unpins an entry this agent can change.
+	MemoryPin(ctx context.Context, id int64, pinned bool) error
+	// MemoryForget removes an entry this agent can change.
+	MemoryForget(ctx context.Context, id int64) error
+	// MemoryReview lists the entries this agent can read whose review date has passed.
+	MemoryReview(ctx context.Context) ([]memory.Entry, error)
+	// MemoryReviewed moves the review date of an entry one interval ahead.
+	MemoryReviewed(ctx context.Context, id int64) error
 }
 
 // Hooks receive the output of every conversation, tagged with its key
@@ -140,8 +150,10 @@ type AgentInfo struct {
 	Model       string
 	Tools       []string
 	Prompt      string
-	Assigned    bool // assigned to the active space
-	Active      bool // currently selected in the active space
+	// GlobalMemory is whether the agent reads global memory (groot always does).
+	GlobalMemory bool
+	Assigned     bool // assigned to the active space
+	Active       bool // currently selected in the active space
 }
 
 // Workspace is the runtime. Methods are safe for concurrent use.
@@ -339,13 +351,14 @@ func (w *Workspace) info(d catalog.AgentDef, assigned bool) AgentInfo {
 	cur, _ := w.opts.Spaces.Current()
 	model := ResolveModel(d.Model, cur, w.opts.Config.Provider.Model).Value
 	return AgentInfo{
-		Name:        d.Name,
-		Description: d.Description,
-		Model:       model,
-		Tools:       slices.Clone(d.Tools),
-		Prompt:      d.Prompt,
-		Assigned:    assigned,
-		Active:      assigned && d.Name == w.active,
+		Name:         d.Name,
+		Description:  d.Description,
+		Model:        model,
+		Tools:        slices.Clone(d.Tools),
+		Prompt:       d.Prompt,
+		GlobalMemory: readsGlobal(d.Name, d),
+		Assigned:     assigned,
+		Active:       assigned && d.Name == w.active,
 	}
 }
 
@@ -490,6 +503,20 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	if err != nil {
 		return nil, err
 	}
+	// The memory view of this conversation: its store, the agent that reads it and
+	// whether it reads global memory. The hooks of the memory tools are set here,
+	// before the first tool build reads them.
+	mem, err := w.memoryStateFor(sp.Path, st.mem, def, agentName)
+	if err != nil {
+		return nil, err
+	}
+	var conv *Conversation
+	mem.tainted = func() bool { return conv != nil && conv.TurnTainted() }
+	mem.changed = func() {
+		if conv != nil {
+			_ = conv.refreshSystem(context.Background())
+		}
+	}
 	key := sp.Name + "/" + agentName
 	files := &fileLog{}
 	box := &reviewBox{}
@@ -516,7 +543,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	}
 	g := newConversationGuard(w.opts.Config.Guard.Mode)
 	rebuild := func(names []string) (*tool.Registry, error) {
-		reg, err := w.buildTools(sp.Path, names, st.mem, w.messengerFor(sp.Name, agentName), ctl, files, agentName)
+		reg, err := w.buildTools(sp.Path, names, mem, w.messengerFor(sp.Name, agentName), ctl, files, agentName)
 		if err != nil {
 			return nil, err
 		}
@@ -542,7 +569,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	// rebuildSystem composes the prompt from the memory stored at the time of the
 	// call. It runs at open and again on /clear.
 	rebuildSystem := func(ctx context.Context) (string, error) {
-		entries, err := st.mem.Preamble(ctx, memory.Reader{Agent: agentName}, memory.Budget{})
+		entries, err := mem.store.Preamble(ctx, mem.reader(), mem.budget)
 		if err != nil {
 			return "", fmt.Errorf("load memory preamble: %w", err)
 		}
@@ -562,8 +589,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		maxTurns = w.opts.Config.MaxTurns
 	}
 	sess := gate.Session{Inner: confirmingGate(w.opts.Gate, w.opts.Hooks, key), Grants: w.grantsFor(key), Work: work}
-	// conv is set below; the limit reads it only once a turn runs.
-	var conv *Conversation
+	// The limit reads conv only once a turn runs.
 	ag := &agent.Agent{
 		Name:      agentName,
 		Provider:  prov,
@@ -588,7 +614,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		Limit: func(ctx context.Context) error { return conv.checkBudget(ctx, 0) },
 	}
 	resumed := w.startOrResume(ctx, ag, st.mem, agentName)
-	conv = &Conversation{Agent: ag, prov: prov, store: st.mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, rebuildSystem: rebuildSystem, work: work, files: files, review: box,
+	conv = &Conversation{Agent: ag, prov: prov, store: mem.store, mem: mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, rebuildSystem: rebuildSystem, work: work, files: files, review: box,
 		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key), rebuildTools: rebuild,
 		budgets:      func(ctx context.Context) ([]Budget, error) { return w.budgetsFor(ctx, st.mem, sp.Name, agentName) },
 		budgetNotice: keyedWarn(w.opts.Hooks, key)}
@@ -688,6 +714,15 @@ func (c idleChat) PromptMemory(context.Context) ([]memory.Entry, memory.Overview
 func (c idleChat) RecallMemory(context.Context, string) ([]memory.Entry, error) {
 	return nil, c.err
 }
+func (c idleChat) MemoryEntry(context.Context, int64) (memory.Entry, error) {
+	return memory.Entry{}, c.err
+}
+func (c idleChat) MemoryPin(context.Context, int64, bool) error { return c.err }
+func (c idleChat) MemoryForget(context.Context, int64) error    { return c.err }
+func (c idleChat) MemoryReview(context.Context) ([]memory.Entry, error) {
+	return nil, c.err
+}
+func (c idleChat) MemoryReviewed(context.Context, int64) error { return c.err }
 
 // ImportAgent fetches an agent file (a local path or an http(s) URL), maps its
 // tools, and saves it to the catalog. An existing agent is replaced only when

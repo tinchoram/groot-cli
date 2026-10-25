@@ -217,6 +217,8 @@ directory, Groot adds it to the system prompt under "Project context".
 | `ui.show_cost` | `false` | Show the estimated session cost in the status line and the spend of each agent in the sidebar. `/cost` and `/tokens` show it either way |
 | `updates.check` | `true` | Check GitHub once a day, in the background at startup, for a newer release and show a note in the status line. `groot upgrade --check` checks at any time |
 | `memory.path` | `.groot/groot.db` | SQLite database. A relative path is under each space's directory; an absolute path is shared by all spaces |
+| `memory.preamble_tokens` | `1500` | Estimated token budget of the memory block in the system prompt |
+| `memory.preamble_summaries` | `3` | Session summaries kept in the memory block, newest first |
 | `audit.path` | `.groot/audit.jsonl` | Audit log. Same rules as `memory.path` |
 | `audit.sinks` | empty | Export sinks: `file`, `http` or `syslog`. See Audit |
 | `gate.policy` | `interactive` | `interactive`, `readonly` or `auto` |
@@ -490,7 +492,7 @@ Since 0.2.0 groot works in **spaces**, and inside a space you talk to **agents**
 - **Memory**: each agent's long-term memory, with scopes that decide who sees
   what. See [Memory](#memory).
 - **Summary on exit**: when groot quits, every conversation that exchanged
-  messages writes a three-line summary to its space's memory.
+  messages writes a session summary (goal, done, decisions, next, files) to its space's memory.
 
 ### Deleting, renaming, moving and copying
 
@@ -1031,43 +1033,49 @@ Limits:
 
 ## Memory
 
-Agents keep long-term memory in their space's database. Two tools use it:
+Agents keep long-term memory. The full model (scopes, upsert, review, taint,
+preamble budget) is in [docs/MEMORY.md](docs/MEMORY.md). In short:
 
-- `remember` saves an entry. `kind` is `fact`, `decision` or `runbook`. `scope`
-  is `project` when omitted, or `global` or `agent`. The `session_summary` kind
-  is reserved for the summary written on exit, so `remember` refuses it.
-- `recall` searches the entries the agent can see. It is a full-text search over
-  the entry text (SQLite FTS5): every word of the query must appear. It returns
-  10 entries by default, at most 50.
+Scopes decide who reads and writes an entry:
 
-Who sees what:
+| Scope | Visible to | Written by |
+|---|---|---|
+| `agent` | only the agent that wrote it | that agent |
+| `space` | every agent of the space (default) | any agent of the space |
+| `global` | groot always; other agents when enabled | groot only |
 
-| Scope | Visible to |
-|---|---|
-| `global` | every agent |
-| `project` | the agent that wrote it, and project entries with no agent (written before per-agent memory) |
-| `agent` | only the agent that wrote it |
+Tools:
 
-The 10 newest visible entries are added to the system prompt under "Long-term
-memory". The block is built when a conversation opens, and it is rebuilt on
-`/clear`: once when the old session detaches, so every entry saved during it is
-included, and again after the summary of the cleared session is written, so the
-next turn sees that summary too.
+- `remember {kind, text, title?, topic_key?, scope?}`: `kind` is `fact`,
+  `decision` or `runbook`. Saving the same `topic_key` revises the entry; saving
+  the same content again is counted, not stored twice. `session_summary` is
+  written by the system only.
+- `recall {query, limit?}`: one line per entry with its id; `memory_get {id}`
+  returns the full text.
+- `update_memory {id, title?, text?, topic_key?, pinned?}`, `forget {id}`.
+- `grant_global_memory {agent}`, `revoke_global_memory {agent}` (groot, admin):
+  let an agent read global memory. `list_agents` shows `global memory: yes`.
 
-`/memory` lists the entries in the agent's prompt, newest first, as `<id> <kind>
-<scope> <age> <text>`, with a footer that counts the entries the agent can see
-and how many of them are session summaries. `/memory <query>` searches the same
-entries the way `recall` does.
+The preamble of the system prompt carries the pinned entries, decisions and
+runbooks, facts, then the newest session summaries, within
+`memory.preamble_tokens` (default 1500) and `memory.preamble_summaries`
+(default 3). It is rebuilt after every memory change, so the next turn sees it.
+
+`/memory` lists the entries in the prompt with their id, kind, scope, flags
+(`★` pinned, `?` needs review, `!` tainted, `G` global), age and title or text,
+and a footer with the counts. Other forms: `/memory <query>` searches;
+`/memory show|pin|unpin|rm|reviewed <id>` act on one entry; `/memory review`
+lists the entries that need review.
 
 The database path is set by `memory.path` (default `.groot/groot.db`). A relative
 path is taken from the space directory, so each space has its own memory. An
 absolute path is shared by every space that uses it. `audit.path` works the same
-way for the audit log.
+way for the audit log. Global memory lives in the root space's database.
 
 ## Sessions and history
 
 Each conversation is one session stored in its space's database (`memory.path`,
-by default `<space>/.groot/groot.db`): every message, tool call and the three-line summary
+by default `<space>/.groot/groot.db`): every message, tool call and the session summary
 written when the session ends. Sessions are per agent in a space.
 
 - Selecting an agent resumes its latest session. The session id stays the same,
@@ -1236,7 +1244,7 @@ There is no global default yet: a `budget` key in `groot.yaml` is not read.
 ## Keys and exit
 
 - `ctrl-c` ends the session at once: turns are cancelled, pending approvals are
-  denied, each conversation keeps a local summary (the last request and the start
+  denied, each conversation keeps a local summary (goal = the last request, done = the start
   of the last answer) with no model call, and the shell is hung up.
 - `ctrl-d` and `/exit` write model summaries for the conversations that ran, in
   parallel, within fifteen seconds. The status line shows `closing… (esc to skip

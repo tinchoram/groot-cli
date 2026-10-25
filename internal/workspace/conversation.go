@@ -27,13 +27,23 @@ const (
 	summaryTimeout  = 30 * time.Second
 	summaryMaxRunes = 100_000
 	summarySystem   = "You write terse session summaries for an SRE audit trail."
-	summaryPrompt   = "Summarize this session in exactly three lines: what was asked, what was found or changed, and what is still open. No preamble.\n\n"
+	// summaryPrompt asks for the fixed shape of a session summary; the local
+	// summary of exit.go uses the same headings.
+	summaryPrompt = "Summarize this session in at most 12 lines, in exactly this shape. No preamble.\n" +
+		"Goal: one line.\n" +
+		"Done: up to 3 bullets (\"- item\").\n" +
+		"Decisions: up to 2 bullets (\"- item\"), or \"none\".\n" +
+		"Next: up to 3 bullets (\"- item\").\n" +
+		"Files: up to 3 paths, or \"none\".\n\n"
 )
 
 // Conversation is one agent running inside one space. It wraps the agent loop
 // with the model handle and the space's memory store.
 type Conversation struct {
 	*agent.Agent
+	// mem is the memory view: the store, the agent that reads it, and its global
+	// access. The memory tools and the prompt are built from it.
+	mem   *memoryState
 	prov  provider.Provider
 	store memory.Store
 	name  string
@@ -103,11 +113,11 @@ func (c *Conversation) refreshSystem(ctx context.Context) error {
 // PromptMemory returns the entries of the prompt preamble of this agent, within
 // the default budget, and how many entries the agent can read in all.
 func (c *Conversation) PromptMemory(ctx context.Context) ([]memory.Entry, memory.Overview, error) {
-	entries, err := c.store.Preamble(ctx, memory.Reader{Agent: c.name}, memory.Budget{})
+	entries, err := c.store.Preamble(ctx, c.mem.reader(), c.mem.budget)
 	if err != nil {
 		return nil, memory.Overview{}, err
 	}
-	ov, err := c.store.Overview(ctx, memory.Reader{Agent: c.name})
+	ov, err := c.store.Overview(ctx, c.mem.reader())
 	if err != nil {
 		return nil, memory.Overview{}, err
 	}
@@ -116,7 +126,43 @@ func (c *Conversation) PromptMemory(ctx context.Context) ([]memory.Entry, memory
 
 // RecallMemory searches the entries this agent can read, newest matches first.
 func (c *Conversation) RecallMemory(ctx context.Context, query string) ([]memory.Entry, error) {
-	return c.store.Recall(ctx, memory.Reader{Agent: c.name}, query, recallEntries)
+	return c.store.Recall(ctx, c.mem.reader(), query, recallEntries)
+}
+
+// MemoryEntry returns one entry this agent can read, with its full text.
+func (c *Conversation) MemoryEntry(ctx context.Context, id int64) (memory.Entry, error) {
+	return c.store.Get(ctx, id, c.mem.reader())
+}
+
+// MemoryPin pins or unpins an entry. The prompt is rebuilt, so the change is in
+// the next turn.
+func (c *Conversation) MemoryPin(ctx context.Context, id int64, pinned bool) error {
+	if err := c.store.SetPinned(ctx, id, c.mem.reader(), pinned); err != nil {
+		return err
+	}
+	return c.refreshSystem(ctx)
+}
+
+// MemoryForget removes an entry this agent can change, and rebuilds the prompt.
+func (c *Conversation) MemoryForget(ctx context.Context, id int64) error {
+	if err := c.store.Forget(ctx, id, c.mem.reader()); err != nil {
+		return err
+	}
+	return c.refreshSystem(ctx)
+}
+
+// MemoryReview lists the entries whose review date has passed, oldest first.
+func (c *Conversation) MemoryReview(ctx context.Context) ([]memory.Entry, error) {
+	return c.store.NeedsReview(ctx, c.mem.reader(), recallEntries)
+}
+
+// MemoryReviewed moves the review date of an entry one interval ahead, and
+// rebuilds the prompt, which marks the entry as reviewed.
+func (c *Conversation) MemoryReviewed(ctx context.Context, id int64) error {
+	if err := c.store.MarkReviewed(ctx, id, c.mem.reader()); err != nil {
+		return err
+	}
+	return c.refreshSystem(ctx)
 }
 
 // Send runs one turn. When the agent has unread messages, the prompt is
@@ -223,14 +269,7 @@ func (c *Conversation) summarize(ctx context.Context, id, transcript string) err
 	if text == "" {
 		return nil
 	}
-	_, err = c.store.Remember(sctx, memory.Entry{
-		Kind:   memory.KindSessionSummary,
-		Scope:  memory.ScopeAgent,
-		Agent:  c.name,
-		Text:   text,
-		Source: "session:" + id,
-	})
-	return err
+	return c.storeSummary(sctx, id, text)
 }
 
 // tail keeps the last n runes so long sessions stay within the summary budget.
@@ -244,7 +283,7 @@ func tail(s string, n int) string {
 
 // buildTools creates the registry an agent may use. root confines file tools
 // and sets the working directory for bash, so it is the space path.
-func (w *Workspace) buildTools(root string, names []string, mem memory.Store, msg tool.Messenger, ctl *flow.Controller, files *fileLog, agentName string) (*tool.Registry, error) {
+func (w *Workspace) buildTools(root string, names []string, mem *memoryState, msg tool.Messenger, ctl *flow.Controller, files *fileLog, agentName string) (*tool.Registry, error) {
 	reg := tool.NewRegistry()
 	for _, n := range names {
 		t, err := w.newTool(n, root, mem, msg, ctl, files, agentName)
@@ -258,7 +297,7 @@ func (w *Workspace) buildTools(root string, names []string, mem memory.Store, ms
 	return reg, nil
 }
 
-func (w *Workspace) newTool(name, root string, mem memory.Store, msg tool.Messenger, ctl *flow.Controller, files *fileLog, agentName string) (tool.Tool, error) {
+func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messenger, ctl *flow.Controller, files *fileLog, agentName string) (tool.Tool, error) {
 	switch name {
 	case "task_classify", "task_open", "task_advance", "task_status":
 		if ctl == nil {
@@ -321,9 +360,15 @@ func (w *Workspace) newTool(name, root string, mem memory.Store, msg tool.Messen
 	case "kubectl":
 		return tool.NewKubectl("kubectl", w.opts.Config.Kubectl.Namespaces), nil
 	case "remember":
-		return tool.NewRemember(mem, agentName), nil
+		return tool.NewRemember(mem.access()), nil
 	case "recall":
-		return tool.NewRecall(mem, agentName), nil
+		return tool.NewRecall(mem.access()), nil
+	case "memory_get":
+		return tool.NewMemoryGet(mem.access()), nil
+	case "forget":
+		return tool.NewForget(mem.access()), nil
+	case "update_memory":
+		return tool.NewUpdateMemory(mem.access()), nil
 	}
 	for _, at := range admintool.All(w.Manager(), w.opts.UserHome) {
 		if at.Definition().Name == name {

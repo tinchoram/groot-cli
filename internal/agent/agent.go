@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tinchoram/groot-cli/internal/api"
@@ -58,6 +59,12 @@ type Agent struct {
 	Guard    *guard.Guard
 	System   string
 	MaxTurns int
+	// turnTainted is set when a tool of the current turn returned untrusted
+	// output. Send clears it at the start of every turn.
+	turnTainted atomic.Bool
+	// parentID is the session a /clear detached; the next session names it as
+	// its parent, and then it is forgotten. Guarded by mu.
+	parentID string
 
 	// OnText receives streamed model text as it arrives. May be nil.
 	OnText func(delta string)
@@ -121,6 +128,7 @@ func (a *Agent) Transcript() string {
 // Send appends prompt to the conversation, runs the model and any requested
 // tools until the model stops asking for tools, and returns the final text.
 func (a *Agent) Send(ctx context.Context, prompt string) (string, error) {
+	a.turnTainted.Store(false)
 	a.ensureSession(ctx)
 	a.persistRepairs(ctx)
 	a.appendMessage(ctx, api.Message{
@@ -229,6 +237,7 @@ func (a *Agent) Detach() (id, transcript string, messages int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	id, transcript, messages = a.sessionID, api.RenderTranscript(a.history), len(a.history)
+	a.parentID = id
 	a.sessionID, a.history, a.turn, a.costBase = "", nil, 0, 0
 	a.resetContextLocked()
 	return id, transcript, messages
@@ -280,6 +289,11 @@ func (a *Agent) persistCost(ctx context.Context) {
 	a.warn(a.store().SetSessionCost(context.WithoutCancel(ctx), id, a.SessionCost()))
 }
 
+// TurnTainted reports whether the current turn has read untrusted tool output,
+// such as a fetched page or a remembered entry. Memory saved in such a turn is
+// stored as tainted.
+func (a *Agent) TurnTainted() bool { return a.turnTainted.Load() }
+
 func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
 	input := string(use.Input)
 	t, ok := a.registry().Get(use.Name)
@@ -290,6 +304,9 @@ func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
 			Content:   fmt.Sprintf("unknown tool %q", use.Name),
 			IsError:   true,
 		}
+	}
+	if u, ok := t.(tool.Untrusted); ok && u.Untrusted() {
+		a.turnTainted.Store(true)
 	}
 
 	risk := t.RiskFor(input)
@@ -393,11 +410,13 @@ func (a *Agent) ensureSession(ctx context.Context) {
 	}
 	a.sessionID = newSessionID()
 	a.costBase = -a.CostUSD()
-	id := a.sessionID
+	id, parent := a.sessionID, a.parentID
+	a.parentID = ""
 	a.mu.Unlock()
 
 	a.warn(a.store().StartSession(ctx, memory.Session{
 		ID:        id,
+		ParentID:  parent,
 		Agent:     a.Name,
 		Model:     a.Provider.Model(),
 		StartedAt: time.Now().UTC(),
