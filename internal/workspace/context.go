@@ -161,7 +161,7 @@ func (w *Workspace) windowFor(model string) int {
 	return provider.ContextWindow(model, w.opts.Config.Models.ContextWindow)
 }
 
-// SetContextWindow saves the window of a model (or model prefix) to the
+// SetContextWindow saves the window of a model (or model prefix) to the global
 // configuration file and applies it to the running conversations.
 func (w *Workspace) SetContextWindow(model string, tokens int) error {
 	model = strings.TrimSpace(model)
@@ -171,7 +171,13 @@ func (w *Workspace) SetContextWindow(model string, tokens int) error {
 	if tokens <= 0 {
 		return errors.New("context window must be a positive number of tokens")
 	}
-	if err := config.SetContextWindow(w.ConfigFile(), model, tokens); err != nil {
+	// models.context_window is global-only: a project file that holds it fails
+	// to load, so the override always goes to the global file.
+	target := w.opts.GlobalConfigPath
+	if target == "" {
+		target = w.ConfigFile()
+	}
+	if err := config.SetContextWindow(target, model, tokens); err != nil {
 		return err
 	}
 	w.mu.Lock()

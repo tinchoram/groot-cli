@@ -1,7 +1,7 @@
 // Package update finds the latest GitHub release of groot, downloads its
-// archive for this platform and replaces the running binary. The repository
-// is private for now: the API and the downloads need a token until it is
-// public (see ErrNeedsToken).
+// archive for this platform and replaces the running binary. Requests go out
+// unauthenticated first. GITHUB_TOKEN is optional: it is sent only to retry a
+// request GitHub refused with 403 (rate limit) or 404.
 package update
 
 import (
@@ -42,8 +42,11 @@ const (
 	maxBinary     = 256 << 20
 )
 
-// ErrNeedsToken means the repository is private and the request had no token.
-var ErrNeedsToken = errors.New("the groot repository is private for now: set GITHUB_TOKEN (or GH_TOKEN) to a GitHub token that can read it, until the repository is public")
+// ErrNotFound means GitHub has no such release or asset for the version asked.
+var ErrNotFound = errors.New("release not found: check the version and https://github.com/tinchoram/groot-cli/releases")
+
+// jsonAccept is the Accept header of the release API.
+const jsonAccept = "application/vnd.github+json"
 
 // Release is the latest published release.
 type Release struct {
@@ -101,29 +104,49 @@ type apiRelease struct {
 	} `json:"assets"`
 }
 
-// Latest asks GitHub for the latest release of repo. A 404 without a token is
-// reported as ErrNeedsToken, because a private repository answers that way.
-func Latest(ctx context.Context, client *http.Client, repo, token string) (Release, error) {
-	ctx, cancel := context.WithTimeout(ctx, latestTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, APIBase+"/repos/"+repo+"/releases/latest", nil)
+// getOnce sends one GET. A token, when given, is sent as a bearer header.
+func getOnce(ctx context.Context, client *http.Client, url, accept, token string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return Release{}, err
+		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := client.Do(req)
+	return client.Do(req)
+}
+
+// retryable is a refusal that a token can fix: a rate limit or a 404.
+func retryable(status int) bool {
+	return status == http.StatusForbidden || status == http.StatusNotFound
+}
+
+// Latest asks GitHub for the latest release of repo. The first request is
+// unauthenticated; with a token, a 403 or 404 is retried once with it.
+func Latest(ctx context.Context, client *http.Client, repo, token string) (Release, error) {
+	ctx, cancel := context.WithTimeout(ctx, latestTimeout)
+	defer cancel()
+	url := APIBase + "/repos/" + repo + "/releases/latest"
+	resp, err := getOnce(ctx, client, url, jsonAccept, "")
 	if err != nil {
 		return Release{}, fmt.Errorf("latest release: %w", err)
 	}
+	if token != "" && retryable(resp.StatusCode) {
+		resp.Body.Close()
+		resp, err = getOnce(ctx, client, url, jsonAccept, token)
+		if err != nil {
+			return Release{}, fmt.Errorf("latest release: %w", err)
+		}
+	}
 	defer resp.Body.Close()
 	switch {
-	case resp.StatusCode == http.StatusNotFound && token == "":
-		return Release{}, ErrNeedsToken
 	case resp.StatusCode == http.StatusNotFound:
-		return Release{}, fmt.Errorf("no release found for %s", repo)
+		return Release{}, ErrNotFound
+	case resp.StatusCode == http.StatusForbidden:
+		return Release{}, fmt.Errorf("latest release: GitHub refused the request (%s), probably the API rate limit: set GITHUB_TOKEN (optional) to raise it", resp.Status)
 	case resp.StatusCode != http.StatusOK:
 		return Release{}, fmt.Errorf("latest release: %s", resp.Status)
 	}
@@ -307,34 +330,32 @@ func (r Release) asset(name string) (Asset, bool) {
 	return Asset{}, false
 }
 
-// fetch downloads an asset. With a token the API url is used with the octet
-// stream accept header, which is how a private repository serves its assets;
-// without one the public download url is used.
+// fetch downloads an asset from its public download url without a token. A 403
+// or 404 is retried once through the API url with the token, when one is set.
 func fetch(ctx context.Context, client *http.Client, a Asset, token string, limit int64) ([]byte, error) {
-	url, accept := a.BrowserURL, ""
-	if token != "" {
-		url, accept = a.URL, "application/octet-stream"
+	var resp *http.Response
+	var err error
+	if a.BrowserURL != "" {
+		resp, err = getOnce(ctx, client, a.BrowserURL, "", "")
+		if err != nil {
+			return nil, fmt.Errorf("download %s: %w", a.Name, err)
+		}
 	}
-	if url == "" {
+	if (resp == nil || retryable(resp.StatusCode)) && token != "" && a.URL != "" {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		resp, err = getOnce(ctx, client, a.URL, "application/octet-stream", token)
+		if err != nil {
+			return nil, fmt.Errorf("download %s: %w", a.Name, err)
+		}
+	}
+	if resp == nil {
 		return nil, fmt.Errorf("asset %s has no download url", a.Name)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	if accept != "" {
-		req.Header.Set("Accept", accept)
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("download %s: %w", a.Name, err)
-	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound && token == "" {
-		return nil, ErrNeedsToken
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("download %s: %w", a.Name, ErrNotFound)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("download %s: %s", a.Name, resp.Status)

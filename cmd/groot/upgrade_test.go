@@ -20,16 +20,11 @@ import (
 
 const upgradeTestToken = "s3cret"
 
-// fakeReleases serves the latest release of a private repository: the API
-// answers 404 unless the request carries upgradeTestToken, as GitHub does.
+// fakeReleases serves a public latest release: every request answers without a token.
 func fakeReleases(t *testing.T, version string, files map[string][]byte) {
 	t.Helper()
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+upgradeTestToken {
-			http.NotFound(w, r)
-			return
-		}
 		switch {
 		case r.URL.Path == "/repos/tinchoram/groot-cli/releases/latest":
 			assets := []map[string]any{}
@@ -125,17 +120,24 @@ func TestUpgradeSaysWhenAlreadyLatest(t *testing.T) {
 	}
 }
 
-func TestUpgradeWithoutATokenNamesTheVariable(t *testing.T) {
-	fakeReleases(t, "0.6.0", nil)
+func TestUpgradeReportsAMissingRelease(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	old := update.APIBase
+	update.APIBase = srv.URL
+	t.Cleanup(func() { update.APIBase = old })
+
 	var out, errOut bytes.Buffer
 	env := upgradeEnvFor(t, "0.5.4-dev", "")
 	env.Getenv = func(string) string { return "" }
 
 	if code := runUpgrade([]string{"--check"}, &out, &errOut, env); code != 1 {
-		t.Fatalf("a private repository without a token must fail: exit %d", code)
+		t.Fatalf("a missing release must fail: exit %d", code)
 	}
-	if !strings.Contains(errOut.String(), "GITHUB_TOKEN") {
-		t.Fatalf("stderr should name GITHUB_TOKEN: %q", errOut.String())
+	if !strings.Contains(errOut.String(), "release not found") {
+		t.Fatalf("stderr should say the release was not found: %q", errOut.String())
 	}
 }
 

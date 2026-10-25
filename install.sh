@@ -15,7 +15,7 @@ API=${GROOT_BASE_URL:-https://api.github.com}
 DOWNLOAD=${GROOT_DOWNLOAD_BASE:-https://github.com}
 INSTALL_DIR=${GROOT_INSTALL_DIR:-$HOME/.local/bin}
 TOKEN=${GITHUB_TOKEN:-${GH_TOKEN:-}}
-PRIVATE_HINT="the groot repository is private for now: set GITHUB_TOKEN (or GH_TOKEN) to a GitHub token that can read it, until the repository is public"
+NOT_FOUND_HINT="release not found: check the version and https://github.com/tinchoram/groot-cli/releases"
 TAB=$(printf '\t')
 TMP=
 STAGE=
@@ -29,8 +29,8 @@ Installs groot into $GROOT_INSTALL_DIR (default: $HOME/.local/bin).
 
   GROOT_VERSION        release to install, with or without the v (default: latest)
   GROOT_INSTALL_DIR    install directory (default: $HOME/.local/bin)
-  GITHUB_TOKEN         token that can read the repository; GH_TOKEN is the fallback.
-                       Needed while the repository is private.
+  GITHUB_TOKEN         optional GitHub token, sent with the requests to raise the
+                       API rate limit; GH_TOKEN is the fallback.
   GROOT_REPO           repository (default: tinchoram/groot-cli)
   GROOT_BASE_URL       GitHub API root (default: https://api.github.com), for tests
   GROOT_DOWNLOAD_BASE  download root for assets with no browser_download_url
@@ -116,7 +116,7 @@ find_asset() {
 }
 
 # fetch_asset NAME FILE downloads a release asset. A token makes it go through
-# the API url, which is how a private repository serves its assets.
+# the API url instead of the public download url.
 fetch_asset() {
 	find_asset "$1"
 	if [ -n "$TOKEN" ]; then
@@ -162,10 +162,7 @@ main() {
 	case $HTTP_STATUS in
 	200) ;;
 	404)
-		if [ -z "$TOKEN" ]; then
-			die "$PRIVATE_HINT"
-		fi
-		die "no release found for $REPO ($release_url)"
+		die "$NOT_FOUND_HINT"
 		;;
 	*) die "release lookup failed: HTTP $HTTP_STATUS ($release_url)" ;;
 	esac

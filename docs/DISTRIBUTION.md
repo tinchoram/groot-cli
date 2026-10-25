@@ -6,9 +6,11 @@ is the plan for the first public release.
 
 ## Decisions
 
-1. **The repository becomes public when we publish.** Until then releases,
-   `groot upgrade` and the install paths below need a GitHub token. Nothing in
-   the code assumes a private repository beyond that token.
+1. **The repository is public from 0.6.0.** Downloads and `groot upgrade` need
+   no token. `GITHUB_TOKEN` is optional: it only raises the GitHub API rate limit,
+   and `groot upgrade` sends it only when GitHub refuses a request. A 404 for a
+   release means the version does not exist; the message points to the releases
+   page.
 2. **Platforms: macOS and Linux**, `amd64` and `arm64`. Windows is deferred: the
    binary compiles there, but the bash sandbox and the keychain do not exist,
    so it needs a design of its own, not just a build target.
@@ -49,11 +51,11 @@ is the plan for the first public release.
 
 | Path | Platform | Needs the repo public | Status |
 |---|---|---|---|
-| `curl -fsSL https://raw.githubusercontent.com/tinchoram/groot-cli/main/install.sh \| sh` | macOS, Linux | yes: the raw URL answers 404 while the repo is private (use `gh api`, see README "Install") | done, `install.sh` at the repo root and in each release |
+| `curl -fsSL https://raw.githubusercontent.com/tinchoram/groot-cli/main/install.sh \| sh` | macOS, Linux | no | done, `install.sh` at the repo root and in each release |
 | `brew tap tinchoram/groot && brew install groot` | macOS, Linux | yes | planned; goreleaser `brews:` pushes the formula to `tinchoram/homebrew-groot` |
-| Manual: download the archive, check the sum, move the binary | macOS, Linux | token while private | done, see README "Install" |
+| Manual: download the archive, check the sum, move the binary | macOS, Linux | no | done, see README "Install" |
 | `.deb` / `.rpm` through goreleaser `nfpms:` | Linux | yes | later |
-| `go install github.com/tinchoram/groot-cli/cmd/groot@latest` | any with Go | yes | works once public; no sandbox hint, so not the recommended path |
+| `go install github.com/tinchoram/groot-cli/cmd/groot@latest` | any with Go | yes | works; no sandbox hint, so not the recommended path |
 
 System dependencies: on Linux, bubblewrap for the bash sandbox (`groot doctor`
 prints the distro's install command); `kubectl` only if the kubectl tool is

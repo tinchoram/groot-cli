@@ -113,8 +113,10 @@ type Options struct {
 	Config   config.Config
 	// ConfigPath is the project configuration file (-config, default
 	// ./groot.yaml). GlobalConfigPath is the file in the groot home. Writes
-	// (/model --default, set_context_window) go to ConfigPath when it exists,
-	// otherwise to GlobalConfigPath. Empty ConfigPath means groot.yaml.
+	// (/model --default) go to ConfigPath when it exists, otherwise to
+	// GlobalConfigPath. set_context_window always goes to GlobalConfigPath,
+	// since a project file may not hold models.context_window. Empty
+	// ConfigPath means groot.yaml.
 	ConfigPath       string
 	GlobalConfigPath string
 	// UserConfigPath is the identity file (user.yaml) that /me and the

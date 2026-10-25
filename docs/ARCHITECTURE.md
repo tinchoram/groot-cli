@@ -32,7 +32,7 @@ under `internal/`:
 | `auth` | Finds and stores the Anthropic key: environment, `.env`, the macOS keychain (through `security`), `<home>/credentials`. |
 | `feedback` | Backlog of bugs and feature requests about groot. |
 | `changelog` (repo root, `changelog.go`) | Embeds `CHANGELOG.md`; `go:embed` cannot reach a parent directory, so the file sits at the root. `Section` finds one version's entry. Used by `read_changelog` and by the version check in `cmd/groot`. |
-| `config` | `groot.yaml` schema, defaults, layering (global file, then `user.yaml` with the operator's name, then the project file), `${VAR}` expansion, system prompt composition (People block included), `AGENTS.md`. |
+| `config` | `groot.yaml` schema, defaults, layering (global file, then `user.yaml` with the operator's name, then the project file), `${VAR}` expansion in the global and user files only (a project file is checked against the allow-list in `project.go` and never expands env), system prompt composition (People block included), `AGENTS.md`. |
 
 Supporting packages: `api` (provider-neutral messages and blocks), `audit` (JSONL
 log of tool calls; `reader.go` filters it from the end of the file and `Summarize`

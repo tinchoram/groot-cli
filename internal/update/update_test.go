@@ -18,36 +18,77 @@ import (
 	"time"
 )
 
-// testToken is what the fake private repository accepts.
+// testToken is the optional token the fake GitHub accepts.
 const testToken = "s3cret"
 
-// server is a fake GitHub release API for a private repository: the API and
-// the asset api urls answer only with testToken, and the public download urls
-// always answer 404, as they do for a private repository.
+// mode is how the fake GitHub treats a request that carries no token.
+type mode int
+
+const (
+	// modePublic answers every request without a token.
+	modePublic mode = iota
+	// modeGated answers 404 to every request without a token, as a repository
+	// that only a signed-in reader can see does.
+	modeGated
+	// modeLimited answers 403 to the release API without a token, as an
+	// exhausted anonymous rate limit does. Downloads stay public.
+	modeLimited
+)
+
+// request is one call the fake GitHub received.
+type request struct {
+	path   string
+	authed bool
+}
+
+// server is a fake GitHub release API.
 type server struct {
 	*httptest.Server
-	mu    sync.Mutex
-	paths []string
+	mu   sync.Mutex
+	reqs []request
+}
+
+func (s *server) log() []request {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]request(nil), s.reqs...)
 }
 
 func (s *server) requested() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]string(nil), s.paths...)
+	var paths []string
+	for _, r := range s.log() {
+		paths = append(paths, r.path)
+	}
+	return paths
 }
 
-func newReleaseServer(t *testing.T, version string, files map[string][]byte) *server {
+// newFakeGitHub serves one release of version with the given assets, in mode m.
+// The asset api urls answer only with testToken.
+func newFakeGitHub(t *testing.T, m mode, version string, files map[string][]byte) *server {
 	t.Helper()
 	s := &server{}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.mu.Lock()
-		s.paths = append(s.paths, r.URL.Path)
-		s.mu.Unlock()
 		authed := r.Header.Get("Authorization") == "Bearer "+testToken
+		s.mu.Lock()
+		s.reqs = append(s.reqs, request{path: r.URL.Path, authed: authed})
+		s.mu.Unlock()
+		send := func(name string) {
+			body, ok := files[name]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write(body)
+		}
+		gated := m == modeGated && !authed
 		switch {
 		case r.URL.Path == "/repos/tinchoram/groot-cli/releases/latest":
-			if !authed {
+			if gated {
 				http.NotFound(w, r)
+				return
+			}
+			if m == modeLimited && !authed {
+				http.Error(w, "rate limit exceeded", http.StatusForbidden)
 				return
 			}
 			var assets []map[string]any
@@ -60,13 +101,18 @@ func newReleaseServer(t *testing.T, version string, files map[string][]byte) *se
 				})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"tag_name": "v" + version, "assets": assets})
-		case strings.HasPrefix(r.URL.Path, "/assets/"):
-			body, ok := files[strings.TrimPrefix(r.URL.Path, "/assets/")]
-			if !ok || !authed || r.Header.Get("Accept") != "application/octet-stream" {
+		case strings.HasPrefix(r.URL.Path, "/dl/"):
+			if gated {
 				http.NotFound(w, r)
 				return
 			}
-			_, _ = w.Write(body)
+			send(strings.TrimPrefix(r.URL.Path, "/dl/"))
+		case strings.HasPrefix(r.URL.Path, "/assets/"):
+			if !authed || r.Header.Get("Accept") != "application/octet-stream" {
+				http.NotFound(w, r)
+				return
+			}
+			send(strings.TrimPrefix(r.URL.Path, "/assets/"))
 		default:
 			http.NotFound(w, r)
 		}
@@ -76,6 +122,12 @@ func newReleaseServer(t *testing.T, version string, files map[string][]byte) *se
 	APIBase = s.URL
 	t.Cleanup(func() { APIBase = old })
 	return s
+}
+
+// newReleaseServer is a public release: everything answers without a token.
+func newReleaseServer(t *testing.T, version string, files map[string][]byte) *server {
+	t.Helper()
+	return newFakeGitHub(t, modePublic, version, files)
 }
 
 func targz(t *testing.T, name string, body []byte) []byte {
@@ -133,10 +185,9 @@ func TestAssetNameMatchesTheGoreleaserArchive(t *testing.T) {
 	}
 }
 
-func TestLatestReadsTheReleaseWithTheTokenAndUserAgent(t *testing.T) {
+func TestLatestReadsTheReleaseWithTheUserAgent(t *testing.T) {
 	var gotAccept, gotUA string
 	s := newReleaseServer(t, "0.6.0", map[string][]byte{"checksums.txt": []byte("x")})
-	// Wrap the handler to observe the headers of the latest call.
 	inner := s.Config.Handler
 	s.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/repos/tinchoram/groot-cli/releases/latest" {
@@ -145,7 +196,7 @@ func TestLatestReadsTheReleaseWithTheTokenAndUserAgent(t *testing.T) {
 		inner.ServeHTTP(w, r)
 	})
 
-	rel, err := Latest(context.Background(), NewClient("9.9.9"), Repo, testToken)
+	rel, err := Latest(context.Background(), NewClient("9.9.9"), Repo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +206,7 @@ func TestLatestReadsTheReleaseWithTheTokenAndUserAgent(t *testing.T) {
 	if len(rel.Assets) != 1 || rel.Assets[0].Name != "checksums.txt" || rel.Assets[0].Size != 1 {
 		t.Fatalf("assets = %+v", rel.Assets)
 	}
-	if gotAccept != "application/vnd.github+json" {
+	if gotAccept != jsonAccept {
 		t.Errorf("Accept = %q", gotAccept)
 	}
 	if gotUA != "groot/9.9.9" {
@@ -163,15 +214,65 @@ func TestLatestReadsTheReleaseWithTheTokenAndUserAgent(t *testing.T) {
 	}
 }
 
-func TestLatestWithoutATokenOnAPrivateRepoNeedsAToken(t *testing.T) {
-	newReleaseServer(t, "0.6.0", nil)
+func TestLatestWithATokenNeverSendsItOnA200(t *testing.T) {
+	s := newReleaseServer(t, "0.6.0", nil)
+
+	if _, err := Latest(context.Background(), NewClient("9.9.9"), Repo, testToken); err != nil {
+		t.Fatal(err)
+	}
+	reqs := s.log()
+	if len(reqs) != 1 || reqs[0].authed {
+		t.Fatalf("a 200 must be answered by one unauthenticated request, got %+v", reqs)
+	}
+}
+
+func TestLatestRetriesWithTheTokenAfterARateLimit(t *testing.T) {
+	s := newFakeGitHub(t, modeLimited, "0.6.0", nil)
+
+	rel, err := Latest(context.Background(), NewClient("9.9.9"), Repo, testToken)
+	if err != nil {
+		t.Fatalf("the token retry should succeed: %v", err)
+	}
+	if rel.Version != "0.6.0" {
+		t.Fatalf("release = %+v", rel)
+	}
+	reqs := s.log()
+	if len(reqs) != 2 || reqs[0].authed || !reqs[1].authed {
+		t.Fatalf("want one unauthenticated request then one with the token, got %+v", reqs)
+	}
+}
+
+func TestLatestRetriesWithTheTokenAfterA404(t *testing.T) {
+	s := newFakeGitHub(t, modeGated, "0.6.0", nil)
+
+	if _, err := Latest(context.Background(), NewClient("9.9.9"), Repo, testToken); err != nil {
+		t.Fatalf("the token retry should succeed: %v", err)
+	}
+	reqs := s.log()
+	if len(reqs) != 2 || reqs[0].authed || !reqs[1].authed {
+		t.Fatalf("want one unauthenticated request then one with the token, got %+v", reqs)
+	}
+}
+
+func TestLatestWithoutATokenReportsAMissingRelease(t *testing.T) {
+	newFakeGitHub(t, modeGated, "0.6.0", nil)
 
 	_, err := Latest(context.Background(), NewClient("9.9.9"), Repo, "")
-	if !errors.Is(err, ErrNeedsToken) {
-		t.Fatalf("err = %v, want ErrNeedsToken", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
-	if !strings.Contains(err.Error(), "GITHUB_TOKEN") || !strings.Contains(err.Error(), "GH_TOKEN") {
-		t.Fatalf("message should name both variables: %q", err)
+	const want = "release not found: check the version and https://github.com/tinchoram/groot-cli/releases"
+	if err.Error() != want {
+		t.Fatalf("message = %q, want %q", err, want)
+	}
+}
+
+func TestLatestWithoutATokenNamesTheOptionalTokenOnARateLimit(t *testing.T) {
+	newFakeGitHub(t, modeLimited, "0.6.0", nil)
+
+	_, err := Latest(context.Background(), NewClient("9.9.9"), Repo, "")
+	if err == nil || !strings.Contains(err.Error(), "GITHUB_TOKEN (optional)") {
+		t.Fatalf("a rate limit should name the optional GITHUB_TOKEN, got %v", err)
 	}
 }
 
@@ -224,9 +325,56 @@ func TestApplyReplacesTheBinaryAfterTheChecksumMatches(t *testing.T) {
 	if fi.Mode().Perm() != 0o755 {
 		t.Fatalf("mode = %v, want 0755", fi.Mode().Perm())
 	}
-	// Private assets are fetched through the API url with the token.
+	if !contains(s.requested(), "/dl/"+archName) {
+		t.Fatalf("the public archive url should serve a public release: %v", s.requested())
+	}
+	for _, r := range s.log() {
+		if r.authed {
+			t.Fatalf("a public download must not send the token: %+v", s.log())
+		}
+	}
+}
+
+func TestApplyRetriesTheAssetAPIWithTheTokenWhenTheDownloadIsGated(t *testing.T) {
+	archName := AssetName("0.6.0", "darwin", "arm64")
+	archive := targz(t, "groot", []byte("new binary"))
+	s := newFakeGitHub(t, modeGated, "0.6.0", map[string][]byte{
+		archName:      archive,
+		ChecksumsName: []byte(sumLine(archive, archName)),
+	})
+	rel, err := Latest(context.Background(), NewClient("0.5.4-dev"), Repo, testToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exe := filepath.Join(t.TempDir(), "groot")
+	if err := os.WriteFile(exe, []byte("old binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(context.Background(), NewClient("0.5.4-dev"), rel, exe, "darwin", "arm64", testToken); err != nil {
+		t.Fatal(err)
+	}
 	if !contains(s.requested(), "/assets/"+archName) {
-		t.Fatalf("the archive was not fetched through the asset api url: %v", s.requested())
+		t.Fatalf("a refused download must retry through the asset api url: %v", s.requested())
+	}
+}
+
+func TestApplyWithoutATokenReportsAGatedDownloadAsMissing(t *testing.T) {
+	archName := AssetName("0.6.0", "darwin", "arm64")
+	archive := targz(t, "groot", []byte("new binary"))
+	newFakeGitHub(t, modeGated, "0.6.0", map[string][]byte{
+		archName:      archive,
+		ChecksumsName: []byte(sumLine(archive, archName)),
+	})
+	rel, err := Latest(context.Background(), NewClient("0.5.4-dev"), Repo, testToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exe := filepath.Join(t.TempDir(), "groot")
+	_, err = Apply(context.Background(), NewClient("0.5.4-dev"), rel, exe, "darwin", "arm64", "")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }
 
@@ -278,25 +426,6 @@ func TestApplyNamesAMissingPlatformArchive(t *testing.T) {
 	_, err = Apply(context.Background(), NewClient("0.5.4-dev"), rel, exe, "darwin", "arm64", testToken)
 	if err == nil || !strings.Contains(err.Error(), "darwin_arm64") {
 		t.Fatalf("err = %v, want the missing platform named", err)
-	}
-}
-
-func TestApplyWithoutATokenOnAPrivateRepoNeedsAToken(t *testing.T) {
-	archName := AssetName("0.6.0", "darwin", "arm64")
-	archive := targz(t, "groot", []byte("new binary"))
-	newReleaseServer(t, "0.6.0", map[string][]byte{
-		archName:      archive,
-		ChecksumsName: []byte(sumLine(archive, archName)),
-	})
-	rel, err := Latest(context.Background(), NewClient("0.5.4-dev"), Repo, testToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	exe := filepath.Join(t.TempDir(), "groot")
-	_, err = Apply(context.Background(), NewClient("0.5.4-dev"), rel, exe, "darwin", "arm64", "")
-	if !errors.Is(err, ErrNeedsToken) {
-		t.Fatalf("err = %v, want ErrNeedsToken", err)
 	}
 }
 
@@ -366,15 +495,15 @@ func TestCheckCallsTheAPIAtMostOncePerDay(t *testing.T) {
 }
 
 func TestCheckSwallowsErrorsAndKnownReportsThem(t *testing.T) {
-	newReleaseServer(t, "0.6.0", nil)
+	newFakeGitHub(t, modeGated, "0.6.0", nil)
 	home := t.TempDir()
 
 	res := Check(context.Background(), home, "0.5.4-dev", Options{Repo: Repo, Token: ""})
 	if res.Newer {
-		t.Fatalf("an offline or private check must show nothing: %+v", res)
+		t.Fatalf("a missing release must show nothing: %+v", res)
 	}
 	st := Known(home, "0.5.4-dev")
-	if st.Newer || !strings.Contains(st.Reason, "GITHUB_TOKEN") {
+	if st.Newer || !strings.Contains(st.Reason, "release not found") {
 		t.Fatalf("Known after a failed check = %+v", st)
 	}
 }

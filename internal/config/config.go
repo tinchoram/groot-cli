@@ -248,7 +248,7 @@ func Load(path string) (Config, error) {
 // the global file; every later path is a project file. A missing path is
 // skipped, so callers decide which files are required. Scalars in a later file
 // override earlier ones, lists are replaced whole, and maps merge key by key.
-// A project file may not define mcp.servers. The mcp section keeps its ${VAR}
+// A project file may set only the keys in projectAllowed and never expands ${VAR}; the mcp section of the global file keeps its ${VAR}
 // references literal here; they expand at connect time. The merged result is
 // validated once, at the end.
 func LoadLayers(paths ...string) (Config, error) {
@@ -265,7 +265,7 @@ func LoadLayers(paths ...string) (Config, error) {
 
 // layerKind says which rules a file is held to: the global file may set
 // everything, the identity file sets only the name, and project files set
-// everything except mcp.servers and user.name.
+// only the keys in projectAllowed (no environment expansion).
 type layerKind int
 
 const (
@@ -311,7 +311,13 @@ func loadLayers(layers []layer) (Config, error) {
 		if err := yaml.Unmarshal(raw, &doc); err != nil {
 			return cfg, fmt.Errorf("parse %s: %w", l.path, err)
 		}
-		expandConfigNode(&doc, os.LookupEnv)
+		if l.kind == layerProject {
+			if err := checkProjectFile(l.path, &doc); err != nil {
+				return cfg, err
+			}
+		} else {
+			expandConfigNode(&doc, os.LookupEnv)
+		}
 		if err := doc.Decode(&cfg); err != nil {
 			return cfg, fmt.Errorf("decode %s: %w", l.path, err)
 		}

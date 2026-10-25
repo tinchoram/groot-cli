@@ -191,12 +191,29 @@ shipped in 0.6.0.
   made before this release learn the new tools from the tool list, not from the
   prompt; edit `~/.groot/agents/groot.md` to mention them.
 
+### Security
+- A project's `groot.yaml` is limited to an allow-list of keys, listed under
+  "Safety model" in the README. Security settings (`audit.sinks`, `bash.sandbox`,
+  `fetch`, `guard`, `updates`, `mcp.servers`, `user.name`) and unknown keys are
+  refused with an error that names the key; set them in `~/.groot/groot.yaml`.
+- A project file no longer expands `${VAR}`: a reference is an error there, and
+  the global file still expands.
+- The update check is unauthenticated by default. `GITHUB_TOKEN` is sent only to
+  retry a request GitHub refused (403 rate limit, or 404); a 200 never carries it.
+- `set_context_window` writes the global file, since a project file may not hold
+  `models.context_window`.
+
 ### Distribution
 - `install.sh` at the repository root installs groot on macOS and Linux. It
   detects the platform, downloads the release archive, checks its sha256 against
   `checksums.txt`, installs `groot` into `~/.local/bin` (or `GROOT_INSTALL_DIR`),
   and runs `groot doctor`. `GROOT_VERSION` pins a release. While the repository is
-  private it needs `GITHUB_TOKEN`. Each release carries the script.
+  public and needs no token; `GITHUB_TOKEN` is optional, for the API rate limit.
+  Each release carries the script. A missing release reports `release not found`
+  and the releases page, not a private-repository hint.
+- `THIRD_PARTY_NOTICES.md` lists the third-party modules that the binaries bundle,
+  with their licenses and full texts, and ships in each archive. README "License"
+  links to it.
 - A fresh home holds `root` and `groot` only. Bootstrap no longer creates or
   assigns the `debug` agent, the one that keeps the groot backlog. It ships in the
   built-in library: install it with `install_agent debug` or `/agent install debug`,

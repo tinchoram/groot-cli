@@ -61,14 +61,14 @@ func installShells(t *testing.T) []string {
 }
 
 // newInstallRelease serves a fake GitHub release with the archive and the
-// checksums file. A private release answers the API and the asset api urls only
-// with testToken, and its public download urls always answer 404.
-func newInstallRelease(t *testing.T, private bool, archName string, archive, sums []byte) *httptest.Server {
+// checksums file. In gated mode the release and its public download urls answer
+// 404 without testToken, and the asset api urls answer only with testToken.
+func newInstallRelease(t *testing.T, gated bool, archName string, archive, sums []byte) *httptest.Server {
 	t.Helper()
 	files := map[string][]byte{archName: archive, ChecksumsName: sums}
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hidden := private && r.Header.Get("Authorization") != "Bearer "+testToken
+		hidden := gated && r.Header.Get("Authorization") != "Bearer "+testToken
 		send := func(name string) {
 			body, ok := files[name]
 			if !ok {
@@ -102,7 +102,7 @@ func newInstallRelease(t *testing.T, private bool, archName string, archive, sum
 			_ = enc.Encode(rel)
 		case !hidden && strings.HasPrefix(r.URL.Path, "/repos/"+Repo+"/releases/assets/") && r.Header.Get("Accept") == "application/octet-stream":
 			send(strings.TrimPrefix(r.URL.Path, "/repos/"+Repo+"/releases/assets/"))
-		case !private && strings.HasPrefix(r.URL.Path, "/dl/"):
+		case !hidden && strings.HasPrefix(r.URL.Path, "/dl/"):
 			send(strings.TrimPrefix(r.URL.Path, "/dl/"))
 		default:
 			http.NotFound(w, r)
@@ -236,7 +236,7 @@ func TestInstallScriptRefusesATamperedArchive(t *testing.T) {
 	}
 }
 
-func TestInstallScriptUsesTheTokenForAPrivateRepository(t *testing.T) {
+func TestInstallScriptUsesTheOptionalTokenWhenTheReleaseIsGated(t *testing.T) {
 	archName := supportedArchName(t)
 	archive := targz(t, "groot", fakeGroot)
 	srv := newInstallRelease(t, true, archName, archive, []byte(sumLine(archive, archName)))
@@ -251,7 +251,7 @@ func TestInstallScriptUsesTheTokenForAPrivateRepository(t *testing.T) {
 	}
 }
 
-func TestInstallScriptNamesTheTokenForAPrivateRepository(t *testing.T) {
+func TestInstallScriptReportsAMissingReleaseWithoutAToken(t *testing.T) {
 	archName := supportedArchName(t)
 	archive := targz(t, "groot", fakeGroot)
 	srv := newInstallRelease(t, true, archName, archive, []byte(sumLine(archive, archName)))
@@ -259,10 +259,14 @@ func TestInstallScriptNamesTheTokenForAPrivateRepository(t *testing.T) {
 	home, scratch, bin := installFixture(t)
 	out, err := runInstall(t, shell, installEnv(home, scratch, bin, srv.URL))
 	if err == nil {
-		t.Fatalf("install.sh succeeded without a token for a private repository:\n%s", out)
+		t.Fatalf("install.sh succeeded without a release it could see:\n%s", out)
 	}
-	if !strings.Contains(out, "GITHUB_TOKEN") || !strings.Contains(out, "GH_TOKEN") {
-		t.Fatalf("the hint should name both variables:\n%s", out)
+	const want = "release not found: check the version and https://github.com/tinchoram/groot-cli/releases"
+	if !strings.Contains(out, want) {
+		t.Fatalf("the 404 should say %q:\n%s", want, out)
+	}
+	if strings.Contains(out, "private") {
+		t.Fatalf("the message must not call the repository private:\n%s", out)
 	}
 	if _, err := os.Stat(bin); !os.IsNotExist(err) {
 		t.Errorf("the install directory was created without a release: %v", err)
@@ -280,5 +284,8 @@ func TestInstallScriptHelpNamesTheKnobs(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("--help does not mention %s:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "private") {
+		t.Errorf("--help still calls the repository private:\n%s", out)
 	}
 }

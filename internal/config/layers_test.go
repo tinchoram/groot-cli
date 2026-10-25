@@ -37,32 +37,32 @@ func TestLoadLayersLaterFileOverridesScalarsOverDefaults(t *testing.T) {
 
 func TestLoadLayersReplacesListsWhole(t *testing.T) {
 	dir := t.TempDir()
-	global := writeLayer(t, dir, "global.yaml", "kubectl:\n  namespaces: [a, b]\n")
-	project := writeLayer(t, dir, "project.yaml", "kubectl:\n  namespaces: [c]\n")
+	global := writeLayer(t, dir, "global.yaml", mcpGlobalYAML+"  enable: [grafana, k8s]\n")
+	project := writeLayer(t, dir, "project.yaml", "mcp:\n  enable: [k8s]\n")
 
 	cfg, err := LoadLayers(global, project)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cfg.Kubectl.Namespaces; len(got) != 1 || got[0] != "c" {
+	if got := cfg.MCP.Enable; len(got) != 1 || got[0] != "k8s" {
 		t.Fatalf("a list in the project file replaces the global list whole, got %v", got)
 	}
 }
 
 func TestLoadLayersSkipsMissingFiles(t *testing.T) {
 	dir := t.TempDir()
-	project := writeLayer(t, dir, "project.yaml", "gate:\n  policy: auto\n")
+	project := writeLayer(t, dir, "project.yaml", "max_turns: 12\n")
 
 	cfg, err := LoadLayers(filepath.Join(dir, "absent.yaml"), project)
 	if err != nil {
 		t.Fatalf("a missing layer is not an error: %v", err)
 	}
-	if cfg.Gate.Policy != "auto" {
-		t.Fatalf("got policy %q", cfg.Gate.Policy)
+	if cfg.MaxTurns != 12 {
+		t.Fatalf("got max_turns %d", cfg.MaxTurns)
 	}
 }
 
-func TestLoadLayersExpandsEnvPerFile(t *testing.T) {
+func TestLoadLayersExpandsEnvInTheGlobalFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("GROOT_LAYER_TEST", "from-env")
 	global := writeLayer(t, dir, "global.yaml", "provider:\n  model: ${GROOT_LAYER_TEST}\n")
@@ -72,7 +72,7 @@ func TestLoadLayersExpandsEnvPerFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.Provider.Model != "from-env" {
-		t.Fatalf("env expansion must apply to each layer, got %q", cfg.Provider.Model)
+		t.Fatalf("env expansion must apply to the global file, got %q", cfg.Provider.Model)
 	}
 }
 

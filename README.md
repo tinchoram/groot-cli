@@ -87,16 +87,11 @@ Environment variables it reads:
 
 - `GROOT_VERSION`: a release to install, with or without the `v` (default: latest).
 - `GROOT_INSTALL_DIR`: where to put `groot` (default: `~/.local/bin`).
-- `GITHUB_TOKEN` (or `GH_TOKEN`): a token that can read the repository. Needed
-  while the repository is private.
+- `GITHUB_TOKEN` (or `GH_TOKEN`): optional. A GitHub token that raises the API
+  rate limit; the script sends it with its requests when it is set.
 
-While the repository is private, the raw URL answers 404. Fetch the script with
-`gh` instead, and give it a token:
-
-```sh
-export GITHUB_TOKEN=$(gh auth token)
-gh api repos/tinchoram/groot-cli/contents/install.sh -H 'Accept: application/vnd.github.raw' | sh
-```
+If the script reports `release not found`, check the version and the releases page:
+https://github.com/tinchoram/groot-cli/releases
 
 ### Manual install
 
@@ -105,7 +100,7 @@ per platform named `groot_<version>_<os>_<arch>.tar.gz` (`darwin` or `linux`,
 `amd64` or `arm64`), and `checksums.txt` with the sha256 of each archive.
 
 ```sh
-V=0.5.3; OS=darwin; ARCH=arm64        # your platform; V is the version without the v
+V=0.6.0; OS=darwin; ARCH=arm64        # your platform; V is the version without the v
 gh release download "v$V" --repo tinchoram/groot-cli \
   --pattern "groot_${V}_${OS}_${ARCH}.tar.gz" --pattern checksums.txt
 shasum -a 256 -c checksums.txt --ignore-missing   # must print OK
@@ -115,9 +110,9 @@ groot auth login
 groot doctor
 ```
 
-While the repository is private, the download and `groot upgrade` need a GitHub
-token in `GITHUB_TOKEN` (or `GH_TOKEN`). `gh release download` uses your `gh`
-login and needs no variable. Once the repository is public, neither is needed.
+`groot upgrade` makes its requests without a token. If GitHub refuses one for its
+rate limit, it retries once with `GITHUB_TOKEN` (or `GH_TOKEN`) when one is set,
+so the token is optional and is never sent to GitHub unless a request is refused.
 
 On Linux, groot's bash sandbox needs bubblewrap. `groot doctor` prints the install
 command for your distribution when it is missing.
@@ -236,9 +231,9 @@ Two files are loaded, in this order, and each one overrides the one before:
    `--config` that does not exist is an error.
 
 Scalars in the project file override the global ones, lists are replaced whole,
-and maps such as `models.context_window` merge key by key. Settings made from
-inside groot (`/model --default`, `set_context_window`) are written to the project
-file when it exists, and to the global file otherwise. `groot doctor` shows which
+and only the keys listed under [Safety model](#safety-model) may be set in it. Settings made from
+inside groot (`/model --default`) are written to the project
+file when it exists, and to the global file otherwise. `set_context_window` always writes the global file. `groot doctor` shows which
 files were loaded.
 
 ## Safety model
@@ -278,6 +273,15 @@ files were loaded.
   are masked in tool output, previews and the audit log.
 - **Audit.** Every tool call is logged in a JSON line, readable with `/audit` and
   optionally exported to a file, an HTTP collector or syslog. See [Audit](#audit).
+- **Project configuration is limited.** A project's `groot.yaml` may set only
+  `max_turns`, `provider.model`, `memory.path`, `memory.preamble_tokens`,
+  `memory.preamble_summaries`, `audit.path`, `compaction.*`, `flow.*`,
+  `work.max_turns`, `work.max_auto_turns`, `work.max_usd`, `bash.timeout`,
+  `bash.max_timeout`, `mcp.enable` and `ui.*`. It never changes security settings
+  (audit sinks, `bash.sandbox`, `fetch`, `guard`, `updates`, `mcp.servers`,
+  `user.name`) and never reads environment variables: a `${VAR}` in a project
+  file is an error. Any other key is refused, and so is an unknown one. Set those
+  in `~/.groot/groot.yaml`.
 
 ### Audit
 
@@ -1523,4 +1527,5 @@ an allowlist, subagents, embeddings and observability tools.
 
 ## License
 
-MIT, see LICENSE.
+groot is MIT licensed, see [LICENSE](LICENSE). Release binaries bundle third-party
+code under the licenses listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tinchoram/groot-cli/internal/api"
+	"github.com/tinchoram/groot-cli/internal/config"
 	"github.com/tinchoram/groot-cli/internal/memory"
 )
 
@@ -77,16 +78,28 @@ func TestContextsReadTheLastSessionOfEachAgent(t *testing.T) {
 
 func TestContextWindowOverridePersistsAndApplies(t *testing.T) {
 	f := newFixture(t, text("ok"))
-	path := filepath.Join(t.TempDir(), "groot.yaml")
-	f.ws.opts.ConfigPath = path
+	dir := t.TempDir()
+	global := filepath.Join(dir, "global.yaml")
+	project := filepath.Join(dir, "project.yaml")
+	if err := os.WriteFile(project, []byte("max_turns: 5\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.ws.opts.ConfigPath = project
+	f.ws.opts.GlobalConfigPath = global
 	seedContext(t, f, "reader", 84_000)
 
 	if err := f.ws.SetContextWindow("mock-model", 100_000); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(global)
 	if err != nil || !strings.Contains(string(raw), "mock-model") {
-		t.Fatalf("groot.yaml must hold the override: err=%v\n%s", err, raw)
+		t.Fatalf("the global file must hold the override: err=%v\n%s", err, raw)
+	}
+	if kept, _ := os.ReadFile(project); string(kept) != "max_turns: 5\n" {
+		t.Fatalf("a project file may not hold models.context_window, got %q", kept)
+	}
+	if _, err := config.LoadLayers(global, project); err != nil {
+		t.Fatalf("the layered config must still load after the override: %v", err)
 	}
 	rows, err := f.ws.Contexts(context.Background(), false)
 	if err != nil {
