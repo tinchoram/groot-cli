@@ -954,7 +954,7 @@ func (m Model) banner() string {
 	if !m.shineOn {
 		shine = shineDisabled
 	}
-	return bannerView(m.chatWidth(), shine)
+	return bannerView(m.chatWidth(), shine, m.version)
 }
 
 // transcriptText returns the plain transcript, used by tests.

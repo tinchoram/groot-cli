@@ -129,12 +129,24 @@ func TestMascotRowsAreAlignedAndTallerThanWordmark(t *testing.T) {
 
 func TestBannerShowsTaglineAndMascot(t *testing.T) {
 	for _, width := range []int{30, 120} {
-		out := bannerView(width, shineDisabled)
+		out := bannerView(width, shineDisabled, "0.5.4-dev")
 		if !strings.Contains(out, tagline) {
 			t.Errorf("width %d: banner lacks the tagline %q", width, tagline)
 		}
 	}
-	wide := bannerView(120, shineDisabled)
+	wide := bannerView(120, shineDisabled, "0.5.4-dev")
+	for _, width := range []int{30, 60, 120} {
+		out := stripANSI(bannerView(width, shineDisabled, "0.5.4-dev"))
+		if !strings.Contains(out, "v0.5.4-dev") {
+			t.Errorf("width %d: banner lacks the version", width)
+		}
+		if strings.Index(out, "v0.5.4-dev") < strings.Index(out, "GROOT") && strings.Index(out, "v0.5.4-dev") < strings.Index(out, "██") {
+			t.Errorf("width %d: the version goes under the name, not before it", width)
+		}
+	}
+	if out := stripANSI(bannerView(120, shineDisabled, "")); strings.Contains(out, " v") {
+		t.Errorf("empty version prints nothing: %q", out)
+	}
 	if !strings.Contains(wide, "▀") && !strings.Contains(wide, "▄") {
 		t.Errorf("wide banner lacks the pixel-art mascot")
 	}

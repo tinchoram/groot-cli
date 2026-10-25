@@ -220,11 +220,33 @@ func renderBannerRow(line string, row, shine int) string {
 	return sb.String()
 }
 
+// versionTag is the version as the banner prints it next to the tagline, or
+// "" when the build carries no version.
+func versionTag(version string) string {
+	if strings.TrimSpace(version) == "" {
+		return ""
+	}
+	return styleSubtitle.Render("v" + version)
+}
+
+// taglineLine is the line under the wordmark: the tagline and the version.
+func taglineLine(version string) string {
+	if v := versionTag(version); v != "" {
+		return styleDim.Render(tagline+"  ·  ") + v
+	}
+	return styleDim.Render(tagline)
+}
+
 // bannerView renders the banner for a terminal of the given width. shine is
-// the sweep column; pass shineDisabled for the settled frame.
-func bannerView(width, shine int) string {
+// the sweep column; pass shineDisabled for the settled frame. version is
+// printed under the name.
+func bannerView(width, shine int, version string) string {
 	if width < wordmarkMinWidth {
-		return "\n" + styleBanner.Render("  GROOT") +
+		name := styleBanner.Render("  GROOT")
+		if v := versionTag(version); v != "" {
+			name += " " + v
+		}
+		return "\n" + name +
 			styleDim.Render("  ·  "+tagline) + "\n" +
 			styleDim.Render("  type a message or /help") + "\n\n"
 	}
@@ -236,7 +258,7 @@ func bannerView(width, shine int) string {
 			sb.WriteString(renderBannerRow(line, row, shine))
 			sb.WriteString("\n")
 		}
-		sb.WriteString(styleDim.Render(tagline) + "\n")
+		sb.WriteString(taglineLine(version) + "\n")
 		sb.WriteString(styleDim.Render("type a message · /help for commands · ctrl-d to exit") + "\n\n")
 		return sb.String()
 	}
@@ -248,7 +270,7 @@ func bannerView(width, shine int) string {
 	for row, line := range bannerArt {
 		right[wordmarkTop+row] = renderBannerRow(line, row, shine)
 	}
-	right[wordmarkTop+len(bannerArt)] = styleDim.Render(tagline)
+	right[wordmarkTop+len(bannerArt)] = taglineLine(version)
 	right[wordmarkTop+len(bannerArt)+1] = styleDim.Render("type a message · /help for commands · ctrl-d to exit")
 
 	var sb strings.Builder
