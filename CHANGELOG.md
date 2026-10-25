@@ -3,7 +3,9 @@
 All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
-## 0.5.4 — 2026-10-25
+## 0.5.5-dev (unreleased)
+
+## 0.5.4 — 2026-10-25 (tagged, not published)
 
 ### UI
 - The status line above the input starts with the active agent as a badge:
