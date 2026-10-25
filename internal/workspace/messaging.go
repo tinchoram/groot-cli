@@ -65,14 +65,17 @@ func (m *messenger) MarkRead(ctx context.Context, ids []int64) error {
 }
 
 // resolveRecipient maps an address to a space and agent. "groot" is the groot
-// agent in the root space; a bare name is an agent in senderSpace; "<space>/<agent>"
-// is explicit. The agent must be assigned to that space.
+// agent in the root space; "debug" is the debug agent in whichever space it is
+// assigned to; a bare name is an agent in senderSpace; "<space>/<agent>" is
+// explicit. The agent must be assigned to that space.
 func (w *Workspace) resolveRecipient(senderSpace, to string) (string, string, error) {
 	to = strings.TrimSpace(to)
 	var spaceName, agent string
 	switch {
 	case to == managedAgent:
 		spaceName, agent = rootSpaceName, managedAgent
+	case to == debugAgent:
+		spaceName, agent = w.debugSpace(), debugAgent
 	case strings.Contains(to, "/"):
 		i := strings.Index(to, "/")
 		spaceName, agent = to[:i], to[i+1:]

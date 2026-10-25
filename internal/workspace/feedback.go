@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -13,9 +14,26 @@ import (
 // feedbackSubjectRunes caps the part of the text that becomes the message subject.
 const feedbackSubjectRunes = 60
 
-// feedbackRecipient is where reports go: the debug agent in the root space. Only
-// debug writes the backlog.
-const feedbackRecipient = rootSpaceName + "/" + debugAgent
+// debugSpace is the space debug is assigned to: root when it is there, else
+// the first space that has it, else root. Reports and the bare "debug"
+// address follow it when the user moves it.
+func (w *Workspace) debugSpace() string {
+	if sp, ok := w.opts.Spaces.Get(rootSpaceName); ok && slices.Contains(sp.Agents, debugAgent) {
+		return rootSpaceName
+	}
+	for _, sp := range w.opts.Spaces.List() {
+		if slices.Contains(sp.Agents, debugAgent) {
+			return sp.Name
+		}
+	}
+	return rootSpaceName
+}
+
+// feedbackRecipient is where reports go: the debug agent, wherever it is
+// assigned. Only debug writes the backlog.
+func (w *Workspace) feedbackRecipient() string {
+	return w.debugSpace() + "/" + debugAgent
+}
 
 // SendFeedback sends a bug or a feature request about groot to the debug agent,
 // as a message from the given space and agent. Nothing is written to the backlog
@@ -34,7 +52,7 @@ func (w *Workspace) SendFeedback(spaceName, agent, kind, text string, lines []st
 	// A report is never refused for its size: a long paste is cut and marked,
 	// and the footer is kept so debug still knows where it came from.
 	content := capBytes(body.String(), inbox.MaxBodyBytes-len(footer))
-	recipient, id, err := w.messengerFor(spaceName, agent).Send(context.Background(), feedbackRecipient, subject, content+footer)
+	recipient, id, err := w.messengerFor(spaceName, agent).Send(context.Background(), w.feedbackRecipient(), subject, content+footer)
 	if err != nil {
 		return 0, "", err
 	}

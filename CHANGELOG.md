@@ -21,6 +21,13 @@ built in one day of live testing, so they are grouped by what shipped.
   so a badge on another agent or space is explained, and the badges are
   re-read at the same time.
 
+### Agents
+- The debug agent can be moved. Bootstrap used to assign it to `root` on every
+  start, so a move to another space was undone by the next restart. It is now
+  placed in `root` only when it is assigned to no space at all. Bug and feature
+  reports, `/bug`, `/feat` and the bare `debug` address follow it to the space
+  it lives in.
+
 ## 0.5.3 — 2026-10-25
 
 ### Backlog sweep

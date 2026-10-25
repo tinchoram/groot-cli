@@ -1101,8 +1101,9 @@ table, regenerated after every change. Each item is one file under `items/`, nam
 `BUG-001-<slug>.md` or `FEAT-001-<slug>.md`, with frontmatter (id, type, status,
 area, reported_at, space, agent, version) and its description.
 
-- `/bug <text>` and `/feat <text>` send a message to `root/debug` from the current
-  space and agent. No model call and no permission gate. The body holds your text,
+- `/bug <text>` and `/feat <text>` send a message to the debug agent, in whatever
+  space it is assigned to (`root` at first; a move is kept across restarts), from
+  the current space and agent. No model call and no permission gate. The body holds your text,
   the last ten lines you typed in this conversation as context, and the version.
   Earlier reports are left out. The confirmation gives the message id.
 - Only the `debug` agent writes the backlog. It is created by bootstrap next to

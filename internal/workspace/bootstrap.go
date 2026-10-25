@@ -112,6 +112,16 @@ Keep it short and concrete. Edit this file to change how the agent behaves.
 `, name)
 }
 
+// assignedAnywhere reports whether agent is assigned to at least one space.
+func assignedAnywhere(st *space.Store, agent string) bool {
+	for _, sp := range st.List() {
+		if slices.Contains(sp.Agents, agent) {
+			return true
+		}
+	}
+	return false
+}
+
 // Bootstrap prepares the groot home on every start. It never deletes anything
 // and never overwrites a file: missing pieces are added, existing ones are kept.
 //
@@ -166,7 +176,9 @@ func Bootstrap(home, userHome string, now time.Time) (fresh bool, err error) {
 			return false, err
 		}
 	}
-	if !slices.Contains(root.Agents, debugAgent) {
+	// Debug starts in root but may be moved: it is placed only when it is
+	// assigned to no space at all, so a move survives a restart.
+	if !assignedAnywhere(st, debugAgent) {
 		if err := st.Assign(rootSpaceName, debugAgent); err != nil {
 			return false, err
 		}
