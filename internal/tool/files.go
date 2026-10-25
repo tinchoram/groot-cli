@@ -9,10 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/tinchoram/groot-cli/internal/api"
 )
 
+// readFileLimit is the default and the largest window read_file returns per call.
 const readFileLimit = 64 * 1024
 
 // sandbox confines file paths to a root directory, following symlinks.
@@ -77,6 +79,60 @@ type pathInput struct {
 	Content string `json:"content"`
 }
 
+// readInput is the read_file input. Limit is a pointer so an explicit 0 can be
+// told apart from an absent limit.
+type readInput struct {
+	Path   string `json:"path"`
+	Offset int64  `json:"offset"`
+	Limit  *int64 `json:"limit"`
+}
+
+func parseReadInput(input string) (readInput, error) {
+	var in readInput
+	if err := json.Unmarshal([]byte(input), &in); err != nil {
+		return in, fmt.Errorf("invalid input: %w", err)
+	}
+	if strings.TrimSpace(in.Path) == "" {
+		return in, errors.New("path is required")
+	}
+	if in.Offset < 0 {
+		return in, errors.New("offset must be 0 or more")
+	}
+	if in.Limit != nil && *in.Limit < 1 {
+		return in, errors.New("limit must be 1 or more")
+	}
+	return in, nil
+}
+
+// cutAtRuneBoundary moves a window end back so that a rune split by the window
+// edge is left for the next read. If the cut would leave nothing, the window is
+// kept as it is, so a caller always makes progress.
+func cutAtRuneBoundary(b []byte) []byte {
+	for i := len(b) - 1; i >= 0 && i >= len(b)-utf8.UTFMax; i-- {
+		c := b[i]
+		if c < utf8.RuneSelf {
+			return b
+		}
+		if !utf8.RuneStart(c) {
+			continue
+		}
+		need := 1
+		switch {
+		case c >= 0xF0:
+			need = 4
+		case c >= 0xE0:
+			need = 3
+		case c >= 0xC0:
+			need = 2
+		}
+		if i+need > len(b) && i > 0 {
+			return b[:i]
+		}
+		return b
+	}
+	return b
+}
+
 func parsePathInput(input string) (pathInput, error) {
 	var in pathInput
 	if err := json.Unmarshal([]byte(input), &in); err != nil {
@@ -103,8 +159,8 @@ func NewReadFile(root string) *ReadFile {
 func (*ReadFile) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "read_file",
-		Description: "Read a text file inside the working directory. Output is capped at 64 KB.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","description":"Path relative to the working directory"}},"required":["path"]}`),
+		Description: "Read a text file inside the working directory. Up to 64 KB per call; larger files say so in the first line and are read in parts with offset.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","description":"Path relative to the working directory"},"offset":{"type":"integer","description":"Byte offset to start reading at (default 0)"},"limit":{"type":"integer","description":"Maximum bytes to return (default 65536, max 65536)"}},"required":["path"]}`),
 	}
 }
 
@@ -116,7 +172,7 @@ func (*ReadFile) Untrusted() bool { return true }
 func (r *ReadFile) RiskFor(string) Risk { return r.Risk() }
 
 func (*ReadFile) Preview(input string) string {
-	in, err := parsePathInput(input)
+	in, err := parseReadInput(input)
 	if err != nil {
 		return "read_file: " + err.Error()
 	}
@@ -132,7 +188,7 @@ func (r *ReadFile) execute(input string) (string, bool) {
 	if r.rootErr != nil {
 		return r.rootErr.Error(), true
 	}
-	in, err := parsePathInput(input)
+	in, err := parseReadInput(input)
 	if err != nil {
 		return err.Error(), true
 	}
@@ -145,14 +201,58 @@ func (r *ReadFile) execute(input string) (string, bool) {
 		return err.Error(), true
 	}
 	defer f.Close()
-	buf, err := io.ReadAll(io.LimitReader(f, readFileLimit+1))
+	info, err := f.Stat()
 	if err != nil {
 		return err.Error(), true
 	}
-	if len(buf) > readFileLimit {
-		return string(buf[:readFileLimit]) + "\n... [output truncated at 64 KB]", false
+	size := info.Size()
+	if in.Offset > size {
+		return fmt.Sprintf("offset %d is past the end of the file (%d bytes)", in.Offset, size), true
 	}
-	return string(buf), false
+
+	limit := int64(readFileLimit)
+	clamp := ""
+	if in.Limit != nil {
+		if *in.Limit > readFileLimit {
+			clamp = fmt.Sprintf("limit %d clamped to %d", *in.Limit, readFileLimit)
+		} else {
+			limit = *in.Limit
+		}
+	}
+
+	if _, err := f.Seek(in.Offset, io.SeekStart); err != nil {
+		return err.Error(), true
+	}
+	buf, err := io.ReadAll(io.LimitReader(f, limit))
+	if err != nil {
+		return err.Error(), true
+	}
+	end := in.Offset + int64(len(buf))
+	if end < size {
+		buf = cutAtRuneBoundary(buf)
+		end = in.Offset + int64(len(buf))
+	}
+
+	if in.Offset == 0 && end == size {
+		if clamp == "" {
+			return string(buf), false
+		}
+		return "[read_file: " + clamp + "]\n" + string(buf), false
+	}
+	if len(buf) == 0 {
+		return fmt.Sprintf("[read_file: offset %d is the end of the file (%d bytes)]", in.Offset, size), false
+	}
+
+	next := "end of file"
+	if end < size {
+		next = fmt.Sprintf("call again with offset=%d to continue", end)
+	}
+	parts := []string{}
+	if clamp != "" {
+		parts = append(parts, clamp)
+	}
+	parts = append(parts, fmt.Sprintf("showing bytes %d-%d of %d", in.Offset, end-1, size), next)
+	return "[read_file: " + strings.Join(parts, "; ") + "]\n" + string(buf), false
 }
 
 // WriteFile creates or replaces a file inside the working directory.

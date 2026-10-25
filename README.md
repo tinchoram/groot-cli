@@ -270,7 +270,8 @@ files were loaded.
   allowlist, `-A` is refused and a namespace is required. The kubectl tool runs
   outside the sandbox, since it needs your kubeconfig and the network.
 - **Limits.** Commands time out after 60 seconds. Output is capped (32 KB for
-  bash, 64 KB for reads and kubectl).
+  bash, 64 KB for kubectl). `read_file` returns 64 KB per call and takes `offset`
+  and `limit` in bytes to read the rest of a larger file.
 - **Redaction.** Obvious secrets (`password=`, `token:`, `api_key=`, `Bearer`)
   are masked in tool output, previews and the audit log.
 - **Audit.** Every tool call is logged in a JSON line, readable with `/audit` and

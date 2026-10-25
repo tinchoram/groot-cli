@@ -57,6 +57,12 @@ built in one day of live testing, so they are grouped by what shipped.
   max_turns for this agent if it needs more`. Only a failed final call returns
   the error.
 - The default `max_turns` rises from 20 to 40 model calls per request.
+- BUG-006: `read_file` cut files larger than 64 KB at the limit with a trailing note
+  the agent did not notice, so a 68 KB doc was read halfway and never cited. Each
+  call now returns at most 64 KB and takes `offset` and `limit` in bytes. When the
+  file is larger than the window, the first line says which bytes came back and the
+  `offset` to continue from, for example `[read_file: showing bytes 0-65535 of 68342;
+  call again with offset=65536 to continue]`. Windows never split a UTF-8 rune.
 
 ## 0.5.5-dev (unreleased)
 
