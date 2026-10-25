@@ -899,8 +899,15 @@ Who sees what:
 | `agent` | only the agent that wrote it |
 
 The 10 newest visible entries are added to the system prompt under "Long-term
-memory", once per conversation, when the conversation is created. Entries saved
-later are found by `recall` and appear in the prompt of the next conversation.
+memory". The block is built when a conversation opens, and it is rebuilt on
+`/clear`: once when the old session detaches, so every entry saved during it is
+included, and again after the summary of the cleared session is written, so the
+next turn sees that summary too.
+
+`/memory` lists the entries in the agent's prompt, newest first, as `<id> <kind>
+<scope> <age> <text>`, with a footer that counts the entries the agent can see
+and how many of them are session summaries. `/memory <query>` searches the same
+entries the way `recall` does.
 
 The database path is set by `memory.path` (default `.groot/groot.db`). A relative
 path is taken from the space directory, so each space has its own memory. An
@@ -924,7 +931,9 @@ written when the session ends. Sessions are per agent in a space.
   tool call is one `[tool] name` line. Tool result bodies are not drawn.
 - `/clear` ends the session (the summary is written), marks it cleared and
   starts a fresh one. A cleared session is never resumed. Its messages stay in
-  the database for audit and recall.
+  the database for audit and recall. The agent's memory is kept too, and the
+  "Long-term memory" block of its prompt is refreshed, so the new session starts
+  with what was remembered and the summary of the old one.
 - Databases from earlier versions are upgraded on open, with a `cleared_at`
   column added to `sessions`. Nothing is deleted.
 
@@ -1139,6 +1148,9 @@ capped at 16 KB and subjects at 200 characters.
   space the total unread of its agents. The space mark sits after the `●` and `?`
   marks.
 - `/inbox` lists the active agent's last 10 messages, read or not.
+- `/readinbox` starts a turn in which the active agent reads its unread messages
+  and says which ones need an answer from you, without acting on them yet. With
+  no unread messages it spends no turn.
 - `/inbox send <to> <subject> -- <body>` sends a message by hand. It is not gated,
   because you wrote it.
 

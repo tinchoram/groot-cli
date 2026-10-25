@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/tinchoram/groot-cli/internal/api"
@@ -107,6 +108,63 @@ func TestClearEndsTheOldSessionWithSummaryAndStartsFresh(t *testing.T) {
 	}
 	if got := len(f.mock.Calls[2].Messages); got != 1 {
 		t.Fatalf("fresh session sent %d messages, want only the prompt", got)
+	}
+}
+
+func TestClearRefreshesTheMemoryPreamble(t *testing.T) {
+	ctx := context.Background()
+	// Steps: the first answer, the summary written at clear, the answer after clear.
+	f := newFixture(t, text("one"), text("Asked about the cluster. Nothing open."), text("two"))
+	_ = f.ws.SelectAgent("reader")
+	conv := f.ws.Chat()
+	if _, err := conv.Send(ctx, "first"); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := f.ws.storesFor(f.dir)
+	if err := st.mem.Remember(ctx, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeProject, Agent: "reader", Text: "pager rota lives in ops-calendar"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := conv.Clear()(ctx); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if _, err := conv.Send(ctx, "second"); err != nil {
+		t.Fatal(err)
+	}
+	sys := f.mock.Calls[2].System
+	for _, want := range []string{"pager rota lives in ops-calendar", "Asked about the cluster. Nothing open."} {
+		if !strings.Contains(sys, want) {
+			t.Fatalf("prompt after /clear lacks %q:\n%s", want, sys)
+		}
+	}
+}
+
+func TestChatMemoryListsThePreambleAndRecalls(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t, text("ok"))
+	_ = f.ws.SelectAgent("reader")
+	conv := f.ws.Chat()
+	st, _ := f.ws.storesFor(f.dir)
+	for _, text := range []string{"first note about backups", "second note about backups", "third note about dns"} {
+		if err := st.mem.Remember(ctx, memory.Entry{Kind: memory.KindFact, Scope: memory.ScopeProject, Agent: "reader", Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, ov, err := conv.PromptMemory(ctx)
+	if err != nil {
+		t.Fatalf("Memory: %v", err)
+	}
+	if len(entries) != 3 || entries[0].Text != "third note about dns" {
+		t.Fatalf("Memory entries = %+v, want the three notes newest first", entries)
+	}
+	if ov.Visible != 3 || ov.Summaries != 0 {
+		t.Fatalf("Memory overview = %+v", ov)
+	}
+	found, err := conv.RecallMemory(ctx, "backups")
+	if err != nil || len(found) != 2 {
+		t.Fatalf("RecallMemory = %+v, %v; want the two backup notes", found, err)
+	}
+	if none, _ := conv.RecallMemory(ctx, "kubernetes"); len(none) != 0 {
+		t.Fatalf("RecallMemory without matches = %+v", none)
 	}
 }
 

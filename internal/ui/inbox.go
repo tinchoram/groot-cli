@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -52,6 +53,25 @@ func (m *Model) runInboxCommand(arg string) {
 		return
 	}
 	m.showInbox()
+}
+
+// readInboxPrompt is the turn /readinbox gives the active agent. The unread
+// notice the workspace puts before a turn delivers the messages to it.
+const readInboxPrompt = "Read your inbox now. For each message give the sender, the subject and a one-line summary, then say which ones need an answer or an action from me. Do not act on them yet."
+
+// runReadInbox starts a turn in which the active agent reads its unread
+// messages. With none, no turn is spent.
+func (m Model) runReadInbox() (tea.Model, tea.Cmd) {
+	counts, err := m.ws.UnreadCounts(context.Background())
+	if err != nil {
+		m.append(styleError.Render("error: " + err.Error()))
+		return m, nil
+	}
+	if counts[m.ws.ConversationKey()] == 0 {
+		m.append(styleDim.Render(fmt.Sprintf("no unread messages for %s; /inbox lists the last %d", m.ws.ActiveAgent(), inboxListLimit)))
+		return m, nil
+	}
+	return m.sendPrompt(readInboxPrompt, readInboxPrompt, nil)
 }
 
 // showInbox prints the newest messages of the active agent, read or not. The

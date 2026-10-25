@@ -229,6 +229,18 @@ func (s *SQLite) Recall(ctx context.Context, query, agent string, limit int) ([]
 }
 
 func (s *SQLite) Preamble(ctx context.Context, agent string, limit int) (string, error) {
+	entries, err := s.PreambleEntries(ctx, agent, limit)
+	if err != nil {
+		return "", err
+	}
+	var sb strings.Builder
+	for _, e := range entries {
+		fmt.Fprintf(&sb, "- [%s] %s\n", e.Kind, e.Text)
+	}
+	return sb.String(), nil
+}
+
+func (s *SQLite) PreambleEntries(ctx context.Context, agent string, limit int) ([]Entry, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -239,18 +251,23 @@ func (s *SQLite) Preamble(ctx context.Context, agent string, limit int) (string,
 		ORDER BY m.id DESC
 		LIMIT ?`, agent, agent, limit)
 	if err != nil {
-		return "", fmt.Errorf("preamble: %w", err)
+		return nil, fmt.Errorf("preamble: %w", err)
 	}
 	defer rows.Close()
-	entries, err := scanEntries(rows)
+	return scanEntries(rows)
+}
+
+func (s *SQLite) Overview(ctx context.Context, agent string) (Overview, error) {
+	var ov Overview
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*), COALESCE(SUM(CASE WHEN m.kind = ? THEN 1 ELSE 0 END), 0)
+		FROM memories m
+		WHERE `+Visible,
+		string(KindSessionSummary), agent, agent).Scan(&ov.Visible, &ov.Summaries)
 	if err != nil {
-		return "", err
+		return Overview{}, fmt.Errorf("overview: %w", err)
 	}
-	var sb strings.Builder
-	for _, e := range entries {
-		fmt.Fprintf(&sb, "- [%s] %s\n", e.Kind, e.Text)
-	}
-	return sb.String(), nil
+	return ov, nil
 }
 
 func scanEntries(rows *sql.Rows) ([]Entry, error) {

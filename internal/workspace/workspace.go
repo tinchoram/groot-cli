@@ -69,6 +69,11 @@ type Chat interface {
 	// Clear detaches the conversation for /clear; the returned function ends
 	// the old session and must run off the UI loop.
 	Clear() func(context.Context) error
+	// Memory returns the entries in the prompt preamble of this agent, newest
+	// first, and how many entries the agent can read in all.
+	PromptMemory(ctx context.Context) ([]memory.Entry, memory.Overview, error)
+	// RecallMemory searches the entries this agent can read.
+	RecallMemory(ctx context.Context, query string) ([]memory.Entry, error)
 }
 
 // Hooks receive the output of every conversation, tagged with its key
@@ -520,14 +525,6 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		return nil, err
 	}
 	ctx := context.Background()
-	preamble, err := st.mem.Preamble(ctx, agentName, 10)
-	if err != nil {
-		return nil, fmt.Errorf("load memory preamble: %w", err)
-	}
-	projectCtx, err := config.LoadProjectContext(sp.Path)
-	if err != nil {
-		return nil, fmt.Errorf("read AGENTS.md: %w", err)
-	}
 	base := def.Prompt
 	if strings.TrimSpace(base) == "" {
 		base = w.opts.Config.EffectiveSystemPrompt()
@@ -538,6 +535,23 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	}
 	if agentName == debugAgent {
 		base += "\n\n" + debugRules(w.opts.Config.Feedback.Confirm)
+	}
+	// rebuildSystem composes the prompt from the memory stored at the time of the
+	// call. It runs at open and again on /clear.
+	rebuildSystem := func(ctx context.Context) (string, error) {
+		preamble, err := st.mem.Preamble(ctx, agentName, preambleEntries)
+		if err != nil {
+			return "", fmt.Errorf("load memory preamble: %w", err)
+		}
+		projectCtx, err := config.LoadProjectContext(sp.Path)
+		if err != nil {
+			return "", fmt.Errorf("read AGENTS.md: %w", err)
+		}
+		return config.ComposeSystemPrompt(base, preamble, projectCtx), nil
+	}
+	system, err := rebuildSystem(ctx)
+	if err != nil {
+		return nil, err
 	}
 	maxTurns := def.MaxTurns
 	if maxTurns == 0 {
@@ -560,7 +574,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		Audit:             st.aud,
 		Space:             sp.Name,
 		Guard:             g,
-		System:            config.ComposeSystemPrompt(base, preamble, projectCtx),
+		System:            system,
 		MaxTurns:          maxTurns,
 		OnText:            keyedText(w.opts.Hooks, key),
 		OnToolCall:        autoAwareTool(w.opts.Hooks, key, work, sess, g),
@@ -570,7 +584,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		Limit: func(ctx context.Context) error { return conv.checkBudget(ctx, 0) },
 	}
 	resumed := w.startOrResume(ctx, ag, st.mem, agentName)
-	conv = &Conversation{Agent: ag, prov: prov, store: st.mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, work: work, files: files, review: box,
+	conv = &Conversation{Agent: ag, prov: prov, store: st.mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, rebuildSystem: rebuildSystem, work: work, files: files, review: box,
 		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key), rebuildTools: rebuild,
 		budgets:      func(ctx context.Context) ([]Budget, error) { return w.budgetsFor(ctx, st.mem, sp.Name, agentName) },
 		budgetNotice: keyedWarn(w.opts.Hooks, key)}
@@ -664,6 +678,12 @@ func (c idleChat) Clear() func(context.Context) error {
 	return func(context.Context) error { return nil }
 }
 func (c idleChat) SessionID() string { return "" }
+func (c idleChat) PromptMemory(context.Context) ([]memory.Entry, memory.Overview, error) {
+	return nil, memory.Overview{}, c.err
+}
+func (c idleChat) RecallMemory(context.Context, string) ([]memory.Entry, error) {
+	return nil, c.err
+}
 
 // ImportAgent fetches an agent file (a local path or an http(s) URL), maps its
 // tools, and saves it to the catalog. An existing agent is replaced only when

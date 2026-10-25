@@ -15,6 +15,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/flow"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
+	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/provider"
 	"github.com/tinchoram/groot-cli/internal/tool"
 	"github.com/tinchoram/groot-cli/internal/workspace"
@@ -43,6 +44,22 @@ type fakeSession struct {
 	window    int
 	// onClear runs inside Clear, to mirror what the workspace changes on /clear.
 	onClear func()
+	// promptMemory and memoryOverview answer PromptMemory; recall answers
+	// RecallMemory, and recallQueries records each query it was asked.
+	promptMemory   []memory.Entry
+	memoryOverview memory.Overview
+	recall         []memory.Entry
+	recallQueries  []string
+	memoryErr      error
+}
+
+func (f *fakeSession) PromptMemory(context.Context) ([]memory.Entry, memory.Overview, error) {
+	return f.promptMemory, f.memoryOverview, f.memoryErr
+}
+
+func (f *fakeSession) RecallMemory(_ context.Context, query string) ([]memory.Entry, error) {
+	f.recallQueries = append(f.recallQueries, query)
+	return f.recall, f.memoryErr
 }
 
 func (f *fakeSession) Task() (flow.Task, bool) {

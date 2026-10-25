@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tinchoram/groot-cli/internal/admintool"
@@ -20,6 +21,10 @@ import (
 )
 
 const (
+	// preambleEntries is how many memory entries the prompt carries.
+	preambleEntries = 10
+	// recallEntries is how many matches /memory <query> shows.
+	recallEntries   = 10
 	summaryTimeout  = 30 * time.Second
 	summaryMaxRunes = 100_000
 	summarySystem   = "You write terse session summaries for an SRE audit trail."
@@ -38,13 +43,18 @@ type Conversation struct {
 	// resumed is set when the conversation continued a stored session.
 	resumed *Resumed
 	// ctl enforces the ODD flow; baseSystem is the prompt before the flow block.
-	ctl        *flow.Controller
-	work       *gate.WorkState
-	files      *fileLog
-	review     *reviewBox
-	busy       atomic.Bool  // a turn is running: UI-driven or triggered by a message
-	autoTurns  atomic.Int64 // turns triggered by messages in this session
+	ctl       *flow.Controller
+	work      *gate.WorkState
+	files     *fileLog
+	review    *reviewBox
+	busy      atomic.Bool  // a turn is running: UI-driven or triggered by a message
+	autoTurns atomic.Int64 // turns triggered by messages in this session
+	// sysMu guards baseSystem: /clear refreshes it while a turn may be reading it.
+	sysMu      sync.Mutex
 	baseSystem string
+	// rebuildSystem recomputes the prompt before the flow block from the memory
+	// stored now, with the agent prompt and project context of the open.
+	rebuildSystem func(ctx context.Context) (string, error)
 	// startModel is the model the conversation started with; prevModel is the
 	// one before the last change. A model the provider does not know reverts to
 	// them. warn reports the revert.
@@ -68,6 +78,48 @@ type Conversation struct {
 // Model returns the model used for the next call.
 func (c *Conversation) Model() string { return c.prov.Model() }
 
+// base returns the prompt before the flow block.
+func (c *Conversation) base() string {
+	c.sysMu.Lock()
+	defer c.sysMu.Unlock()
+	return c.baseSystem
+}
+
+// refreshSystem recomputes the prompt from the memory stored now. On failure the
+// previous prompt stays in place.
+func (c *Conversation) refreshSystem(ctx context.Context) error {
+	if c.rebuildSystem == nil {
+		return nil
+	}
+	sys, err := c.rebuildSystem(ctx)
+	if err != nil {
+		return err
+	}
+	c.sysMu.Lock()
+	defer c.sysMu.Unlock()
+	c.baseSystem = sys
+	return nil
+}
+
+// PromptMemory returns the entries of the prompt preamble of this agent, newest first,
+// and how many entries the agent can read in all.
+func (c *Conversation) PromptMemory(ctx context.Context) ([]memory.Entry, memory.Overview, error) {
+	entries, err := c.store.PreambleEntries(ctx, c.name, preambleEntries)
+	if err != nil {
+		return nil, memory.Overview{}, err
+	}
+	ov, err := c.store.Overview(ctx, c.name)
+	if err != nil {
+		return nil, memory.Overview{}, err
+	}
+	return entries, ov, nil
+}
+
+// RecallMemory searches the entries this agent can read, newest matches first.
+func (c *Conversation) RecallMemory(ctx context.Context, query string) ([]memory.Entry, error) {
+	return c.store.Recall(ctx, query, c.name, recallEntries)
+}
+
 // Send runs one turn. When the agent has unread messages, the prompt is
 // prefixed with a notice so the model reads them with read_inbox when they
 // matter. Nothing is marked read here.
@@ -86,7 +138,7 @@ func (c *Conversation) send(ctx context.Context, prompt string) (string, error) 
 	}
 	if c.ctl != nil {
 		c.ctl.StartTurn()
-		c.Agent.System = withBlock(c.ctl.ContextBlock(ctx), c.baseSystem)
+		c.Agent.System = withBlock(c.ctl.ContextBlock(ctx), c.base())
 	}
 	prompt = c.injectInbox(ctx, prompt)
 	if prompt == "" {

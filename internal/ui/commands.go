@@ -15,7 +15,7 @@ type Command struct {
 
 var knownCommands = map[string]bool{
 	"help": true, "model": true, "compact": true, "tokens": true, "clear": true, "exit": true,
-	"space": true, "agent": true, "inbox": true, "task": true, "tasks": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true, "audit": true,
+	"space": true, "agent": true, "inbox": true, "task": true, "tasks": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true, "audit": true, "memory": true, "readinbox": true,
 }
 
 // ParseCommand reports whether line is a slash command and splits it into name and argument.
@@ -61,6 +61,9 @@ var helpEntries = []helpEntry{
 	{"/agent upgrade <name>|--all", "add the tools that built-in agents gained since they were installed"},
 	{"/inbox", "show the last 10 messages of this agent"},
 	{"/inbox send <to> <subject> -- <body>", "send a message by hand"},
+	{"/readinbox", "have this agent read its unread messages in one turn"},
+	{"/memory", "the memory entries in this agent's prompt, and their counts"},
+	{"/memory <query>", "search the memory this agent can read"},
 	{"/model [name]", "show or change the model"},
 	{"/models", "list the models the provider offers, with their prices"},
 	{"/cost", "session cost, spend and budgets"},

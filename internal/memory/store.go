@@ -64,6 +64,13 @@ type Session struct {
 	ContextTokens int64
 }
 
+// Overview is how many entries an agent can read, and how many of them are
+// session summaries.
+type Overview struct {
+	Visible   int
+	Summaries int
+}
+
 // Entry is one long-term memory.
 type Entry struct {
 	ID        int64
@@ -96,6 +103,10 @@ type Store interface {
 	// Preamble returns the most recent visible entries to agent, newest first,
 	// as a text block of at most limit entries.
 	Preamble(ctx context.Context, agent string, limit int) (string, error)
+	// PreambleEntries returns the entries Preamble formats, in the same order.
+	PreambleEntries(ctx context.Context, agent string, limit int) ([]Entry, error)
+	// Overview counts the entries visible to agent and the session summaries among them.
+	Overview(ctx context.Context, agent string) (Overview, error)
 	// LatestSession returns the most recently started session of agent,
 	// cleared or not. ok is false when the agent has no session.
 	LatestSession(ctx context.Context, agent string) (s Session, ok bool, err error)
@@ -131,6 +142,10 @@ func (NoMemory) Remember(context.Context, Entry) error { return nil }
 func (NoMemory) Recall(context.Context, string, string, int) ([]Entry, error) { return nil, nil }
 
 func (NoMemory) Preamble(context.Context, string, int) (string, error) { return "", nil }
+
+func (NoMemory) PreambleEntries(context.Context, string, int) ([]Entry, error) { return nil, nil }
+
+func (NoMemory) Overview(context.Context, string) (Overview, error) { return Overview{}, nil }
 
 func (NoMemory) LatestSession(context.Context, string) (Session, bool, error) {
 	return Session{}, false, nil

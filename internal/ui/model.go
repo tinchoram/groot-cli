@@ -653,7 +653,12 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	if cmd, ok := ParseCommand(full); ok {
 		return m.runCommand(cmd)
 	}
+	return m.sendPrompt(text, full, echoLines)
+}
 
+// sendPrompt echoes a prompt as a user turn and starts the turn on the active
+// conversation. text is what the user sees, full what the agent receives.
+func (m Model) sendPrompt(text, full string, echoLines []string) (tea.Model, tea.Cmd) {
 	m.append("\n" + turnHeader(m.vp.Width))
 	// The echo prints the lines as typed: the prompt on the first, an indent after.
 	lines := strings.Split(text, "\n")
@@ -750,6 +755,10 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		}
 	case "inbox":
 		m.runInboxCommand(cmd.Arg)
+	case "readinbox":
+		return m.runReadInbox()
+	case "memory":
+		m.runMemoryCommand(cmd.Arg)
 	case "work":
 		m.runWorkCommand(cmd.Arg)
 	case "allow":

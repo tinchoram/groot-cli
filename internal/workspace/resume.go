@@ -122,29 +122,36 @@ func (c *Conversation) Resumed() (Resumed, bool) {
 }
 
 // Clear starts a fresh conversation for /clear. The old session is detached in
-// memory right away, so the next Send opens a new one. The returned function
-// finishes the old session: it writes the summary, records the end and marks the
-// session cleared. The caller runs it off the UI loop.
+// memory right away, so the next Send opens a new one, and the prompt is rebuilt
+// from the memory stored so far. The returned function finishes the old session:
+// it writes the summary, records the end and marks the session cleared. Then it
+// rebuilds the prompt again, so the summary is in the next turn. The caller runs
+// it off the UI loop.
 func (c *Conversation) Clear() func(context.Context) error {
 	// The session's own spend, not the provider's total: the provider keeps
 	// counting across the sessions of this conversation.
 	cost := c.Agent.SessionCost()
 	id, transcript, n := c.Agent.Detach()
 	c.resumed = nil
+	// Cheap, and it picks up every entry remembered during the session. A failure
+	// keeps the previous prompt; the refresh after the summary reports it.
+	_ = c.refreshSystem(context.Background())
 	return func(ctx context.Context) error {
-		if id == "" {
-			return nil
-		}
 		var errs []error
-		if n > 0 {
-			if err := c.summarize(ctx, id, transcript); err != nil {
+		if id != "" {
+			if n > 0 {
+				if err := c.summarize(ctx, id, transcript); err != nil {
+					errs = append(errs, err)
+				}
+			}
+			if err := c.store.EndSession(ctx, id, cost); err != nil {
+				errs = append(errs, err)
+			}
+			if err := c.store.MarkCleared(ctx, id); err != nil {
 				errs = append(errs, err)
 			}
 		}
-		if err := c.store.EndSession(ctx, id, cost); err != nil {
-			errs = append(errs, err)
-		}
-		if err := c.store.MarkCleared(ctx, id); err != nil {
+		if err := c.refreshSystem(ctx); err != nil {
 			errs = append(errs, err)
 		}
 		return errors.Join(errs...)

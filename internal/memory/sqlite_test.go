@@ -74,6 +74,37 @@ func TestRememberRejectsInvalidKind(t *testing.T) {
 	}
 }
 
+func TestPreambleEntriesAndOverviewCountVisibleEntries(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	_ = s.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeProject, Agent: "a", Text: "older fact for a"})
+	_ = s.Remember(ctx, Entry{Kind: KindSessionSummary, Scope: ScopeProject, Agent: "a", Text: "summary for a"})
+	_ = s.Remember(ctx, Entry{Kind: KindFact, Scope: ScopeAgent, Agent: "b", Text: "private to b"})
+	_ = s.Remember(ctx, Entry{Kind: KindDecision, Scope: ScopeGlobal, Text: "global decision"})
+
+	entries, err := s.PreambleEntries(ctx, "a", 2)
+	if err != nil {
+		t.Fatalf("PreambleEntries: %v", err)
+	}
+	if len(entries) != 2 || entries[0].Text != "global decision" || entries[0].Kind != KindDecision || entries[1].Text != "summary for a" {
+		t.Fatalf("PreambleEntries = %+v, want the two newest visible entries, newest first", entries)
+	}
+	pre, err := s.Preamble(ctx, "a", 2)
+	if err != nil {
+		t.Fatalf("Preamble: %v", err)
+	}
+	if want := "- [decision] global decision\n- [session_summary] summary for a\n"; pre != want {
+		t.Fatalf("Preamble = %q, want %q", pre, want)
+	}
+	ov, err := s.Overview(ctx, "a")
+	if err != nil {
+		t.Fatalf("Overview: %v", err)
+	}
+	if ov.Visible != 3 || ov.Summaries != 1 {
+		t.Fatalf("Overview = %+v, want 3 visible entries with 1 summary", ov)
+	}
+}
+
 func TestPreambleOrderingAndScope(t *testing.T) {
 	ctx := context.Background()
 	s := openTemp(t)
