@@ -132,6 +132,9 @@ func HandoverBody(t Task, origin string) string {
 	if t.PlanPath != "" {
 		fmt.Fprintf(&b, "Plan: %s\n", t.PlanPath)
 	}
+	for _, s := range t.Specs {
+		fmt.Fprintf(&b, "Spec S%d: %s\n", s.N, s.Text)
+	}
 	b.WriteString("\nWork it through your own task flow: task_classify, task_open with this goal, scope and done-when, implement, verify with a command, then task_advance deliver with a note on the changes and the risks.\n")
 	fmt.Fprintf(&b, "Your delivery is reported to %s with subject %q and your deliver note as the body.\n", origin, SubjectFor(SignalDelivered, t.ID))
 	fmt.Fprintf(&b, "If you cannot finish it, fail your task with a reason and send_message to %s with subject %q.\n", origin, fmt.Sprintf("task:#%d returned <reason>", t.ID))

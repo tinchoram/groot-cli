@@ -38,6 +38,17 @@ var tasksSchema = []string{
 		at      DATETIME NOT NULL
 	)`,
 	`CREATE INDEX IF NOT EXISTS task_evidence_task ON task_evidence(task_id, id)`,
+	// task_specs holds the specs of a large task and their verdicts. Running the
+	// statement again on an older database adds the table.
+	`CREATE TABLE IF NOT EXISTS task_specs (
+		task_id INTEGER NOT NULL,
+		n       INTEGER NOT NULL,
+		text    TEXT NOT NULL,
+		status  TEXT NOT NULL DEFAULT '',
+		note    TEXT NOT NULL DEFAULT '',
+		at      DATETIME NULL,
+		PRIMARY KEY (task_id, n)
+	)`,
 }
 
 // taskAddedColumns are the columns of the delegation record and the parent
@@ -91,6 +102,9 @@ func (s taskStore) Get(ctx context.Context, id int64) (flow.Task, error) {
 	if err != nil {
 		return flow.Task{}, fmt.Errorf("task #%d: %w", id, err)
 	}
+	if t.Specs, err = s.Specs(ctx, t.ID); err != nil {
+		return flow.Task{}, err
+	}
 	if t.Evidence, err = s.evidence(ctx, t.ID); err != nil {
 		return flow.Task{}, err
 	}
@@ -108,6 +122,9 @@ func (s taskStore) Active(ctx context.Context, space, agent string) (flow.Task, 
 		return flow.Task{}, false, fmt.Errorf("active task: %w", err)
 	}
 	if t.Evidence, err = s.evidence(ctx, t.ID); err != nil {
+		return flow.Task{}, false, err
+	}
+	if t.Specs, err = s.Specs(ctx, t.ID); err != nil {
 		return flow.Task{}, false, err
 	}
 	return t, true, nil
@@ -163,6 +180,9 @@ func (s taskStore) List(ctx context.Context, space, agent string, limit int) ([]
 		return nil, err
 	}
 	for i := range out {
+		if out[i].Specs, err = s.Specs(ctx, out[i].ID); err != nil {
+			return nil, err
+		}
 		if out[i].Evidence, err = s.evidence(ctx, out[i].ID); err != nil {
 			return nil, err
 		}
@@ -275,6 +295,65 @@ func scanTask(r rowScanner) (flow.Task, error) {
 	}
 	t.Delegation = delegationOf(delegate, manager, status, delegatedAt, delegationAt)
 	return t, nil
+}
+
+// SetSpecs replaces the specs of a task. Every spec starts pending.
+func (s taskStore) SetSpecs(ctx context.Context, taskID int64, specs []flow.Spec) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set specs: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM task_specs WHERE task_id = ?`, taskID); err != nil {
+		return fmt.Errorf("set specs: %w", err)
+	}
+	for _, sp := range specs {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO task_specs (task_id, n, text) VALUES (?, ?, ?)`, taskID, sp.N, sp.Text); err != nil {
+			return fmt.Errorf("set specs: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// Specs returns the specs of a task with their verdicts, in order.
+func (s taskStore) Specs(ctx context.Context, taskID int64) ([]flow.SpecState, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT n, text, status, note FROM task_specs WHERE task_id = ? ORDER BY n`, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("task specs: %w", err)
+	}
+	defer rows.Close()
+	var out []flow.SpecState
+	for rows.Next() {
+		var sp flow.SpecState
+		if err := rows.Scan(&sp.N, &sp.Text, &sp.Status, &sp.Note); err != nil {
+			return nil, fmt.Errorf("scan spec: %w", err)
+		}
+		out = append(out, sp)
+	}
+	return out, rows.Err()
+}
+
+// SetVerdict saves the verdict of spec n of a task. A spec that does not exist
+// is an error.
+func (s taskStore) SetVerdict(ctx context.Context, taskID int64, n int, status, note string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE task_specs SET status = ?, note = ?, at = ? WHERE task_id = ? AND n = ?`,
+		status, note, time.Now().UTC(), taskID, n)
+	if err != nil {
+		return fmt.Errorf("save verdict: %w", err)
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return fmt.Errorf("spec S%d of task #%d does not exist", n, taskID)
+	}
+	return nil
+}
+
+// ResetVerdicts makes every spec of a task pending again.
+func (s taskStore) ResetVerdicts(ctx context.Context, taskID int64) error {
+	if _, err := s.db.ExecContext(ctx, `UPDATE task_specs SET status = '', note = '', at = NULL WHERE task_id = ?`, taskID); err != nil {
+		return fmt.Errorf("reset verdicts: %w", err)
+	}
+	return nil
 }
 
 func (s taskStore) evidence(ctx context.Context, taskID int64) ([]flow.Evidence, error) {

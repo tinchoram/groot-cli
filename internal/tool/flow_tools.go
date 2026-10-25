@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/tinchoram/groot-cli/internal/api"
@@ -21,15 +22,16 @@ type TaskClassify struct{ ctl *flow.Controller }
 func NewTaskClassify(ctl *flow.Controller) *TaskClassify { return &TaskClassify{ctl: ctl} }
 
 type taskClassifyInput struct {
-	Size   string `json:"size"`
-	Reason string `json:"reason"`
+	Size              string `json:"size"`
+	ResumableFromDiff bool   `json:"resumable_from_diff"`
+	Reason            string `json:"reason"`
 }
 
 func (*TaskClassify) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "task_classify",
-		Description: "Classify the work before the first write: small (1-2 files, no design, reversible), medium (several files or one component, tests affected, no open decisions), or large (design, several components, risk, or questions the user must answer). Returns the route and what the flow will require.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"size":{"type":"string","enum":["small","medium","large"]},"reason":{"type":"string"}},"required":["size","reason"]}`),
+		Description: "Classify the work before the first write with one test: could another agent resume it from the request plus the git diff alone? small = trivial: one or two reversible edits you fully understand and nothing to run; write directly. medium = yes, resumable: a task with command evidence is enough. large = no: it needs a feature document with numbered specs. Returns the route and what the flow will require.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"size":{"type":"string","enum":["small","medium","large"]},"resumable_from_diff":{"type":"boolean"},"reason":{"type":"string"}},"required":["size","resumable_from_diff","reason"]}`),
 	}
 }
 
@@ -49,7 +51,7 @@ func (t *TaskClassify) Execute(ctx context.Context, input string) (string, bool)
 		return "invalid input: " + err.Error(), true
 	}
 	size := flow.Size(strings.TrimSpace(in.Size))
-	out, err := t.ctl.Classify(size, in.Reason)
+	out, err := t.ctl.Classify(size, in.ResumableFromDiff, in.Reason)
 	if err != nil {
 		return err.Error(), true
 	}
@@ -152,7 +154,7 @@ type taskAdvanceInput struct {
 func (*TaskAdvance) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "task_advance",
-		Description: "Move the open task to the next phase. planned needs the plan file path as evidence (large tasks). implement after a planned or a failed verify needs a reason on failure. verify needs a command run during implement. deliver needs a note with the changes and the risks. done closes the task. failed closes it with a reason.",
+		Description: "Move the open task to the next phase. planned needs the plan file path as evidence (large tasks). implement after a planned or a failed verify needs a reason on failure. verify needs a command run during implement. deliver needs a note with the changes and the risks; a large task delivers only when every spec passed (task_verify). done closes the task. failed closes it with a reason.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"phase":{"type":"string","enum":["planned","implement","verify","deliver","done","failed"]},"evidence":{"type":"string"}},"required":["phase"]}`),
 	}
 }
@@ -201,6 +203,63 @@ func (t *TaskAdvance) report(ctx context.Context, next flow.Task, note string) s
 		return "\nnot reported to " + origin + ": " + err.Error()
 	}
 	return "\nreported to " + origin + " as " + subject
+}
+
+// TaskVerify records the verdict of one spec of a large task in verify.
+type TaskVerify struct{ ctl *flow.Controller }
+
+// NewTaskVerify returns the task_verify tool.
+func NewTaskVerify(ctl *flow.Controller) *TaskVerify { return &TaskVerify{ctl: ctl} }
+
+type taskVerifyInput struct {
+	Spec     string `json:"spec"`
+	Result   string `json:"result"`
+	Evidence string `json:"evidence"`
+}
+
+func (*TaskVerify) Definition() api.ToolDef {
+	return api.ToolDef{
+		Name:        "task_verify",
+		Description: "Record the verdict of one spec of the open large task in verify: result pass or fail, with the evidence (what you ran and what it showed). A fail sends the task back to implement with your reason.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"spec":{"type":"string"},"result":{"type":"string","enum":["pass","fail"]},"evidence":{"type":"string"}},"required":["spec","result","evidence"]}`),
+	}
+}
+
+func (*TaskVerify) Risk() Risk            { return RiskRead }
+func (t *TaskVerify) RiskFor(string) Risk { return t.Risk() }
+
+func (*TaskVerify) Preview(input string) string {
+	var in taskVerifyInput
+	if err := json.Unmarshal([]byte(input), &in); err != nil {
+		return "task_verify: invalid input"
+	}
+	return "verify " + in.Spec + ": " + in.Result + " · " + in.Evidence
+}
+
+func (t *TaskVerify) Execute(ctx context.Context, input string) (string, bool) {
+	var in taskVerifyInput
+	if err := json.Unmarshal([]byte(input), &in); err != nil {
+		return "invalid input: " + err.Error(), true
+	}
+	n, err := parseSpecNumber(in.Spec)
+	if err != nil {
+		return err.Error(), true
+	}
+	out, err := t.ctl.Verify(ctx, n, in.Result, in.Evidence)
+	if err != nil {
+		return err.Error(), true
+	}
+	return out, false
+}
+
+// parseSpecNumber reads a spec as "S2", "s2" or "2".
+func parseSpecNumber(s string) (int, error) {
+	s = strings.TrimSpace(s)
+	n, err := strconv.Atoi(strings.TrimPrefix(strings.ToUpper(s), "S"))
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("spec must be S<n>, for example S2: got %q", s)
+	}
+	return n, nil
 }
 
 // TaskStatus reports the classification and the open task.

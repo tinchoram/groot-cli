@@ -37,6 +37,14 @@ func (w *Workspace) newFlow(ctx context.Context, sp space.Space, agentName strin
 		PlanExists: func(path string) bool {
 			return planFileExists(sp.Path, path)
 		},
+		ReadPlan: func(path string) (string, error) {
+			abs, err := planPath(sp.Path, path)
+			if err != nil {
+				return "", err
+			}
+			raw, err := os.ReadFile(abs)
+			return string(raw), err
+		},
 		ApplyRoute: func(r flow.Route) func() {
 			previous := prov.Model()
 			w.warnUnlistedRoute(sp.Name+"/"+agentName, r.Model)
@@ -63,15 +71,28 @@ func routesFrom(c config.FlowConfig) flow.Routes {
 	}
 }
 
-// planFileExists reports whether rel is a file inside root. A path that
-// leaves the space is never a plan.
+// planFileExists reports whether rel is a regular file inside root.
 func planFileExists(root, rel string) bool {
+	_, err := planPath(root, rel)
+	return err == nil
+}
+
+// planPath returns the absolute path of rel, a regular file inside root. A path
+// that leaves the space, or names a directory or a missing file, is an error.
+func planPath(root, rel string) (string, error) {
 	clean := filepath.Clean(rel)
 	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return false
+		return "", fmt.Errorf("plan path %q leaves the space", rel)
 	}
-	info, err := os.Stat(filepath.Join(root, clean))
-	return err == nil && !info.IsDir()
+	abs := filepath.Join(root, clean)
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("plan file %q not found in the space", rel)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("plan path %q is not a file", rel)
+	}
+	return abs, nil
 }
 
 // recordingTool wraps bash so that every run is kept as command evidence of

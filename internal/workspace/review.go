@@ -120,6 +120,12 @@ func reviewText(ctx context.Context, t flow.Task, space string, files []string) 
 	if note := lastDeliverNote(t); note != "" {
 		b.WriteString("deliver note: " + note + "\n")
 	}
+	if t.Size == flow.SizeLarge && len(t.Specs) > 0 {
+		b.WriteString("Specs:\n")
+		for _, s := range t.Specs {
+			b.WriteString("  " + s.Line() + "\n")
+		}
+	}
 	b.WriteString("work mode is off. /task accept closes the task; /task reject <reason> sends it back to implement.")
 	return b.String()
 }

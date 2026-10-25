@@ -18,4 +18,12 @@ type Store interface {
 	AddEvidence(ctx context.Context, taskID int64, ev Evidence) error
 	// List returns the newest tasks of an agent, open or closed.
 	List(ctx context.Context, space, agent string, limit int) ([]Task, error)
+	// SetSpecs replaces the specs of a task, all pending.
+	SetSpecs(ctx context.Context, taskID int64, specs []Spec) error
+	// Specs returns the specs of a task with their verdicts, in order.
+	Specs(ctx context.Context, taskID int64) ([]SpecState, error)
+	// SetVerdict saves the verdict of spec n of a task.
+	SetVerdict(ctx context.Context, taskID int64, n int, status, note string) error
+	// ResetVerdicts makes every spec of a task pending again.
+	ResetVerdicts(ctx context.Context, taskID int64) error
 }

@@ -11,7 +11,7 @@ import (
 func TestDeliverInWorkModeTurnsItOffAndBuildsTheReview(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t,
-		toolStep("tu_1", "task_classify", map[string]string{"size": "medium", "reason": "two files"}),
+		classifyStep("tu_1", "medium", true, "two files"),
 		toolStep("tu_2", "task_open", map[string]string{"goal": "ship", "scope": "space", "done_when": "tests pass"}),
 		toolStep("tu_3", "write_file", map[string]string{"path": "a.txt", "content": "x"}),
 		toolStep("tu_4", "bash", map[string]string{"command": "echo hi"}),
@@ -42,7 +42,7 @@ func TestDeliverInWorkModeTurnsItOffAndBuildsTheReview(t *testing.T) {
 func TestAcceptClosesTheDeliveredTask(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t,
-		toolStep("tu_1", "task_classify", map[string]string{"size": "medium", "reason": "x"}),
+		classifyStep("tu_1", "medium", true, "x"),
 		toolStep("tu_2", "task_open", map[string]string{"goal": "g", "scope": "s", "done_when": "d"}),
 		toolStep("tu_3", "bash", map[string]string{"command": "go test ./..."}),
 		toolStep("tu_4", "task_advance", map[string]string{"phase": "verify"}),
@@ -65,7 +65,7 @@ func TestAcceptClosesTheDeliveredTask(t *testing.T) {
 func TestRejectSendsTheTaskBackToImplement(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t,
-		toolStep("tu_1", "task_classify", map[string]string{"size": "medium", "reason": "x"}),
+		classifyStep("tu_1", "medium", true, "x"),
 		toolStep("tu_2", "task_open", map[string]string{"goal": "g", "scope": "s", "done_when": "d"}),
 		toolStep("tu_3", "bash", map[string]string{"command": "go test ./..."}),
 		toolStep("tu_4", "task_advance", map[string]string{"phase": "verify"}),

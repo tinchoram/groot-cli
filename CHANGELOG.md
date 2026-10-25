@@ -3,6 +3,25 @@
 All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
+## 0.6.0-dev (unreleased)
+
+### Flow
+- Classification uses one test: could another agent resume the work from the
+  request plus the git diff? `task_classify` takes `resumable_from_diff`, and the
+  size must agree with it: large is the work that cannot be resumed; small and
+  medium are the work that can. Any other answer is refused.
+- Large work writes a feature document with `## Specs` (`S1.`), `## Tasks`
+  (`T1. (S1)`, each naming the specs it serves) and `## Log` (`L1.` the original
+  request). Moving to `planned` parses it and stores the specs; a plain plan is
+  refused with the template.
+- New tool `task_verify {spec, result, evidence}`: records a pass or fail for one
+  spec in verify. Deliver is blocked until every spec passes; a fail goes back to
+  implement with the reason, and the verdicts reset.
+- The plan file stays writable through verify, so the Tasks and Log can be kept
+  current.
+- The flow tables gain `task_specs`, added on open for older databases; copy and
+  rename of agents carry the specs with their tasks.
+
 ## 0.5.5-dev (unreleased)
 
 ### Time

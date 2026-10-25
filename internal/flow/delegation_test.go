@@ -39,7 +39,7 @@ func delegationRig(t *testing.T, mode DelegationMode, canDelegate bool, manager 
 func TestAutoDelegationHandsTheTaskOver(t *testing.T) {
 	ctx := context.Background()
 	ctl, store, applied := delegationRig(t, DelegationAuto, true, "project-manager")
-	_, _ = ctl.Classify(SizeMedium, "several files")
+	_, _ = ctl.Classify(SizeMedium, true, "several files")
 
 	tk, op, err := ctl.Open(ctx, "build it", "payments/api", "tests pass")
 	if err != nil {
@@ -68,7 +68,7 @@ func TestAutoDelegationHandsTheTaskOver(t *testing.T) {
 func TestHintDelegationOnlyNamesTheAgent(t *testing.T) {
 	ctx := context.Background()
 	ctl, _, _ := delegationRig(t, DelegationHint, true, "project-manager")
-	_, _ = ctl.Classify(SizeMedium, "several files")
+	_, _ = ctl.Classify(SizeMedium, true, "several files")
 
 	tk, op, err := ctl.Open(ctx, "build it", "payments/api", "tests pass")
 	if err != nil {
@@ -88,7 +88,7 @@ func TestHintDelegationOnlyNamesTheAgent(t *testing.T) {
 func TestOffDelegationDoesNothing(t *testing.T) {
 	ctx := context.Background()
 	ctl, _, _ := delegationRig(t, DelegationOff, true, "project-manager")
-	_, _ = ctl.Classify(SizeMedium, "several files")
+	_, _ = ctl.Classify(SizeMedium, true, "several files")
 
 	tk, op, err := ctl.Open(ctx, "build it", "payments/api", "tests pass")
 	if err != nil {
@@ -105,7 +105,7 @@ func TestOffDelegationDoesNothing(t *testing.T) {
 func TestAutoFallsBackToTheHintWhenTheAgentIsNotAssigned(t *testing.T) {
 	ctx := context.Background()
 	ctl, _, _ := delegationRig(t, DelegationAuto, false, "")
-	_, _ = ctl.Classify(SizeMedium, "several files")
+	_, _ = ctl.Classify(SizeMedium, true, "several files")
 
 	_, op, err := ctl.Open(ctx, "build it", "payments/api", "tests pass")
 	if err != nil {
@@ -124,14 +124,14 @@ func TestDelegatedOriginCannotWriteWhileHandedOver(t *testing.T) {
 
 	// Without a handover a large task is still classified and writes are refused.
 	hinted, _, _ := delegationRig(t, DelegationHint, true, "")
-	_, _ = hinted.Classify(SizeLarge, "design")
+	_, _ = hinted.Classify(SizeLarge, false, "design")
 	_, _, _ = hinted.Open(ctx, "build it", "s", "d")
 	if deny, _, _ := hinted.Check(ctx, "write_file", `{"path":"x.go"}`, true); !deny {
 		t.Fatal("a hinted large task must still refuse writes before its plan")
 	}
 
 	ctl, _, _ := delegationRig(t, DelegationAuto, true, "")
-	_, _ = ctl.Classify(SizeLarge, "design")
+	_, _ = ctl.Classify(SizeLarge, false, "design")
 	_, op, err := ctl.Open(ctx, "build it", "s", "d")
 	if err != nil || op.Handover == nil {
 		t.Fatalf("Open = %+v, %v", op, err)
@@ -155,7 +155,7 @@ func TestDelegatedOriginCannotWriteWhileHandedOver(t *testing.T) {
 func TestDelegatedOriginCannotAdvanceItself(t *testing.T) {
 	ctx := context.Background()
 	ctl, _, _ := delegationRig(t, DelegationAuto, true, "")
-	_, _ = ctl.Classify(SizeMedium, "several files")
+	_, _ = ctl.Classify(SizeMedium, true, "several files")
 	if _, _, err := ctl.Open(ctx, "build it", "s", "d"); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestExpectedParentIsAttachedToTheDelegateTask(t *testing.T) {
 	ctx := context.Background()
 	ctl, store, _ := delegationRig(t, DelegationAuto, true, "")
 	ctl.Expect(Parent{Space: "payments", Agent: "reviewer", Task: 12})
-	_, _ = ctl.Classify(SizeMedium, "handed over")
+	_, _ = ctl.Classify(SizeMedium, true, "handed over")
 
 	tk, _, err := ctl.Open(ctx, "build it", "s", "d")
 	if err != nil {
@@ -193,7 +193,7 @@ func TestDelegateDoesNotHandBackToItsOrigin(t *testing.T) {
 	ctl, _, _ := delegationRig(t, DelegationAuto, true, "")
 	// The rig routes medium work to developer; the task came from developer.
 	ctl.Expect(Parent{Space: "payments", Agent: "developer", Task: 3})
-	_, _ = ctl.Classify(SizeMedium, "handed over")
+	_, _ = ctl.Classify(SizeMedium, true, "handed over")
 
 	_, op, err := ctl.Open(ctx, "build it", "s", "d")
 	if err != nil {
@@ -207,7 +207,7 @@ func TestDelegateDoesNotHandBackToItsOrigin(t *testing.T) {
 func TestStatusShowsTheDelegation(t *testing.T) {
 	ctx := context.Background()
 	ctl, _, _ := delegationRig(t, DelegationAuto, true, "project-manager")
-	_, _ = ctl.Classify(SizeMedium, "several files")
+	_, _ = ctl.Classify(SizeMedium, true, "several files")
 	if _, _, err := ctl.Open(ctx, "build it", "s", "d"); err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestSubjectParsingIsTolerant(t *testing.T) {
 func handedOver(t *testing.T) (*Controller, *fakeStore) {
 	t.Helper()
 	ctl, store, _ := delegationRig(t, DelegationAuto, true, "")
-	_, _ = ctl.Classify(SizeMedium, "several files")
+	_, _ = ctl.Classify(SizeMedium, true, "several files")
 	if _, op, err := ctl.Open(context.Background(), "build it", "s", "d"); err != nil || op.Handover == nil {
 		t.Fatalf("Open = %+v, %v", op, err)
 	}
@@ -328,7 +328,7 @@ func TestASecondReportDoesNotMoveTheTaskAgain(t *testing.T) {
 
 func TestReportNeedsADelegatedOpenTask(t *testing.T) {
 	ctl, _, _ := delegationRig(t, DelegationOff, true, "")
-	_, _ = ctl.Classify(SizeMedium, "several files")
+	_, _ = ctl.Classify(SizeMedium, true, "several files")
 	tk, _, _ := ctl.Open(context.Background(), "build it", "s", "d")
 	if _, _, err := ApplyReport(tk, Subject{Signal: SignalDelivered, Task: tk.ID}, "done", time.Now()); err == nil {
 		t.Fatal("a task that was not handed over takes no delivery report")

@@ -90,7 +90,7 @@ func grootDef() catalog.AgentDef {
 		Tools: []string{
 			"list_spaces", "create_space", "assign_agent", "unassign_agent",
 			"list_agents", "create_agent", "import_agent", "list_library", "install_agent", "recall", "remember", "memory_get", "forget", "update_memory",
-			"send_message", "read_inbox", "current_time", "task_classify", "task_open", "task_advance", "task_status", "upgrade_agent", "set_work_mode", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model", "grant_global_memory", "revoke_global_memory",
+			"send_message", "read_inbox", "current_time", "task_classify", "task_open", "task_advance", "task_verify", "task_status", "upgrade_agent", "set_work_mode", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model", "grant_global_memory", "revoke_global_memory",
 			"delete_space", "edit_space", "delete_agent", "edit_agent", "move_agent", "copy_agent",
 		},
 	}
@@ -111,7 +111,7 @@ Your job:
 - When the user asks for a library agent, install it with install_agent. Name the space it should join if the user gave one; otherwise install it into the catalog only and say how to assign it.
 - You can list directories and find files by pattern (list_dir, glob), but you cannot read file contents or run commands. If the user needs that, point them to a space with a suitable agent.
 - Agents may send you requests and specifications with send_message; read them with read_inbox when the user asks or when the inbox block appears. You can send specifications or instructions to any agent with send_message, naming <space>/<agent>; keep them concrete: goal, constraints, definition of done.
-- Work rubric: small = 1-2 files, no design, reversible; medium = several files or one component, tests affected, no open decisions; large = design or architecture, several components, risk, or questions the user must answer. Classify before the first write (task_classify). Open a task for medium and large (task_open). Record evidence. Deliver with risks.
+- Work rubric: one test decides the size: could another agent resume the work from the request plus the git diff? small = trivial, one or two reversible edits and nothing to run, write directly; medium = yes, open a task and verify with a command; large = no, open a task and write the feature document (docs/tasks/<id>.md: Specs, Tasks, Log) before implementing. Classify before the first write (task_classify). Record evidence. Verify every spec. Deliver with risks.
 - Bug and feature reports about groot are kept by the debug agent from the library. It is installed on request with install_agent; until then /bug and /feat say so.
 - Answer style: lead with the direct answer in one or two sentences. Default to at most eight lines. No headings, no bold, no nested lists; a flat list only when listing things. Expand only when the user asks.
 `

@@ -89,20 +89,33 @@ Strict mode denies writes that skip the flow. Advisory mode only warns.
 ```
 medium:  implement -> verify -> deliver -> done          (opened in implement)
 large:   classified -> planned -> implement -> verify -> deliver -> done
-verify -> implement   on failure, the reason is kept as evidence
+verify -> implement   on failure, the reason is kept as evidence; verdicts reset
 any open phase -> failed, the reason is kept as evidence
 ```
 
+Classification (`Controller.Classify`, `task_classify`) applies the resume test:
+could another agent resume the work from the request plus the git diff? Large
+must answer no, small and medium yes. Any other pair is refused.
+
 Evidence rules, from `internal/flow/flow.go`:
 
-- `planned` needs the plan file path (large tasks only).
-- `verify` needs a command run during the current implement cycle.
-- `deliver` needs a note with the changes and the risks.
+- `planned` needs the plan file path (large tasks only). The plan must parse as
+  a feature document (`internal/flow/featuredoc.go`): `## Specs` with `S<n>.`,
+  `## Tasks` with `T<n>. (S<n>)`, each task naming existing specs, and `## Log`
+  with `L1.` the original request. Its specs are stored in `task_specs`.
+- `verify` needs a command run during the current implement cycle. A large task
+  also records a verdict per spec with `task_verify` (`pass` or `fail`, with
+  evidence). Evidence kind `verdict`.
+- `deliver` needs a note with the changes and the risks. A large task delivers
+  only when every spec passed: a pending spec is refused, a failed one blocks the
+  delivery and names the spec.
 
-Evidence kinds are `command`, `note` and `plan`. Risky calls (writes, commands)
-need the `implement` phase, with one exception: a large task may write a
-`write_file` under `docs/tasks/` while it is `classified` or `planned`. Small
-tasks need no task at all (`Controller.Check` in `internal/flow/controller.go`).
+Evidence kinds are `command`, `note`, `plan` and `verdict`. Risky calls (writes,
+commands) need the `implement` phase, with two exceptions for a large task: a
+`write_file` under `docs/tasks/` while it is `classified` or `planned`, and a
+write to the recorded plan path in any open phase, so the Tasks and Log stay
+current. Small tasks need no task at all (`Controller.Check` in
+`internal/flow/controller.go`).
 
 Delegation: `Controller.Open` decides a handover (`internal/flow/controller.go`). The
 task messages `task:#<id> handover|delivered|returned|tracking` are the contract

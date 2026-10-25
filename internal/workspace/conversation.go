@@ -317,7 +317,7 @@ func (w *Workspace) buildTools(root string, names []string, mem *memoryState, ms
 
 func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messenger, ctl *flow.Controller, files *fileLog, agentName string) (tool.Tool, error) {
 	switch name {
-	case "task_classify", "task_open", "task_advance", "task_status":
+	case "task_classify", "task_open", "task_advance", "task_verify", "task_status":
 		if ctl == nil {
 			return nil, errors.New("the task flow is not available")
 		}
@@ -328,6 +328,8 @@ func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messen
 			return tool.NewTaskOpen(ctl, msg), nil
 		case "task_advance":
 			return tool.NewTaskAdvance(ctl, msg), nil
+		case "task_verify":
+			return tool.NewTaskVerify(ctl), nil
 		}
 		return tool.NewTaskStatus(ctl), nil
 	case "feedback_report":

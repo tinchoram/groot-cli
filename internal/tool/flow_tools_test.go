@@ -2,7 +2,9 @@ package tool
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +35,7 @@ func TestTaskToolsRunTheFlowRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	ctl := flowController(t)
 
-	out, isErr := NewTaskClassify(ctl).Execute(ctx, `{"size":"medium","reason":"two files"}`)
+	out, isErr := NewTaskClassify(ctl).Execute(ctx, `{"size":"medium","resumable_from_diff":true,"reason":"two files"}`)
 	if isErr || !strings.Contains(out, "sonnet") {
 		t.Fatalf("classify = %q (err %v)", out, isErr)
 	}
@@ -69,9 +71,78 @@ func TestTaskToolRisks(t *testing.T) {
 	if NewTaskOpen(ctl, nil).Risk() != RiskWrite {
 		t.Fatal("task_open switches the model: it is a write")
 	}
-	for _, tl := range []Tool{NewTaskClassify(ctl), NewTaskAdvance(ctl, nil), NewTaskStatus(ctl)} {
+	for _, tl := range []Tool{NewTaskClassify(ctl), NewTaskAdvance(ctl, nil), NewTaskStatus(ctl), NewTaskVerify(ctl)} {
 		if tl.Risk() != RiskRead {
 			t.Fatalf("%s should be RiskRead", tl.Definition().Name)
+		}
+	}
+}
+
+func TestTaskClassifySchemaRequiresTheResumeAnswer(t *testing.T) {
+	var def struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+		Required   []string                   `json:"required"`
+	}
+	if err := json.Unmarshal(NewTaskClassify(flowController(t)).Definition().InputSchema, &def); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := def.Properties["resumable_from_diff"]; !ok {
+		t.Fatalf("schema lacks resumable_from_diff: %v", def.Properties)
+	}
+	want := []string{"size", "resumable_from_diff", "reason"}
+	if !slices.Equal(def.Required, want) {
+		t.Fatalf("required = %v, want %v", def.Required, want)
+	}
+	if desc := NewTaskClassify(flowController(t)).Definition().Description; !strings.Contains(desc, "could another agent resume it from the request plus the git diff alone?") {
+		t.Fatalf("description lacks the resume test: %s", desc)
+	}
+}
+
+func TestTaskClassifyRefusesAnAnswerThatContradictsTheSize(t *testing.T) {
+	ctl := flowController(t)
+	out, isErr := NewTaskClassify(ctl).Execute(context.Background(), `{"size":"large","resumable_from_diff":true,"reason":"x"}`)
+	if !isErr || !strings.Contains(out, "classify medium") {
+		t.Fatalf("large and resumable must be refused, got %q (err %v)", out, isErr)
+	}
+	out, isErr = NewTaskClassify(ctl).Execute(context.Background(), `{"size":"large","resumable_from_diff":false,"reason":"x"}`)
+	if isErr || !strings.Contains(out, "next: task_open, write docs/tasks/<id>.md") {
+		t.Fatalf("large and not resumable must be accepted, got %q (err %v)", out, isErr)
+	}
+}
+
+func TestTaskVerifySchemaPreviewAndRisk(t *testing.T) {
+	ctl := flowController(t)
+	verify := NewTaskVerify(ctl)
+	var def struct {
+		Required []string `json:"required"`
+	}
+	if verify.Definition().Name != "task_verify" {
+		t.Fatalf("name = %q", verify.Definition().Name)
+	}
+	if err := json.Unmarshal(verify.Definition().InputSchema, &def); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"spec", "result", "evidence"}; !slices.Equal(def.Required, want) {
+		t.Fatalf("required = %v, want %v", def.Required, want)
+	}
+	if preview := verify.Preview(`{"spec":"S2","result":"fail","evidence":"totals"}`); !strings.Contains(preview, "S2") || !strings.Contains(preview, "fail") {
+		t.Fatalf("preview = %q", preview)
+	}
+	if verify.Risk() != RiskRead {
+		t.Fatal("task_verify is RiskRead, like the other task tools")
+	}
+}
+
+func TestTaskVerifyParsesTheSpecNumber(t *testing.T) {
+	ctx := context.Background()
+	verify := NewTaskVerify(flowController(t))
+	if out, isErr := verify.Execute(ctx, `{"spec":"two","result":"pass","evidence":"ok"}`); !isErr || !strings.Contains(out, "spec must be S<n>") {
+		t.Fatalf("a spec that is not a number must be refused, got %q (err %v)", out, isErr)
+	}
+	for _, spec := range []string{"S2", "s2", "2"} {
+		out, isErr := verify.Execute(ctx, `{"spec":"`+spec+`","result":"pass","evidence":"ok"}`)
+		if !isErr || !strings.Contains(out, "no open task") {
+			t.Fatalf("spec %q did not reach the controller: %q (err %v)", spec, out, isErr)
 		}
 	}
 }

@@ -908,26 +908,50 @@ implement -> verify -> deliver -> done    (a medium task opens in implement)
 any open phase -> failed (with a reason)
 ```
 
-Sizes:
+Sizes come from one test: could another agent resume the work from the request
+plus the git diff alone?
 
-- small: one or two files, no design, reversible. No task. Writes pass through the
-  gate as before.
-- medium: several files or one component, tests affected, no open decisions. A
-  task moves through implement, verify, deliver and done.
-- large: design or architecture, several components, risk, or questions the user
-  must answer. The plan goes under `docs/tasks/`. It is recorded with
-  `task_advance` (phase `planned`, the plan path as evidence) before implement.
+- small: trivial, one or two reversible edits you fully understand, nothing to
+  run. No task. Writes pass through the gate as before. (Resumable: yes.)
+- medium: resumable. A task with command evidence is enough. A task moves through
+  implement, verify, deliver and done. (Resumable: yes.)
+- large: not resumable. It needs a feature document under `docs/tasks/`, with
+  numbered specs. (Resumable: no.)
+
+`task_classify` takes the size and the answer to the test (`resumable_from_diff`).
+Large with a yes, or small and medium with a no, is refused.
+
+The feature document of a large task has three sections, in any order:
+
+```
+## Specs
+S1. "<what the user asked, verbatim>"
+## Tasks
+T1. (S1) <what you will change>
+## Log
+L1. <the original request, verbatim>
+```
+
+Items are numbered from 1 without gaps. A task names the specs it serves as `(S1)`
+or `(S1, S3)`, and every named spec must exist. A line indented by two spaces
+continues the item before it. `task_advance` to `planned` with the path reads the
+document; a plan that does not parse is refused with this template.
 
 Tools: `task_classify` records the size, `task_open` opens the task and applies the
-route, `task_advance` moves it on, and `task_status` reports it. In the chat, the
-header shows `task #12 medium/implement` while a task is open. `/task` prints the
-status and `/task fail <reason>` closes the task as failed.
+route, `task_advance` moves it on, `task_verify` records a verdict per spec of a
+large task, and `task_status` reports it. In the chat, the header shows
+`task #12 medium/implement` while a task is open. `/task` prints the status and
+`/task fail <reason>` closes the task as failed.
 
 Evidence:
 
 - verify needs a command run during implement. Every bash run in that phase is
   recorded automatically: the command, the first 300 characters of output and the
   exit status. The model does not write these records.
+- A large task verifies each spec with `task_verify` (`pass` or `fail`, with the
+  evidence). Deliver is blocked until every spec passes: a pending spec is named,
+  and a failed one sends the task back to implement with the reason. Going back to
+  implement clears the verdicts; the fail notes stay as evidence.
 - deliver needs a note with the changes and the risks.
 - going back to implement from a failed verify needs the failure as evidence.
 
@@ -1172,7 +1196,7 @@ Work mode decides by tool:
 | `send_message`, `read_inbox`, `remember`, `recall` | `create_space`, `assign_agent`, `unassign_agent`, `delete_space`, `edit_space`, `delete_agent`, `edit_agent`, `move_agent`, `copy_agent` |
 | `feedback_report`, `feedback_update`, `feedback_list` | `create_agent`, `import_agent`, `install_agent`, `upgrade_agent`, `set_agent_model`, `set_space_route`, `set_space_model`, `set_space_delegation`, `set_space_budget`, `set_agent_budget`, `set_context_window`, `set_work_mode` |
 | `get_context`, `get_cost`, `list_tasks`, `read_changelog`, `current_time` (read-only, not asked) | none; they answer as text |
-| `task_classify`, `task_open`, `task_advance`, `task_status` | `set_work_mode` |
+| `task_classify`, `task_open`, `task_advance`, `task_verify`, `task_status` | `set_work_mode` |
 
 Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.
 - the ODD flow still applies: a medium or large task still needs its steps.

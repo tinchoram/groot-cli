@@ -8,7 +8,7 @@ import "slices"
 func ManagedTools() []string {
 	return []string{
 		"send_message", "read_inbox",
-		"task_classify", "task_open", "task_advance", "task_status",
+		"task_classify", "task_open", "task_advance", "task_verify", "task_status",
 		"recall", "remember", "memory_get", "forget", "update_memory",
 		"list_dir", "glob",
 	}

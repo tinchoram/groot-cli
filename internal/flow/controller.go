@@ -68,6 +68,10 @@ type Options struct {
 	Now func() time.Time
 	// PlanExists reports whether a plan file exists in the space. Nil accepts any path.
 	PlanExists func(path string) bool
+	// ReadPlan returns the text of a plan file of the space. A large task's plan
+	// must parse as a feature document, and its specs are stored. Nil skips the
+	// parse, so the plan carries no specs.
+	ReadPlan func(path string) (string, error)
 	// ApplyRoute switches the model for a route and returns the function that
 	// restores the previous model. Nil skips the switch.
 	ApplyRoute func(Route) (restore func())
@@ -193,9 +197,17 @@ func (c *Controller) StartTurn() {
 }
 
 // Classify records the size of the work and returns what the engine will require.
-func (c *Controller) Classify(size Size, reason string) (string, error) {
+// The size and the resume answer must agree: only work that cannot be resumed
+// from the request and the diff is large.
+func (c *Controller) Classify(size Size, resumable bool, reason string) (string, error) {
 	if !size.Valid() {
 		return "", fmt.Errorf("size %q is not valid (small, medium or large)", size)
+	}
+	if size == SizeLarge && resumable {
+		return "", errors.New("large work is the work that cannot be resumed from the diff: answer resumable_from_diff false, or classify medium")
+	}
+	if size != SizeLarge && !resumable {
+		return "", errors.New("work that cannot be resumed from the request plus the diff is large: classify large and write the feature document")
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -211,7 +223,7 @@ func (c *Controller) Classify(size Size, reason string) (string, error) {
 	case SizeMedium:
 		b.WriteString("\nnext: task_open, then implement, verify with a command, deliver with a note")
 	default:
-		b.WriteString("\nnext: task_open, then write the plan (task_advance phase planned with its path), implement, verify with a command, deliver with a note")
+		b.WriteString("\nnext: task_open, write docs/tasks/<id>.md with ## Specs (S1. quoting the user), ## Tasks (T1. (S1) …) and ## Log (L1. the original request), task_advance planned with its path, implement, verify each spec with task_verify, deliver with a note")
 	}
 	return b.String(), nil
 }
@@ -335,15 +347,41 @@ func (c *Controller) Advance(ctx context.Context, to Phase, text string) (Task, 
 	if c.active.Delegation.Active() && to != PhaseFailed {
 		return Task{}, fmt.Errorf("task #%d is handed over to %s: wait for the delivery report, or fail it with a reason", c.active.ID, c.active.Delegation.Delegate)
 	}
+	var doc *FeatureDoc
 	if to == PhasePlanned {
 		path := strings.TrimSpace(text)
 		if c.opts.PlanExists != nil && path != "" && !c.opts.PlanExists(path) {
 			return Task{}, fmt.Errorf("plan file %q not found in the space: write it first, then advance", path)
 		}
+		if c.opts.ReadPlan != nil && path != "" && c.active.Size == SizeLarge {
+			src, err := c.opts.ReadPlan(path)
+			if err != nil {
+				return Task{}, fmt.Errorf("read plan %q: %w", path, err)
+			}
+			parsed, err := ParseFeatureDoc(src)
+			if err != nil {
+				return Task{}, fmt.Errorf("plan %q is not a feature document: %w", path, err)
+			}
+			doc = &parsed
+		}
 	}
 	next, ev, err := Transition(*c.active, to, text, c.opts.Now())
 	if err != nil {
 		return Task{}, err
+	}
+	if doc != nil {
+		if err := c.opts.Store.SetSpecs(ctx, next.ID, doc.Specs); err != nil {
+			return Task{}, fmt.Errorf("save specs: %w", err)
+		}
+		next.Specs = pendingSpecs(doc.Specs)
+	}
+	if to == PhaseImplement && len(next.Specs) > 0 && (c.active.Phase == PhaseVerify || c.active.Phase == PhaseDeliver) {
+		// Back in implement the verdicts of the last verify do not count: the
+		// fail notes stay in the evidence.
+		if err := c.opts.Store.ResetVerdicts(ctx, next.ID); err != nil {
+			return Task{}, fmt.Errorf("reset verdicts: %w", err)
+		}
+		next.Specs = resetSpecs(next.Specs)
 	}
 	if err := c.opts.Store.Update(ctx, next); err != nil {
 		return Task{}, fmt.Errorf("save task: %w", err)
@@ -375,6 +413,75 @@ func (c *Controller) Advance(ctx context.Context, to Phase, text string) (Task, 
 		c.finishRoute()
 	}
 	return next, nil
+}
+
+// Verify records the verdict of spec n of the open large task. It is only
+// possible in verify, and a fail is evidence for the return to implement. It
+// returns the result line that the tool shows.
+func (c *Controller) Verify(ctx context.Context, n int, status, evidence string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.active == nil {
+		return "", errors.New("no open task: open one with task_open")
+	}
+	if c.active.Size != SizeLarge || c.active.Phase != PhaseVerify || c.active.Delegation.Active() {
+		return "", errors.New("task_verify needs a large task in verify; medium tasks verify with a command and a deliver note")
+	}
+	if status != VerdictPass && status != VerdictFail {
+		return "", fmt.Errorf("result %q is not valid (pass or fail)", status)
+	}
+	evidence = strings.TrimSpace(evidence)
+	if evidence == "" {
+		return "", errors.New("task_verify needs the evidence: what you ran and what it showed")
+	}
+	idx := -1
+	for i, s := range c.active.Specs {
+		if s.N == n {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		return "", fmt.Errorf("spec S%d does not exist: specs are S1..S%d", n, len(c.active.Specs))
+	}
+	if err := c.opts.Store.SetVerdict(ctx, c.active.ID, n, status, evidence); err != nil {
+		return "", fmt.Errorf("save verdict: %w", err)
+	}
+	specs := slices.Clone(c.active.Specs)
+	specs[idx].Status, specs[idx].Note = status, evidence
+	c.active.Specs = specs
+	ev := Evidence{Phase: PhaseVerify, Kind: KindVerdict, Text: fmt.Sprintf("S%d %s: %s", n, status, evidence), At: c.opts.Now()}
+	if err := c.record(ctx, ev); err != nil {
+		return "", err
+	}
+	passed := 0
+	for _, s := range specs {
+		if s.Status == VerdictPass {
+			passed++
+		}
+	}
+	text := fmt.Sprintf("S%d %s · specs %d/%d pass", n, status, passed, len(specs))
+	if status == VerdictFail {
+		text += ": go back with task_advance implement and the reason"
+	}
+	return text, nil
+}
+
+// pendingSpecs makes the specs of a plan, all pending.
+func pendingSpecs(specs []Spec) []SpecState {
+	out := make([]SpecState, 0, len(specs))
+	for _, s := range specs {
+		out = append(out, SpecState{Spec: s})
+	}
+	return out
+}
+
+// resetSpecs makes every spec pending again, keeping its text.
+func resetSpecs(states []SpecState) []SpecState {
+	out := make([]SpecState, 0, len(states))
+	for _, s := range states {
+		out = append(out, SpecState{Spec: s.Spec})
+	}
+	return out
 }
 
 // Fail closes the open task with a reason.
@@ -424,6 +531,33 @@ func (c *Controller) record(ctx context.Context, ev Evidence) error {
 	return nil
 }
 
+// specsSuffix is the spec progress of the context block of a large task.
+func specsSuffix(t Task) string {
+	if len(t.Specs) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" · specs: %d/%d pass", countPassed(t.Specs), len(t.Specs))
+}
+
+// specLines lists each spec with its verdict, for the status of a task.
+func specLines(t Task) string {
+	var b strings.Builder
+	for _, s := range t.Specs {
+		b.WriteString("\n" + s.Line())
+	}
+	return b.String()
+}
+
+func countPassed(specs []SpecState) int {
+	n := 0
+	for _, s := range specs {
+		if s.Status == VerdictPass {
+			n++
+		}
+	}
+	return n
+}
+
 func cut(s string, n int) string {
 	r := []rune(strings.TrimRight(s, "\n"))
 	if len(r) <= n {
@@ -444,7 +578,7 @@ func (c *Controller) Status(context.Context) string {
 	}
 	t := c.active
 	return fmt.Sprintf("task #%d · %s · %s\ngoal: %s\nscope: %s\ndone when: %s\nevidence: %d",
-		t.ID, t.Size, t.Phase, t.Goal, t.Scope, t.DoneWhen, len(t.Evidence)) + statusSuffix(*t)
+		t.ID, t.Size, t.Phase, t.Goal, t.Scope, t.DoneWhen, len(t.Evidence)) + statusSuffix(*t) + specLines(*t)
 }
 
 // ContextBlock is the line prepended to the system prompt on every turn.
@@ -453,8 +587,8 @@ func (c *Controller) ContextBlock(context.Context) string {
 	defer c.mu.Unlock()
 	if c.active != nil {
 		t := c.active
-		return fmt.Sprintf("[task #%d · %s · %s] goal: %s · done when: %s · evidence so far: %d%s",
-			t.ID, t.Size, t.Phase, t.Goal, t.DoneWhen, len(t.Evidence), delegatedSuffix(*t))
+		return fmt.Sprintf("[task #%d · %s · %s] goal: %s · done when: %s · evidence so far: %d%s%s",
+			t.ID, t.Size, t.Phase, t.Goal, t.DoneWhen, len(t.Evidence), specsSuffix(*t), delegatedSuffix(*t))
 	}
 	if c.classified != "" {
 		return fmt.Sprintf("[classified %s]", c.classified)
@@ -507,13 +641,12 @@ func (c *Controller) Check(ctx context.Context, tool, input string, risky bool) 
 }
 
 // planWrite reports whether a write is the plan document of an open large
-// task that has not reached implement yet: the plan is written before it is
-// recorded, so any file under docs/tasks/ counts until a plan path is set.
+// task. Before a plan path is set, any file under docs/tasks/ counts, because
+// the plan is written before it is recorded. Once the plan is recorded, its
+// path stays writable in every open phase, so the Tasks and Log can be kept up
+// to date.
 func (c *Controller) planWrite(tool, input string) bool {
 	if tool != "write_file" || c.active.Size != SizeLarge {
-		return false
-	}
-	if c.active.Phase != PhaseClassified && c.active.Phase != PhasePlanned {
 		return false
 	}
 	var in struct {
@@ -525,6 +658,9 @@ func (c *Controller) planWrite(tool, input string) bool {
 	path := filepath.ToSlash(filepath.Clean(in.Path))
 	if c.active.PlanPath != "" {
 		return path == filepath.ToSlash(filepath.Clean(c.active.PlanPath))
+	}
+	if c.active.Phase != PhaseClassified && c.active.Phase != PhasePlanned {
+		return false
 	}
 	return strings.HasPrefix(path, "docs/tasks/")
 }

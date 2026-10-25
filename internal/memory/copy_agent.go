@@ -149,6 +149,18 @@ func (s *SQLite) CopyAgentData(ctx context.Context, dst *SQLite, agent string) (
 			return c, fmt.Errorf("copy agent: evidence: %w", err)
 		}
 		c.Evidence += len(evidence)
+
+		specs, err := selectAll(ctx, s.db,
+			`SELECT task_id, n, text, status, note, at FROM task_specs WHERE task_id = ? ORDER BY n`, oldID)
+		if err != nil {
+			return c, fmt.Errorf("copy agent: read specs: %w", err)
+		}
+		for _, sp := range specs {
+			sp[0] = id
+		}
+		if err := copyRows(ctx, tx, `INSERT INTO task_specs (task_id, n, text, status, note, at) VALUES (?, ?, ?, ?, ?, ?)`, specs); err != nil {
+			return c, fmt.Errorf("copy agent: specs: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

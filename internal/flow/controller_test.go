@@ -12,6 +12,7 @@ import (
 type fakeStore struct {
 	tasks []Task
 	next  int64
+	specs map[int64][]SpecState
 }
 
 func (s *fakeStore) Open(_ context.Context, t Task) (Task, error) {
@@ -21,10 +22,15 @@ func (s *fakeStore) Open(_ context.Context, t Task) (Task, error) {
 	return t, nil
 }
 
+func (s *fakeStore) withSpecs(t Task) Task {
+	t.Specs = append([]SpecState(nil), s.specs[t.ID]...)
+	return t
+}
+
 func (s *fakeStore) Get(_ context.Context, id int64) (Task, error) {
 	for _, t := range s.tasks {
 		if t.ID == id {
-			return t, nil
+			return s.withSpecs(t), nil
 		}
 	}
 	return Task{}, errors.New("no such task")
@@ -33,10 +39,43 @@ func (s *fakeStore) Get(_ context.Context, id int64) (Task, error) {
 func (s *fakeStore) Active(_ context.Context, space, agent string) (Task, bool, error) {
 	for _, t := range s.tasks {
 		if t.Space == space && t.Agent == agent && !t.Closed() {
-			return t, true, nil
+			return s.withSpecs(t), true, nil
 		}
 	}
 	return Task{}, false, nil
+}
+
+func (s *fakeStore) SetSpecs(_ context.Context, id int64, specs []Spec) error {
+	if s.specs == nil {
+		s.specs = map[int64][]SpecState{}
+	}
+	var out []SpecState
+	for _, sp := range specs {
+		out = append(out, SpecState{Spec: sp})
+	}
+	s.specs[id] = out
+	return nil
+}
+
+func (s *fakeStore) Specs(_ context.Context, id int64) ([]SpecState, error) {
+	return append([]SpecState(nil), s.specs[id]...), nil
+}
+
+func (s *fakeStore) SetVerdict(_ context.Context, id int64, n int, status, note string) error {
+	for i := range s.specs[id] {
+		if s.specs[id][i].N == n {
+			s.specs[id][i].Status, s.specs[id][i].Note = status, note
+			return nil
+		}
+	}
+	return errors.New("no such spec")
+}
+
+func (s *fakeStore) ResetVerdicts(_ context.Context, id int64) error {
+	for i := range s.specs[id] {
+		s.specs[id][i].Status, s.specs[id][i].Note = VerdictPending, ""
+	}
+	return nil
 }
 
 func (s *fakeStore) Update(_ context.Context, t Task) error {
@@ -76,11 +115,13 @@ type rig struct {
 	restored int
 	warnings []string
 	planOK   bool
+	// docs are the plan files of the space, by path.
+	docs map[string]string
 }
 
 func newRig(t *testing.T, mode Mode) *rig {
 	t.Helper()
-	h := &rig{store: &fakeStore{}, clk: &clock{now: t0}, planOK: true}
+	h := &rig{store: &fakeStore{}, clk: &clock{now: t0}, planOK: true, docs: map[string]string{}}
 	ctl, err := NewController(context.Background(), Options{
 		Space: "payments", Agent: "reviewer", Store: h.store, Mode: mode,
 		Routes: Routes{
@@ -90,6 +131,13 @@ func newRig(t *testing.T, mode Mode) *rig {
 		},
 		Now:        h.clk.tick,
 		PlanExists: func(string) bool { return h.planOK },
+		ReadPlan: func(path string) (string, error) {
+			src, ok := h.docs[path]
+			if !ok {
+				return "", errors.New("no such plan")
+			}
+			return src, nil
+		},
 		ApplyRoute: func(r Route) func() {
 			h.applied = append(h.applied, r)
 			return func() { h.restored++ }
@@ -115,7 +163,7 @@ func (h *rig) open(t *testing.T, size Size) Task {
 }
 
 func (h *rig) openTask(size Size) (Task, error) {
-	if _, err := h.ctl.Classify(size, "reason"); err != nil {
+	if _, err := h.ctl.Classify(size, size != SizeLarge, "reason"); err != nil {
 		return Task{}, err
 	}
 	tk, _, err := h.ctl.Open(ctx, "ship the change", "payments/api", "tests pass")
@@ -131,7 +179,7 @@ func mustOpen(h *rig, size Size) {
 
 func TestClassifyStatesTheRouteAndRequirements(t *testing.T) {
 	h := newRig(t, ModeStrict)
-	text, err := h.ctl.Classify(SizeMedium, "several files")
+	text, err := h.ctl.Classify(SizeMedium, true, "several files")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +188,7 @@ func TestClassifyStatesTheRouteAndRequirements(t *testing.T) {
 			t.Fatalf("classification text misses %q: %s", want, text)
 		}
 	}
-	if _, err := h.ctl.Classify(Size("huge"), ""); err == nil {
+	if _, err := h.ctl.Classify(Size("huge"), true, ""); err == nil {
 		t.Fatal("unknown sizes are refused")
 	}
 }
@@ -154,7 +202,7 @@ func TestOpenNeedsAClassification(t *testing.T) {
 
 func TestSmallNeverOpensATask(t *testing.T) {
 	h := newRig(t, ModeStrict)
-	_, _ = h.ctl.Classify(SizeSmall, "one line")
+	_, _ = h.ctl.Classify(SizeSmall, true, "one line")
 	if _, _, err := h.ctl.Open(ctx, "g", "s", "d"); !errors.Is(err, ErrSmallNoTask) {
 		t.Fatalf("err = %v, want ErrSmallNoTask", err)
 	}
@@ -163,7 +211,7 @@ func TestSmallNeverOpensATask(t *testing.T) {
 func TestOneOpenTaskPerAgent(t *testing.T) {
 	h := newRig(t, ModeStrict)
 	h.open(t, SizeMedium)
-	_, _ = h.ctl.Classify(SizeMedium, "again")
+	_, _ = h.ctl.Classify(SizeMedium, true, "again")
 	if _, _, err := h.ctl.Open(ctx, "second", "s", "d"); err == nil || !strings.Contains(err.Error(), "still open") {
 		t.Fatalf("err = %v, want refusal while a task is open", err)
 	}
@@ -198,6 +246,7 @@ func TestLargeNeedsAnExistingPlanFile(t *testing.T) {
 		t.Fatalf("err = %v, want a missing plan refusal", err)
 	}
 	h.planOK = true
+	h.docs["docs/tasks/1.md"] = validFeatureDoc
 	if _, err := h.ctl.Advance(ctx, PhasePlanned, "docs/tasks/1.md"); err != nil {
 		t.Fatalf("plan: %v", err)
 	}
@@ -227,7 +276,7 @@ func TestBashEvidenceOnlyDuringImplementAndVerify(t *testing.T) {
 
 func TestAgentHintIsRecordedAsANote(t *testing.T) {
 	h := newRig(t, ModeStrict)
-	_, _ = h.ctl.Classify(SizeLarge, "design")
+	_, _ = h.ctl.Classify(SizeLarge, false, "design")
 	_, op, err := h.ctl.Open(ctx, "build it", "s", "d")
 	if err != nil {
 		t.Fatal(err)
@@ -246,7 +295,7 @@ func TestContextBlockDescribesClassificationAndTask(t *testing.T) {
 	if got := h.ctl.ContextBlock(ctx); got != "" {
 		t.Fatalf("no classification gives no block, got %q", got)
 	}
-	_, _ = h.ctl.Classify(SizeMedium, "x")
+	_, _ = h.ctl.Classify(SizeMedium, true, "x")
 	if got := h.ctl.ContextBlock(ctx); got != "[classified medium]" {
 		t.Fatalf("block = %q", got)
 	}
@@ -289,7 +338,7 @@ func TestFailClosesTheTaskAndRestoresTheModel(t *testing.T) {
 
 func TestStartTurnKeepsClassificationOnlyWithoutATask(t *testing.T) {
 	h := newRig(t, ModeStrict)
-	_, _ = h.ctl.Classify(SizeMedium, "x")
+	_, _ = h.ctl.Classify(SizeMedium, true, "x")
 	h.ctl.StartTurn()
 	if h.ctl.Classified() != "" {
 		t.Fatal("a new turn series without a task forgets the classification")
@@ -313,10 +362,10 @@ func TestStrictGateRules(t *testing.T) {
 	}{
 		{"reads are never gated", func(h *rig) {}, "read_file", `{"path":"a"}`, false, false, ""},
 		{"no classification blocks writes", func(h *rig) {}, "write_file", `{"path":"a"}`, true, true, "classify first"},
-		{"small passes", func(h *rig) { _, _ = h.ctl.Classify(SizeSmall, "x") }, "write_file", `{"path":"a"}`, true, false, ""},
-		{"medium without a task blocks", func(h *rig) { _, _ = h.ctl.Classify(SizeMedium, "x") }, "bash", `{"command":"rm x"}`, true, true, "open a task first"},
-		{"task_open is exempt", func(h *rig) { _, _ = h.ctl.Classify(SizeMedium, "x") }, "task_open", `{}`, true, false, ""},
-		{"send_message is exempt", func(h *rig) { _, _ = h.ctl.Classify(SizeMedium, "x") }, "send_message", `{}`, true, false, ""},
+		{"small passes", func(h *rig) { _, _ = h.ctl.Classify(SizeSmall, true, "x") }, "write_file", `{"path":"a"}`, true, false, ""},
+		{"medium without a task blocks", func(h *rig) { _, _ = h.ctl.Classify(SizeMedium, true, "x") }, "bash", `{"command":"rm x"}`, true, true, "open a task first"},
+		{"task_open is exempt", func(h *rig) { _, _ = h.ctl.Classify(SizeMedium, true, "x") }, "task_open", `{}`, true, false, ""},
+		{"send_message is exempt", func(h *rig) { _, _ = h.ctl.Classify(SizeMedium, true, "x") }, "send_message", `{}`, true, false, ""},
 		{"implement allows writes", func(h *rig) { mustOpen(h, SizeMedium) }, "write_file", `{"path":"a"}`, true, false, ""},
 		{"verify does not allow writes", func(h *rig) {
 			mustOpen(h, SizeMedium)
@@ -356,7 +405,7 @@ func TestStrictGateRules(t *testing.T) {
 
 func TestAdvisoryModeWarnsAndAllows(t *testing.T) {
 	h := newRig(t, ModeAdvisory)
-	_, _ = h.ctl.Classify(SizeMedium, "x")
+	_, _ = h.ctl.Classify(SizeMedium, true, "x")
 	deny, _, warn := h.ctl.Check(ctx, "write_file", `{"path":"a"}`, true)
 	if deny || !strings.Contains(warn, "open a task first") {
 		t.Fatalf("advisory: deny=%v warn=%q", deny, warn)

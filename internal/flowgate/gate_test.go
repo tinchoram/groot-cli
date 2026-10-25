@@ -42,7 +42,7 @@ func (a *allowAll) Decide(context.Context, gate.Request) gate.Decision {
 
 func TestDeniedWriteExplainsWhatToDo(t *testing.T) {
 	ctl := controller(t, flow.ModeStrict, nil)
-	if _, err := ctl.Classify(flow.SizeMedium, "several files"); err != nil {
+	if _, err := ctl.Classify(flow.SizeMedium, true, "several files"); err != nil {
 		t.Fatal(err)
 	}
 	inner := &allowAll{}
@@ -62,7 +62,7 @@ func TestDeniedWriteExplainsWhatToDo(t *testing.T) {
 
 func TestReadsAndAllowedWritesGoToTheUserGate(t *testing.T) {
 	ctl := controller(t, flow.ModeStrict, nil)
-	_, _ = ctl.Classify(flow.SizeSmall, "one line")
+	_, _ = ctl.Classify(flow.SizeSmall, true, "one line")
 	inner := &allowAll{}
 	g := &Gate{Inner: inner, Ctl: ctl}
 
@@ -79,7 +79,7 @@ func TestReadsAndAllowedWritesGoToTheUserGate(t *testing.T) {
 
 func TestUserDenialHasNoFlowExplanation(t *testing.T) {
 	ctl := controller(t, flow.ModeStrict, nil)
-	_, _ = ctl.Classify(flow.SizeSmall, "one line")
+	_, _ = ctl.Classify(flow.SizeSmall, true, "one line")
 	g := &Gate{Inner: gate.ReadOnly{}, Ctl: ctl}
 	req := gate.Request{Tool: "bash", Input: `{"command":"rm x"}`, Risk: tool.RiskExec}
 	if got := g.Decide(context.Background(), req); got != gate.Deny {
@@ -93,7 +93,7 @@ func TestUserDenialHasNoFlowExplanation(t *testing.T) {
 func TestAdvisoryModeWarnsAndLetsTheCallThrough(t *testing.T) {
 	var warnings []string
 	ctl := controller(t, flow.ModeAdvisory, func(msg string) { warnings = append(warnings, msg) })
-	_, _ = ctl.Classify(flow.SizeMedium, "x")
+	_, _ = ctl.Classify(flow.SizeMedium, true, "x")
 	inner := &allowAll{}
 	g := &Gate{Inner: inner, Ctl: ctl, Warn: func(msg string) { warnings = append(warnings, msg) }}
 

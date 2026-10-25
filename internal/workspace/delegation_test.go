@@ -63,7 +63,7 @@ func onlyMessage(t *testing.T, f *fixture, agent, subject string) inbox.Message 
 
 func classifyAndOpen(goal string) []provider.Step {
 	return []provider.Step{
-		toolStep("tu_1", "task_classify", map[string]string{"size": "medium", "reason": "several files"}),
+		classifyStep("tu_1", "medium", true, "several files"),
 		toolStep("tu_2", "task_open", map[string]string{"goal": goal, "scope": "payments", "done_when": "tests pass"}),
 		text("handed over"),
 	}
@@ -172,11 +172,11 @@ func TestDelegationLoopEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	f := teamFixture(t,
 		// reader hands the task over.
-		toolStep("tu_1", "task_classify", map[string]string{"size": "medium", "reason": "several files"}),
+		classifyStep("tu_1", "medium", true, "several files"),
 		toolStep("tu_2", "task_open", map[string]string{"goal": "split billing", "scope": "payments", "done_when": "tests pass"}),
 		text("handed over"),
 		// developer takes it: classify, open (linked to the origin), check, verify, deliver.
-		toolStep("tu_3", "task_classify", map[string]string{"size": "medium", "reason": "handed over"}),
+		classifyStep("tu_3", "medium", true, "handed over"),
 		toolStep("tu_4", "task_open", map[string]string{"goal": "split billing", "scope": "payments", "done_when": "tests pass"}),
 		toolStep("tu_5", "bash", map[string]string{"command": "echo ok"}),
 		toolStep("tu_6", "task_advance", map[string]string{"phase": "verify"}),

@@ -156,7 +156,7 @@ func TestConversationUsesTheSpaceModelWhenTheAgentHasNone(t *testing.T) {
 func TestOpenTaskRoutesThroughTheSpaceRoute(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t,
-		toolStep("tu_1", "task_classify", map[string]string{"size": "medium", "reason": "two files"}),
+		classifyStep("tu_1", "medium", true, "two files"),
 		toolStep("tu_2", "task_open", map[string]string{"goal": "ship", "scope": "space", "done_when": "tests pass"}),
 		text("done"),
 	)
@@ -176,7 +176,7 @@ func TestOpenTaskRoutesThroughTheSpaceRoute(t *testing.T) {
 func TestAdvisorySpaceModeLetsAnUnclassifiedWriteThrough(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t,
-		toolStep("tu_1", "task_classify", map[string]string{"size": "medium", "reason": "x"}),
+		classifyStep("tu_1", "medium", true, "x"),
 		toolStep("tu_2", "write_file", map[string]string{"path": "a.txt", "content": "x"}),
 		text("done"),
 	)

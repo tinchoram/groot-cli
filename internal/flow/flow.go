@@ -49,7 +49,36 @@ const (
 	KindCommand EvidenceKind = "command" // a bash run during implement or verify
 	KindNote    EvidenceKind = "note"    // a phase note: failures, the delivery summary
 	KindPlan    EvidenceKind = "plan"    // the plan file path of a large task
+	KindVerdict EvidenceKind = "verdict" // the verdict of one spec of a large task
 )
+
+// Verdict values of a spec. The empty value is pending.
+const (
+	VerdictPending = ""
+	VerdictPass    = "pass"
+	VerdictFail    = "fail"
+)
+
+// SpecState is a spec of a large task with its verdict in verify.
+type SpecState struct {
+	Spec
+	Status string // VerdictPending, VerdictPass or VerdictFail
+	Note   string // the evidence of the last verdict
+}
+
+// Label is the verdict as the flow shows it: pending, pass or fail.
+func (s SpecState) Label() string {
+	if s.Status == VerdictPending {
+		return "pending"
+	}
+	return s.Status
+}
+
+// Line is the spec as status and review show it: "S1 pass — text", with the
+// text cut to 80 characters.
+func (s SpecState) Line() string {
+	return fmt.Sprintf("S%d %s — %s", s.N, s.Label(), cut(s.Text, 80))
+}
 
 // Evidence is one record kept on a task.
 type Evidence struct {
@@ -70,6 +99,9 @@ type Task struct {
 	Scope    string
 	DoneWhen string
 	PlanPath string
+	// Specs are the specs of a large task, with their verdicts. Get and Active
+	// load them with the task.
+	Specs []SpecState
 	// Delegation is set on the origin of a handover; Parent on the task that
 	// another agent opened to take a handed-over task.
 	Delegation Delegation
@@ -130,7 +162,8 @@ func openPhase(size Size) Phase {
 //	any open phase -> failed, with the reason as evidence
 //
 // verify needs a command run during the current implement cycle, and deliver
-// needs a note with the changes and the risks.
+// needs a note with the changes and the risks. A large task delivers only when
+// every spec has passed.
 func Transition(t Task, to Phase, text string, now time.Time) (Task, Evidence, error) {
 	if t.Closed() {
 		return t, Evidence{}, fmt.Errorf("task #%d is closed (%s)", t.ID, t.Phase)
@@ -167,6 +200,9 @@ func Transition(t Task, to Phase, text string, now time.Time) (Task, Evidence, e
 		}
 		ev = Evidence{Phase: PhaseImplement, Kind: KindNote, Text: text, At: now}
 	case t.Phase == PhaseVerify && to == PhaseDeliver:
+		if err := specsPassed(t.Specs); err != nil {
+			return t, Evidence{}, err
+		}
 		if text == "" {
 			return t, Evidence{}, errors.New("deliver needs a note with the changes and the risks")
 		}
@@ -188,6 +224,28 @@ func Transition(t Task, to Phase, text string, now time.Time) (Task, Evidence, e
 		ev.Phase = to
 	}
 	return next, ev, nil
+}
+
+// specsPassed says why a large task cannot deliver yet: a failed spec blocks
+// the delivery and sends the task back, a pending one still has to be checked.
+// A task without specs has nothing to pass.
+func specsPassed(specs []SpecState) error {
+	var failed, pending []string
+	for _, s := range specs {
+		switch s.Status {
+		case VerdictFail:
+			failed = append(failed, fmt.Sprintf("S%d", s.N))
+		case VerdictPending:
+			pending = append(pending, fmt.Sprintf("S%d", s.N))
+		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("deliver is blocked: %s failed; go back with task_advance implement <reason>", strings.Join(failed, ", "))
+	}
+	if len(pending) > 0 {
+		return fmt.Errorf("deliver needs a pass for every spec: pending %s", strings.Join(pending, ", "))
+	}
+	return nil
 }
 
 // hasCommandSince reports whether a command was recorded at or after since.

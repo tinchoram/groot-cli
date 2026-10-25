@@ -22,10 +22,20 @@ func toolStep(id, name string, input map[string]string) provider.Step {
 	}}
 }
 
+// classifyStep is a task_classify call; the resume answer is a boolean, which
+// toolStep cannot carry.
+func classifyStep(id, size string, resumable bool, reason string) provider.Step {
+	in, _ := json.Marshal(map[string]any{"size": size, "resumable_from_diff": resumable, "reason": reason})
+	return provider.Step{Response: api.Response{
+		Content:    []api.Block{{Type: api.BlockToolUse, ID: id, Name: "task_classify", Input: in}},
+		StopReason: api.StopToolUse,
+	}}
+}
+
 // flowAgent gives the fixture's reader agent the tools the flow needs.
 func flowAgent(t *testing.T, f *fixture) {
 	t.Helper()
-	tools := []string{"read_file", "write_file", "bash", "task_classify", "task_open", "task_advance", "task_status"}
+	tools := []string{"read_file", "write_file", "bash", "task_classify", "task_open", "task_advance", "task_verify", "task_status"}
 	if err := catalog.Save(f.home, catalog.AgentDef{Name: "reader", Description: "builds things", Tools: tools}, "You build things."); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +59,7 @@ func lastResult(t *testing.T, msgs []api.Message) api.Block {
 func TestFlowGatesWritesAndRunsTheLoop(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t,
-		toolStep("tu_1", "task_classify", map[string]string{"size": "medium", "reason": "two files"}),
+		classifyStep("tu_1", "medium", true, "two files"),
 		toolStep("tu_2", "write_file", map[string]string{"path": "a.txt", "content": "x"}),
 		toolStep("tu_3", "task_open", map[string]string{"goal": "ship", "scope": "space", "done_when": "tests pass"}),
 		toolStep("tu_5", "bash", map[string]string{"command": "echo hi"}),
@@ -104,7 +114,7 @@ func TestFlowGatesWritesAndRunsTheLoop(t *testing.T) {
 func TestAdvisoryModeWarnsButLetsTheWriteThrough(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t,
-		toolStep("tu_1", "task_classify", map[string]string{"size": "medium", "reason": "x"}),
+		classifyStep("tu_1", "medium", true, "x"),
 		toolStep("tu_2", "write_file", map[string]string{"path": "a.txt", "content": "x"}),
 		text("done"),
 	)
