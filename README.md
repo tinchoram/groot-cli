@@ -92,6 +92,9 @@ login and needs no variable. Once the repository is public, neither is needed.
 On Linux, groot's bash sandbox needs bubblewrap. `groot doctor` prints the install
 command for your distribution when it is missing.
 
+The packaging decisions, the planned install paths (install script, Homebrew
+tap) and where every file lives are in [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+
 ## Setup
 
 Requirements: Go 1.26 (the toolchain downloads automatically with
