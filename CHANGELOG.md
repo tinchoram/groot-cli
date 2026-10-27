@@ -31,6 +31,25 @@ built in one day of live testing, so they are grouped by what shipped.
   `docs/CONFIGURATION.md` and `docs/SPACES-AND-AGENTS.md`.
 - Compaction on by default. `compaction.strategy` now defaults to `summarize` at the
   80% context trigger. Set `strategy: none` to keep the whole history as before.
+- System prompt. The default prompt is now groot's own: identity, working rules
+  (inspect before changing, read before editing, verify with a check, report what was
+  not verified, never print secrets) and the tool rules. The agent prompt follows it and
+  takes precedence on style and role; a custom `system_prompt` replaces only the base.
+- Per-turn lines move out of the system prompt. The `Current time:` line and the task
+  line now open each user turn, so the system prompt is the same bytes for the whole
+  session and the cached prefix holds across turns.
+- Environment block. Each conversation records its working directory, OS and version,
+  shell, date, git branch and status and whether `AGENTS.md` loaded, once at open. Probes
+  that fail show `unknown`. Outside a git work tree there are no git lines.
+- Memory in the conversation. Memory no longer changes the system prompt, so the cached
+  prefix holds. The first turn carries the whole memory in a `<memory>` block, and each
+  later turn carries only what changed in a `<memory-update>` block. `/clear` sends the
+  full block again.
+- Compaction summary. The summarize prompt keeps every user request near-verbatim, the
+  open task, decisions, resource names, commands with their outcomes and open problems.
+- Resume summary. A resumed session that is longer than the 200-message transcript
+  gets a summary of the messages out of context, on its first turn. If the summary
+  fails, the model is told how many messages are not in context.
 
 ## 0.6.0 — 2026-10-25
 

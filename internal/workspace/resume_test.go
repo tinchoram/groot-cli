@@ -111,7 +111,7 @@ func TestClearEndsTheOldSessionWithSummaryAndStartsFresh(t *testing.T) {
 	}
 }
 
-func TestClearRefreshesTheMemoryPreamble(t *testing.T) {
+func TestClearResendsTheFullMemoryBlock(t *testing.T) {
 	ctx := context.Background()
 	// Steps: the first answer, the summary written at clear, the answer after clear.
 	f := newFixture(t, text("one"), text("Asked about the cluster. Nothing open."), text("two"))
@@ -130,10 +130,15 @@ func TestClearRefreshesTheMemoryPreamble(t *testing.T) {
 	if _, err := conv.Send(ctx, "second"); err != nil {
 		t.Fatal(err)
 	}
-	sys := f.mock.Calls[2].System
+	// A cleared conversation starts over, so its first turn carries the whole
+	// memory again, the new entry and the summary of the cleared session.
+	first := lastUserText(f.mock.Calls[2])
+	if !strings.Contains(first, "<memory>") {
+		t.Fatalf("the first turn after /clear must carry the full memory block:\n%s", first)
+	}
 	for _, want := range []string{"pager rota lives in ops-calendar", "Asked about the cluster. Nothing open."} {
-		if !strings.Contains(sys, want) {
-			t.Fatalf("prompt after /clear lacks %q:\n%s", want, sys)
+		if !strings.Contains(first, want) {
+			t.Fatalf("memory block after /clear lacks %q:\n%s", want, first)
 		}
 	}
 }

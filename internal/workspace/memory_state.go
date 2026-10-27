@@ -22,11 +22,10 @@ type memoryState struct {
 	writesGlobal bool
 	budget       memory.Budget
 	global       atomic.Bool
-	// tainted and changed are the conversation hooks of the memory tools; see
-	// tool.MemoryAccess.
+	// tainted is the conversation hook of the memory tools; see tool.MemoryAccess.
+	// Memory changes need no hook: the next turn carries them (Conversation.injectMemory).
 	mu      sync.Mutex
 	tainted func() bool
-	changed func()
 }
 
 // reader is who reads now: the agent, with global memory when it is enabled.
@@ -46,7 +45,6 @@ func (m *memoryState) access() tool.MemoryAccess {
 		Reader:         m.reader(),
 		CanWriteGlobal: m.writesGlobal,
 		Tainted:        m.tainted,
-		Changed:        m.changed,
 	}
 }
 

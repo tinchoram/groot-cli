@@ -33,6 +33,7 @@ under `internal/`:
 | `feedback` | Backlog of bugs and feature requests about groot. |
 | `changelog` (repo root, `changelog.go`) | Embeds `CHANGELOG.md`; `go:embed` cannot reach a parent directory, so the file sits at the root. `Section` finds one version's entry. Used by `read_changelog` and by the version check in `cmd/groot`. |
 | `config` | `groot.yaml` schema, defaults, layering (global file, then `user.yaml` with the operator's name, then the project file), `${VAR}` expansion in the global and user files only (a project file is checked against the allow-list in `project.go` and never expands env), system prompt composition (People block included), `AGENTS.md`. |
+| `env` | Environment block of the system prompt, read once at open: working directory, OS and version, shell, date, git branch and status, whether `AGENTS.md` loaded (`env.Host`, `Probes.Collect`, `Snapshot.Render`). It runs processes, so only the workspace imports it; a failing probe renders `unknown`. |
 
 Supporting packages: `api` (provider-neutral messages and blocks), `audit` (JSONL
 log of tool calls; `reader.go` filters it from the end of the file and `Summarize`
@@ -53,21 +54,35 @@ strategies), `messaging`, `admintool`, `agentimport`, `clipboard`.
 
 1. The UI calls `Conversation.Send` (`internal/workspace/conversation.go`). A busy
    flag refuses a second turn on the same conversation.
-2. `send` calls `flow.Controller.StartTurn`, then builds the task block from
-   `ContextBlock` and prepends it to the base system prompt (`withBlock`,
-   `internal/workspace/flow.go`).
-3. Unread inbox messages are announced in the prompt (`injectInbox`).
+2. `send` calls `turnHeader`, which calls `flow.Controller.StartTurn` and builds the
+   turn header: the `Current time:` line, then the task line from `ContextBlock`
+   when there is a task or a classification (`internal/workspace/conversation.go`).
+3. The user turn is assembled in this order, and the header is the first thing in
+   it: the turn header, the memory block (`injectMemory`: the whole memory on the
+   first turn, the change since the previous turn afterwards, see
+   `docs/MEMORY.md`), the unread inbox messages (`injectInbox`), then the prompt.
+   Before this, on the first model call of a resumed session, the messages the
+   resume left out of the context are summarized into the history (`carryOver`,
+   `internal/workspace/resume.go`).
 4. `Agent.Send` (`internal/agent/agent.go`) runs: `ensureSession` opens the
    session once; `appendMessage` stores each message under the lock and
    persists it through `memory.Store`; the loop calls the provider, and for each
    `tool_use` it runs `runTool`: gate, then `Tool.Execute`, then the audit record.
    The loop ends when the model stops asking for tools or `max_turns` is reached; at the limit the agent is asked for a final answer without tools.
 
-The memory preamble is rebuilt, not built once: when a conversation is opened,
-on `/clear`, and after every change through the memory tools or `/memory`
-(`refreshSystem`, `internal/workspace/conversation.go`). It is budgeted by
-`memory.preamble_tokens` and `memory.preamble_summaries`, and composed into the
-system prompt by `config.ComposeSystemPrompt`. See `docs/MEMORY.md`.
+What lives where, for the whole session:
+
+- **System prompt (static, composed once at open, `open` in `internal/workspace/workspace.go`):**
+  the base prompt (the configured `system_prompt` or `config.DefaultSystemPrompt`),
+  the agent prompt, the rules of the space, the People block, the untrusted-content
+  rule, the environment block (`internal/env`: working directory, OS, shell, date, git
+  snapshot, `AGENTS.md`) and the project context (`config.ComposeSystemPrompt`). It
+  is recomposed only for a change of identity or of the agent (`refreshSystem`).
+  Nothing per turn is in it, so its bytes are the same on every turn and the cached
+  prefix holds.
+- **User turn (per turn, in order):** the `Current time:` line, the task line, the
+  memory block, the inbox notices, then the prompt. `memory.Shown` tracks what each
+  conversation has been told about memory.
 
 Mentions (`internal/ui/mention*.go`, `internal/ui/route.go`) are resolved in the UI, before a turn starts. A message that starts with `@address` is routed to that conversation (`routeTo` switches the space and selects the agent). Other `@` tokens resolve to a `[mentions: …]` line that is appended to the message, so the turn carries the full addresses. Nothing about mentions reaches the workspace except the People block in the system prompt.
 

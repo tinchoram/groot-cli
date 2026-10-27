@@ -29,8 +29,9 @@ func TestAckIsNeverInjectedIntoATurn(t *testing.T) {
 	if strings.Contains(prompt, "FEAT-016") || strings.Contains(prompt, "[inbox]") {
 		t.Fatalf("an ack reached the turn:\n%s", prompt)
 	}
-	if prompt != "go" {
-		t.Fatalf("prompt = %q, want the user's text alone", prompt)
+	// The turn opens with its time line; the user's text is the rest of it.
+	if !strings.HasPrefix(prompt, "Current time: ") || !strings.HasSuffix(prompt, "\n\ngo") {
+		t.Fatalf("prompt = %q, want the time line and the user's text alone", prompt)
 	}
 }
 

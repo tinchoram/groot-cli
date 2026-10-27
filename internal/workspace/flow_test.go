@@ -99,12 +99,15 @@ func TestFlowGatesWritesAndRunsTheLoop(t *testing.T) {
 		t.Fatalf("bash must be recorded as command evidence, got %+v", commands)
 	}
 
-	// The next turn carries the active task in its system prompt.
+	// The next turn carries the active task at the top of its user turn.
 	if _, err := conv.Send(ctx, "and again"); err != nil {
 		t.Fatal(err)
 	}
-	if sys := f.mock.Calls[5].System; !strings.Contains(sys, "[task #1 · medium · implement]") {
-		t.Fatalf("system prompt lacks the task block:\n%s", sys)
+	if turn := lastUserText(f.mock.Calls[5]); !strings.Contains(turn, "[task #1 · medium · implement]") {
+		t.Fatalf("user turn lacks the task block:\n%s", turn)
+	}
+	if strings.Contains(f.mock.Calls[5].System, "[task #") {
+		t.Fatal("the task block is per turn and stays out of the system prompt")
 	}
 	if !strings.Contains(f.mock.Calls[5].System, "You build things.") {
 		t.Fatal("the agent's own prompt must stay after the flow block")

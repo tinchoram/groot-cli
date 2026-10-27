@@ -21,6 +21,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/catalog"
 	"github.com/tinchoram/groot-cli/internal/compact"
 	"github.com/tinchoram/groot-cli/internal/config"
+	"github.com/tinchoram/groot-cli/internal/env"
 	"github.com/tinchoram/groot-cli/internal/feedback"
 	"github.com/tinchoram/groot-cli/internal/flow"
 	"github.com/tinchoram/groot-cli/internal/flowgate"
@@ -532,11 +533,6 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	}
 	var conv *Conversation
 	mem.tainted = func() bool { return conv != nil && conv.TurnTainted() }
-	mem.changed = func() {
-		if conv != nil {
-			_ = conv.refreshSystem(context.Background())
-		}
-	}
 	key := sp.Name + "/" + agentName
 	files := &fileLog{}
 	box := &reviewBox{}
@@ -590,9 +586,11 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		return nil, err
 	}
 	ctx := context.Background()
-	base := def.Prompt
-	if strings.TrimSpace(base) == "" {
-		base = w.opts.Config.EffectiveSystemPrompt()
+	// The base is the configured system prompt. The agent's own prompt follows it
+	// and takes precedence on style and role; the rules of the space come last.
+	base := w.opts.Config.EffectiveSystemPrompt()
+	if p := strings.TrimSpace(def.Prompt); p != "" {
+		base += "\n\n" + p
 	}
 	base += "\n\n" + delegateRule
 	if ResolveFlow(sp, w.opts.Config.Flow).Manager.Value == agentName {
@@ -601,19 +599,21 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	if agentName == debugAgent {
 		base += "\n\n" + debugRules(w.opts.Config.Feedback.Confirm)
 	}
-	// rebuildSystem composes the prompt from the memory stored at the time of the
-	// call. It runs at open and again on /clear.
+	// The environment is read once, at open, so the system prompt of the session
+	// does not change. Memory is not in the prompt: it enters the turns as blocks
+	// (see Conversation.injectMemory). rebuildSystem composes the prompt again
+	// when the identity or the project context changes.
+	projectCtx, err := config.LoadProjectContext(sp.Path)
+	if err != nil {
+		return nil, fmt.Errorf("read AGENTS.md: %w", err)
+	}
+	envBlock := env.Host().Collect(ctx, sp.Path, w.opts.Now(), projectCtx != "").Render()
 	rebuildSystem := func(ctx context.Context) (string, error) {
-		entries, err := mem.store.Preamble(ctx, mem.reader(), mem.budget)
-		if err != nil {
-			return "", fmt.Errorf("load memory preamble: %w", err)
-		}
-		preamble := memory.FormatPreamble(entries)
-		projectCtx, err := config.LoadProjectContext(sp.Path)
+		project, err := config.LoadProjectContext(sp.Path)
 		if err != nil {
 			return "", fmt.Errorf("read AGENTS.md: %w", err)
 		}
-		return config.ComposeSystemPrompt(base+"\n\n"+config.PeopleBlock(w.OperatorName()), preamble, projectCtx), nil
+		return config.ComposeSystemPrompt(base+"\n\n"+config.PeopleBlock(w.OperatorName()), envBlock, project), nil
 	}
 	system, err := rebuildSystem(ctx)
 	if err != nil {
@@ -657,6 +657,9 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		clock:        w.opts.Now,
 		budgets:      func(ctx context.Context) ([]Budget, error) { return w.budgetsFor(ctx, st.mem, sp.Name, agentName) },
 		budgetNotice: keyedWarn(w.opts.Hooks, key)}
+	if resumed != nil {
+		conv.carried = resumed.Dropped
+	}
 	if hasMCPName(def.Tools) {
 		go w.attachMCP(conv, key, st.mcp, def.Tools, build)
 	}

@@ -11,18 +11,27 @@ written when the session ends. Sessions are per agent in a space.
 - Selecting an agent resumes its latest session. The session id stays the same,
   so new turns append to it. The model gets the history back as the compaction
   setting allows: `none` keeps all of it, `window` keeps the last `keep`
-  messages, and `summarize` (the default) keeps the last 200 stored messages with
-  no summary of the older ones. The cut always falls on a user
-  message, so a tool call never loses its result.
+  messages, and `summarize` (the default) keeps the last 200 stored messages. The
+  cut always falls on a user message, so a tool call never loses its result.
+- The older messages that the cut leaves out are summarized, once, on the first
+  turn after the resume. The summary uses the compaction rules (user requests
+  kept near-verbatim, the open task, decisions, resource names, commands and
+  outcomes, open problems) and one model call, bounded by a 30-second timeout.
+  It sits in front of the kept messages as `Summary of the N earlier messages of
+  this session`. When the call fails or answers nothing, the model gets the note
+  `N earlier messages are not in context.` instead, and a warning is shown. A
+  long resume therefore runs the summary and then the usual compaction, which
+  is the first model call of that turn. `window` drops messages by design and
+  gets no summary; `none` keeps them all.
 - The transcript shows the last 200 stored messages above a dim line:
   `resumed session <id> · N messages · last activity <time>`. User turns are
   echoed with their divider, assistant text is rendered as Markdown, and each
   tool call is one `[tool] name` line. Tool result bodies are not drawn.
 - `/clear` ends the session (the summary is written), marks it cleared and
   starts a fresh one. A cleared session is never resumed. Its messages stay in
-  the database for audit and recall. The agent's memory is kept too, and the
-  "Long-term memory" block of its prompt is refreshed, so the new session starts
-  with what was remembered and the summary of the old one.
+  the database for audit and recall. The agent's memory is kept too. The new
+  session starts with the whole memory block on its first turn, which holds what
+  was remembered and the summary of the old session.
 - Databases from earlier versions are upgraded on open, with a `cleared_at`
   column added to `sessions`. Nothing is deleted.
 

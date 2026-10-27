@@ -263,6 +263,15 @@ func (a *Agent) Resume(id string, history []api.Message, turns int, costUSD floa
 	a.turn = turns
 }
 
+// PrependHistory puts msgs in front of the history of the session. It is for
+// the messages a resume left out of the context, summarized, before the first
+// Send of the session.
+func (a *Agent) PrependHistory(msgs []api.Message) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.history = append(append([]api.Message(nil), msgs...), a.history...)
+}
+
 // Detach ends the current conversation in memory, for /clear. It returns the
 // old session id, its transcript and its message count, and leaves the agent
 // without a session, so the next Send opens a fresh one. The stored rows are

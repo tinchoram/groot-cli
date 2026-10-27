@@ -128,7 +128,7 @@ func TestTurnStartsWithInboxNoticeWhenUnread(t *testing.T) {
 	}
 	first := f.mock.Calls[0].Messages[0].Content[0].Text
 	want := "[inbox] from root/groot"
-	if !strings.HasPrefix(first, want) || !strings.HasSuffix(first, "what's up") {
+	if !strings.Contains(first, want) || !strings.HasSuffix(first, "what's up") {
 		t.Fatalf("prompt = %q", first)
 	}
 	// The notice does not mark anything read.
@@ -143,7 +143,7 @@ func TestTurnWithoutUnreadHasNoNotice(t *testing.T) {
 	if _, err := f.ws.Chat().Send(context.Background(), "plain"); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.mock.Calls[0].Messages[0].Content[0].Text; got != "plain" {
+	if got := f.mock.Calls[0].Messages[0].Content[0].Text; !strings.HasPrefix(got, "Current time: ") || !strings.HasSuffix(got, "\n\nplain") {
 		t.Fatalf("prompt = %q", got)
 	}
 }

@@ -67,9 +67,18 @@ type Conversation struct {
 	// sysMu guards baseSystem: /clear refreshes it while a turn may be reading it.
 	sysMu      sync.Mutex
 	baseSystem string
-	// rebuildSystem recomputes the prompt before the flow block from the memory
-	// stored now, with the agent prompt and project context of the open.
+	// rebuildSystem recomputes the prompt before the flow block with the agent
+	// prompt, the environment of the open and the project context as they are now.
 	rebuildSystem func(ctx context.Context) (string, error)
+	// lastGoal is the text of the last request as the user wrote it, without the
+	// turn header, so the local summary names the request and not the time line.
+	lastGoal string
+	// memShown is what the model has been told about the memory of this
+	// conversation. Each turn carries only the change since the previous one.
+	memShown memory.Shown
+	// carried are the stored messages a resume left out of the context. They are
+	// summarized into the history before the first model call (carryOver).
+	carried []api.Message
 	// startModel is the model the conversation started with; prevModel is the
 	// one before the last change. A model the provider does not know reverts to
 	// them. warn reports the revert.
@@ -95,10 +104,10 @@ type Conversation struct {
 // Model returns the model used for the next call.
 func (c *Conversation) Model() string { return c.prov.Model() }
 
-// turnBlock is the context put in front of the base prompt on every turn: the
-// current time, then the flow line when there is a flow. It is rebuilt each
-// turn; the base prompt stays as it was cached.
-func (c *Conversation) turnBlock(ctx context.Context) string {
+// turnHeader opens the user turn of every turn: the current time, then the task
+// line when there is a task or a classification. It is built each turn and is
+// not part of the system prompt, which stays the same for the whole session.
+func (c *Conversation) turnHeader(ctx context.Context) string {
 	now := time.Now
 	if c.clock != nil {
 		now = c.clock
@@ -120,8 +129,6 @@ func (c *Conversation) base() string {
 	return c.baseSystem
 }
 
-// refreshSystem recomputes the prompt from the memory stored now. On failure the
-// previous prompt stays in place.
 // swapTools makes reg the registry of the next model call, and records the
 // names it was built from. Callers hold the workspace lock.
 func (c *Conversation) swapTools(reg *tool.Registry, names []string) {
@@ -129,6 +136,8 @@ func (c *Conversation) swapTools(reg *tool.Registry, names []string) {
 	c.SetTools(reg)
 }
 
+// refreshSystem recomputes the prompt, for a change of identity or of the agent.
+// Memory does not change the prompt. On failure the previous prompt stays in place.
 func (c *Conversation) refreshSystem(ctx context.Context) error {
 	if c.rebuildSystem == nil {
 		return nil
@@ -167,21 +176,15 @@ func (c *Conversation) MemoryEntry(ctx context.Context, ref memory.Ref) (memory.
 	return memory.GetByRef(ctx, c.store, ref, c.mem.reader())
 }
 
-// MemoryPin pins or unpins an entry. The prompt is rebuilt, so the change is in
-// the next turn.
+// MemoryPin pins or unpins an entry. The change reaches the model in the next turn.
 func (c *Conversation) MemoryPin(ctx context.Context, ref memory.Ref, pinned bool) error {
-	if err := memory.SetPinnedByRef(ctx, c.store, ref, c.mem.reader(), pinned); err != nil {
-		return err
-	}
-	return c.refreshSystem(ctx)
+	return memory.SetPinnedByRef(ctx, c.store, ref, c.mem.reader(), pinned)
 }
 
-// MemoryForget removes an entry this agent can change, and rebuilds the prompt.
+// MemoryForget removes an entry this agent can change. The change reaches the
+// model in the next turn.
 func (c *Conversation) MemoryForget(ctx context.Context, ref memory.Ref) error {
-	if err := memory.ForgetByRef(ctx, c.store, ref, c.mem.reader()); err != nil {
-		return err
-	}
-	return c.refreshSystem(ctx)
+	return memory.ForgetByRef(ctx, c.store, ref, c.mem.reader())
 }
 
 // MemoryReview lists the entries whose review date has passed, oldest first.
@@ -189,13 +192,10 @@ func (c *Conversation) MemoryReview(ctx context.Context) ([]memory.Entry, error)
 	return c.store.NeedsReview(ctx, c.mem.reader(), recallEntries)
 }
 
-// MemoryReviewed moves the review date of an entry one interval ahead, and
-// rebuilds the prompt, which marks the entry as reviewed.
+// MemoryReviewed moves the review date of an entry one interval ahead. The next
+// turn carries the entry as reviewed.
 func (c *Conversation) MemoryReviewed(ctx context.Context, ref memory.Ref) error {
-	if err := memory.MarkReviewedByRef(ctx, c.store, ref, c.mem.reader()); err != nil {
-		return err
-	}
-	return c.refreshSystem(ctx)
+	return memory.MarkReviewedByRef(ctx, c.store, ref, c.mem.reader())
 }
 
 // Send runs one turn. When the agent has unread messages, the prompt is
@@ -214,12 +214,21 @@ func (c *Conversation) send(ctx context.Context, prompt string) (string, error) 
 	if err := c.checkBudget(ctx, c.lastTurnUSD); err != nil {
 		return "", err
 	}
-	c.Agent.System = withBlock(c.turnBlock(ctx), c.base())
+	c.Agent.System = c.base()
+	header := c.turnHeader(ctx)
+	if strings.TrimSpace(prompt) != "" {
+		c.lastGoal = prompt
+	}
 	prompt = c.injectInbox(ctx, prompt)
 	if prompt == "" {
 		return "", nil
 	}
 	before := c.Agent.SessionCost()
+	if len(c.carried) > 0 {
+		c.carryOver(ctx)
+	}
+	prompt = c.injectMemory(ctx, prompt)
+	prompt = header + "\n\n" + prompt
 	resp, err := c.Agent.Send(ctx, prompt)
 	if err != nil && provider.IsModelNotFound(err) && c.revertModel() {
 		// The failed attempt left the prompt in the history; the retry answers it.
@@ -227,6 +236,25 @@ func (c *Conversation) send(ctx context.Context, prompt string) (string, error) 
 	}
 	c.lastTurnUSD = c.Agent.SessionCost() - before
 	return resp, err
+}
+
+// injectMemory puts the memory block of this turn in front of the prompt: the
+// whole memory on the first turn of the conversation, then only what changed.
+// Nothing is added when nothing changed.
+func (c *Conversation) injectMemory(ctx context.Context, prompt string) string {
+	if c.mem == nil || c.store == nil {
+		return prompt
+	}
+	entries, err := c.store.Preamble(ctx, c.mem.reader(), c.mem.budget)
+	if err != nil {
+		c.warn(fmt.Sprintf("memory: this turn does not carry the memory: %v", err))
+		return prompt
+	}
+	block := c.memShown.Block(entries)
+	if block == "" {
+		return prompt
+	}
+	return block + "\n\n" + prompt
 }
 
 // SetModel changes the model for later calls.

@@ -27,17 +27,19 @@ func TestEveryTurnSeesItsOwnTimeLineAndTheBasePromptStaysPut(t *testing.T) {
 	}
 	first, second := f.mock.Calls[0].System, f.mock.Calls[1].System
 
-	for i, sys := range []string{first, second} {
+	// The time line is per turn: it opens the user message of its turn.
+	for i := range instants {
+		turn := lastUserText(f.mock.Calls[i])
 		want := "Current time: " + instants[i].In(time.Local).Format("2006-01-02 15:04") + " ("
-		if !strings.HasPrefix(sys, want) {
-			t.Fatalf("turn %d: system does not open with %q:\n%s", i+1, want, sys)
+		if !strings.HasPrefix(turn, want) {
+			t.Fatalf("turn %d: user turn does not open with %q:\n%s", i+1, want, turn)
 		}
 	}
-	if first == second {
-		t.Fatal("two turns carried the same system prompt; the time line must be fresh")
+	// The system prompt is the same bytes on every turn, so the cached prefix holds.
+	if first != second {
+		t.Fatal("the system prompt must not change between turns")
 	}
-	baseOf := func(sys string) string { return sys[strings.Index(sys, "\n\n")+2:] }
-	if baseOf(first) != baseOf(second) {
-		t.Fatal("the base prompt changed between turns; only the time line may differ")
+	if strings.Contains(first, "Current time:") {
+		t.Fatal("the time line is not part of the system prompt")
 	}
 }

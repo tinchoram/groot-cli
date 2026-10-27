@@ -25,6 +25,9 @@ const (
 // empty when there was no exchange.
 func (c *Conversation) localSummary() string {
 	user, answer := c.LastExchange()
+	if c.lastGoal != "" {
+		user = c.lastGoal
+	}
 	if user == "" && answer == "" {
 		return ""
 	}

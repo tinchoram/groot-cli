@@ -1,7 +1,7 @@
 # Memory
 
 groot keeps long-term memory: short entries that outlive a session and are
-shown to the agent in its system prompt. This page is the model. The commands
+shown to the agent in its conversation. This page is the model. The commands
 are in the README under "Memory and sessions".
 
 The hygiene model: upsert by topic, dedupe by content, pin, review
@@ -59,11 +59,29 @@ once per database. A new `global` entry needs the reader to be enabled.
   twice. The result reads `duplicate of #12`, and the duplicate count grows.
 - Otherwise the result reads `remembered #12 (created)`.
 
-## The preamble: what the prompt gets
+## The preamble: what the model gets
 
-The system prompt carries a budgeted preamble, rebuilt when the conversation
-opens, after `/clear`, and after every `remember`, `update_memory`, `forget`,
-pin or review change. So the next turn sees the change.
+Memory is not part of the system prompt. The system prompt is composed once
+when the conversation opens and does not change for the session, so the cached
+prefix holds. Memory enters the conversation as a block at the top of a user
+turn, built from the same budgeted preamble:
+
+- **The first turn** of a conversation (at open, and again after `/clear`)
+  carries the whole preamble in a `<memory>` block with one line saying it is
+  the agent's stored memory for this space.
+- **Every later turn** carries only what changed since the previous block, in a
+  `<memory-update>` block: the entries added or updated since then, with the same
+  lines, and the removed ones named by topic key (or `#id [kind]` when they have
+  none). An entry that gained or lost its review mark, or was pinned, counts as
+  changed. A turn with no change carries no block.
+
+A change made by `remember`, `update_memory`, `forget`, a pin or a review is
+therefore in the next turn, not in the turn that made it. Changes are found by
+comparing the content of the entries, so a tainted entry, whose envelope differs
+on every render, does not look changed.
+
+The budget is the same as before: the selection walks the entries in the order
+below and stops at the first one that would exceed `memory.preamble_tokens`.
 
 Selection order: pinned entries first, then decisions and runbooks, then facts,
 then the newest session summaries. Only the newest `memory.preamble_summaries`

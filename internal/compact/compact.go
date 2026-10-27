@@ -4,6 +4,7 @@ package compact
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/tinchoram/groot-cli/internal/api"
 	"github.com/tinchoram/groot-cli/internal/provider"
@@ -88,25 +89,43 @@ func (s Summarize) compactTail(ctx context.Context, msgs []api.Message, tail int
 	if k == 0 {
 		return msgs, nil
 	}
-
-	prompt := "Summarize this earlier part of the conversation in at most 12 bullet points:\n\n" +
-		api.RenderTranscript(msgs[:k])
-	resp, err := s.Provider.Send(ctx, provider.Request{
-		System: summarizeSystem,
-		Messages: []api.Message{{
-			Role:    api.RoleUser,
-			Content: []api.Block{{Type: api.BlockText, Text: prompt}},
-		}},
-	})
+	summary, err := Digest(ctx, s.Provider, msgs[:k])
 	if err != nil {
 		return nil, fmt.Errorf("summarize history: %w", err)
 	}
 
 	out := []api.Message{
-		{Role: api.RoleUser, Content: []api.Block{{Type: api.BlockText, Text: "Summary of earlier conversation:\n" + resp.Text()}}},
+		{Role: api.RoleUser, Content: []api.Block{{Type: api.BlockText, Text: "Summary of earlier conversation:\n" + summary}}},
 		{Role: api.RoleAssistant, Content: []api.Block{{Type: api.BlockText, Text: "Understood. I will use that context."}}},
 	}
 	return append(out, msgs[k:]...), nil
+}
+
+// summaryRequest says what a summary of earlier messages keeps. The user's
+// requests come first: a summary that loses them loses the task.
+const summaryRequest = "Summarize this earlier part of the conversation in at most 12 bullet points. Keep:\n" +
+	"- every user request, verbatim or near-verbatim, in the order it was made;\n" +
+	"- the open task: its id and phase, if one is open;\n" +
+	"- decisions taken, and why;\n" +
+	"- resource names: hosts, clusters, namespaces, pods, files, ids;\n" +
+	"- commands that were run, with their outcomes;\n" +
+	"- open problems and what is still to do.\n" +
+	"Merge related items to stay within 12 bullets. Never drop a user request to make room.\n\n"
+
+// Digest asks p for a summary of msgs under the rules of the compaction
+// summary. Compaction and the summary of a resumed session both use it.
+func Digest(ctx context.Context, p provider.Provider, msgs []api.Message) (string, error) {
+	resp, err := p.Send(ctx, provider.Request{
+		System: summarizeSystem,
+		Messages: []api.Message{{
+			Role:    api.RoleUser,
+			Content: []api.Block{{Type: api.BlockText, Text: summaryRequest + api.RenderTranscript(msgs)}},
+		}},
+	})
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(resp.Text()), nil
 }
 
 // SafeSplitPoint returns the largest index k in [1, desired] at which msgs can

@@ -21,13 +21,13 @@ directory, Groot adds it to the system prompt under "Project context".
 | `ui.show_cost` | `false` | Show the estimated session cost in the status line and the spend of each agent in the sidebar. `/cost` and `/tokens` show it either way |
 | `updates.check` | `true` | Check GitHub once a day, in the background at startup, for a newer release and show a note in the status line. `groot upgrade --check` checks at any time |
 | `memory.path` | `.groot/groot.db` | SQLite database. A relative path is under each space's directory; an absolute path is shared by all spaces |
-| `memory.preamble_tokens` | `1500` | Estimated token budget of the memory block in the system prompt |
-| `memory.preamble_summaries` | `3` | Session summaries kept in the memory block, newest first |
+| `memory.preamble_tokens` | `1500` | Estimated token budget of the memory block, sent in the conversation (not the system prompt) |
+| `memory.preamble_summaries` | `3` | Session summaries kept in the memory, newest first |
 | `audit.path` | `.groot/audit.jsonl` | Audit log. Same rules as `memory.path` |
 | `audit.sinks` | empty | Export sinks: `file`, `http` or `syslog`. See Audit |
 | `gate.policy` | `interactive` | `interactive`, `readonly` or `auto` |
 | `kubectl.namespaces` | empty (any) | Namespace allowlist |
-| `system_prompt` | built in | Replaces the base SRE prompt |
+| `system_prompt` | built in | Replaces the base prompt only: the default groot prompt (identity, working rules, tool rules) when unset. The agent prompt, the rules of the space, the environment block, the People block and `AGENTS.md` are still added after it |
 
 Never put API keys in `groot.yaml`. Keys come from `groot auth login`, from
 `ANTHROPIC_API_KEY` in the environment, or from a `.env` file in the working

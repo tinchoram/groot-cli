@@ -119,14 +119,6 @@ func (r recordingTool) SandboxName() string {
 	return ""
 }
 
-// withBlock puts the flow block in front of the system prompt of a turn.
-func withBlock(block, base string) string {
-	if block == "" {
-		return base
-	}
-	return block + "\n\n" + base
-}
-
 // Task reports the open task of this conversation, if there is one.
 func (c *Conversation) Task() (flow.Task, bool) {
 	if c.ctl == nil {

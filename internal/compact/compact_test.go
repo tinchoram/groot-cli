@@ -162,3 +162,23 @@ func TestSummarizePropagatesProviderError(t *testing.T) {
 		t.Fatal("provider error must surface")
 	}
 }
+
+func TestSummaryPromptKeepsUserRequestsAndTheOpenTask(t *testing.T) {
+	fp := &fakeProvider{reply: "SUMMARY"}
+	msgs := []api.Message{user("scale checkout to 4 replicas"), user("ok")}
+	if _, err := Digest(context.Background(), fp, msgs); err != nil {
+		t.Fatal(err)
+	}
+	prompt := fp.lastReq.Messages[0].Content[0].Text
+	for _, want := range []string{
+		"every user request", "verbatim", "the open task", "decisions",
+		"resource names", "commands that were run", "outcomes", "open problems",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("summary prompt misses %q:\n%s", want, prompt)
+		}
+	}
+	if !strings.Contains(prompt, "scale checkout to 4 replicas") {
+		t.Error("the summary request must carry the transcript")
+	}
+}

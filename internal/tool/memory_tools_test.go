@@ -2,7 +2,6 @@ package tool
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -185,26 +184,6 @@ func TestRememberRejectsSessionSummaryBadKindScopeAndEmptyText(t *testing.T) {
 	}
 }
 
-func TestRememberCallsChangedOnlyAfterASuccessfulWrite(t *testing.T) {
-	st := &recordingStore{err: errors.New("disk full")}
-	calls := 0
-	acc := access(st, "a")
-	acc.Changed = func() { calls++ }
-	if _, isErr := NewRemember(acc).Execute(context.Background(), mustJSON(t, map[string]string{"kind": "fact", "text": "x"})); !isErr {
-		t.Fatal("a store error must be an error result")
-	}
-	if calls != 0 {
-		t.Fatalf("Changed ran %d times after a failed write", calls)
-	}
-	st.err = nil
-	if _, isErr := NewRemember(acc).Execute(context.Background(), mustJSON(t, map[string]string{"kind": "fact", "text": "x"})); isErr {
-		t.Fatal("write failed")
-	}
-	if calls != 1 {
-		t.Fatalf("Changed ran %d times after a successful write, want 1", calls)
-	}
-}
-
 func TestRecallFormatsCompactLinesWithIDsAndAHint(t *testing.T) {
 	long := strings.Repeat("ö", 200)
 	st := &recordingStore{results: []memory.Entry{
@@ -260,17 +239,15 @@ func TestMemoryGetReportsMissingEntries(t *testing.T) {
 	}
 }
 
-func TestForgetSoftDeletesAndNotifies(t *testing.T) {
+func TestForgetSoftDeletes(t *testing.T) {
 	st := &recordingStore{}
-	calls := 0
 	acc := access(st, "a")
-	acc.Changed = func() { calls++ }
 	out, isErr := NewForget(acc).Execute(context.Background(), mustJSON(t, map[string]int{"id": 5}))
 	if isErr || out != "forgot #5" {
 		t.Fatalf("got (%q, %v)", out, isErr)
 	}
-	if len(st.forgot) != 1 || st.forgot[0] != 5 || calls != 1 {
-		t.Fatalf("forgot=%v calls=%d", st.forgot, calls)
+	if len(st.forgot) != 1 || st.forgot[0] != 5 {
+		t.Fatalf("forgot=%v", st.forgot)
 	}
 	if NewForget(acc).Risk() != RiskWrite {
 		t.Fatal("forget changes memory and is RiskWrite")
@@ -279,9 +256,7 @@ func TestForgetSoftDeletesAndNotifies(t *testing.T) {
 
 func TestUpdateMemoryAppliesOnlyTheFieldsGiven(t *testing.T) {
 	st := &recordingStore{}
-	calls := 0
 	acc := access(st, "a")
-	acc.Changed = func() { calls++ }
 	ut := NewUpdateMemory(acc)
 	if ut.Risk() != RiskWrite {
 		t.Fatal("update_memory changes memory and is RiskWrite")
@@ -296,9 +271,6 @@ func TestUpdateMemoryAppliesOnlyTheFieldsGiven(t *testing.T) {
 	}
 	if st.pinned[3] {
 		t.Fatal("pinned goes through the patch, not SetPinned")
-	}
-	if calls != 1 {
-		t.Fatalf("Changed ran %d times", calls)
 	}
 }
 

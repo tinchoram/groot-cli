@@ -25,6 +25,10 @@ type Resumed struct {
 	Messages     []api.Message // the transcript: the last transcriptCap stored messages
 	Times        []time.Time   // when each transcript message was written; zero when unknown
 	Started      time.Time     // when the session started: the fallback time of old messages
+	// Dropped are the stored messages older than the transcript, cut from the
+	// context by the summarize strategy. The conversation summarizes them before
+	// its first model call.
+	Dropped []api.Message
 }
 
 // startOrResume gives the agent its conversation: the latest stored session of
@@ -76,7 +80,55 @@ func (w *Workspace) resume(ctx context.Context, ag *agent.Agent, store memory.St
 	if n := len(times); n > 0 && !times[n-1].IsZero() {
 		last = times[n-1]
 	}
-	return &Resumed{ID: sess.ID, Count: sess.Messages, LastActivity: last, Messages: tail, Times: tailTimes, Started: sess.StartedAt}, nil
+	return &Resumed{
+		ID: sess.ID, Count: sess.Messages, LastActivity: last, Messages: tail, Times: tailTimes, Started: sess.StartedAt,
+		Dropped: droppedMessages(msgs, w.opts.Config.Compaction),
+	}, nil
+}
+
+// droppedMessages returns the stored messages that restoreHistory leaves out
+// under the summarize strategy, the older ones of the transcript cap. The window
+// strategy drops messages by design, and none keeps all of them.
+func droppedMessages(msgs []api.Message, c config.CompactionConfig) []api.Message {
+	if c.Strategy != "summarize" {
+		return nil
+	}
+	kept := transcriptTail(msgs)
+	if len(kept) == len(msgs) {
+		return nil
+	}
+	return msgs[:len(msgs)-len(kept)]
+}
+
+// carryOver puts the messages a resume left out of the context in front of the
+// history. They are summarized with the compaction rules, in one model call
+// bounded by the summary timeout. When the call fails, or answers nothing, a note
+// says how many messages are out of context instead.
+func (c *Conversation) carryOver(ctx context.Context) {
+	older := c.carried
+	c.carried = nil
+	sctx, cancel := context.WithTimeout(ctx, summaryTimeout)
+	defer cancel()
+	summary, err := compact.Digest(sctx, c.prov, older)
+	if err != nil {
+		c.warn(fmt.Sprintf("summary of the %d earlier messages failed: %v", len(older), err))
+	}
+	var head []api.Message
+	if err == nil && summary != "" {
+		head = carriedPair(fmt.Sprintf("Summary of the %d earlier messages of this session:\n%s", len(older), summary))
+	} else {
+		head = carriedPair(fmt.Sprintf("%d earlier messages are not in context.", len(older)))
+	}
+	c.Agent.PrependHistory(head)
+}
+
+// carriedPair is a user message with the model's answer that acknowledges it,
+// so the history keeps its alternation.
+func carriedPair(user string) []api.Message {
+	return []api.Message{
+		{Role: api.RoleUser, Content: []api.Block{{Type: api.BlockText, Text: user}}},
+		{Role: api.RoleAssistant, Content: []api.Block{{Type: api.BlockText, Text: "Understood. I will use that context."}}},
+	}
 }
 
 // restoreHistory returns the messages the model gets when a session resumes,
@@ -124,9 +176,9 @@ func (c *Conversation) Resumed() (Resumed, bool) {
 // Clear starts a fresh conversation for /clear. The old session is detached in
 // memory right away, so the next Send opens a new one, and the prompt is rebuilt
 // from the memory stored so far. The returned function finishes the old session:
-// it writes the summary, records the end and marks the session cleared. Then it
-// rebuilds the prompt again, so the summary is in the next turn. The caller runs
-// it off the UI loop.
+// it writes the summary, records the end and marks the session cleared. The
+// summary reaches the next turn with the memory block, which is sent in full
+// again. The caller runs it off the UI loop.
 func (c *Conversation) Clear() func(context.Context) error {
 	// The session's own spend, not the provider's total: the provider keeps
 	// counting across the sessions of this conversation.
@@ -136,9 +188,10 @@ func (c *Conversation) Clear() func(context.Context) error {
 	local := c.localSummary()
 	id, transcript, n := c.Agent.Detach()
 	c.resumed = nil
-	// Cheap, and it picks up every entry remembered during the session. A failure
-	// keeps the previous prompt; the refresh after the summary reports it.
-	_ = c.refreshSystem(context.Background())
+	c.carried = nil
+	c.lastGoal = ""
+	// The next turn carries the whole memory again, the summary of this session included.
+	c.memShown.Reset()
 	return func(ctx context.Context) error {
 		var errs []error
 		if id != "" {
@@ -153,9 +206,6 @@ func (c *Conversation) Clear() func(context.Context) error {
 			if err := c.store.MarkCleared(ctx, id); err != nil {
 				errs = append(errs, err)
 			}
-		}
-		if err := c.refreshSystem(ctx); err != nil {
-			errs = append(errs, err)
 		}
 		return errors.Join(errs...)
 	}

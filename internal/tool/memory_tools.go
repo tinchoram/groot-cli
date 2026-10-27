@@ -27,18 +27,9 @@ type MemoryAccess struct {
 	// Tainted reports whether the current turn read untrusted tool output. Entries
 	// saved in such a turn are stored as tainted. Nil means never.
 	Tainted func() bool
-	// Changed runs after a successful change, so the conversation can rebuild
-	// its prompt. Nil means nothing to do.
-	Changed func()
 }
 
 func (a MemoryAccess) tainted() bool { return a.Tainted != nil && a.Tainted() }
-
-func (a MemoryAccess) changed() {
-	if a.Changed != nil {
-		a.Changed()
-	}
-}
 
 // Remember stores a fact, decision or runbook through the memory port.
 type Remember struct {
@@ -111,7 +102,6 @@ func (r *Remember) execute(ctx context.Context, input string) (string, bool) {
 	if err != nil {
 		return err.Error(), true
 	}
-	r.acc.changed()
 	switch res.Outcome {
 	case memory.OutcomeDuplicate:
 		return fmt.Sprintf("duplicate of #%d", res.ID), false
@@ -309,7 +299,6 @@ func (f *Forget) Execute(ctx context.Context, input string) (string, bool) {
 	if err := memory.ForgetByRef(ctx, f.acc.Store, in.ref(), f.acc.Reader); err != nil {
 		return memoryError(in.ID, err), true
 	}
-	f.acc.changed()
 	return fmt.Sprintf("forgot #%d", in.ID), false
 }
 
@@ -368,7 +357,6 @@ func (u *UpdateMemory) Execute(ctx context.Context, input string) (string, bool)
 	if err := memory.UpdateByRef(ctx, u.acc.Store, in.ref(), u.acc.Reader, p); err != nil {
 		return memoryError(in.ID, err), true
 	}
-	u.acc.changed()
 	return fmt.Sprintf("updated #%d", in.ID), false
 }
 

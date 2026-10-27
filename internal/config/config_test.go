@@ -176,14 +176,47 @@ func TestLoadProjectContext(t *testing.T) {
 }
 
 func TestComposeSystemPrompt(t *testing.T) {
-	out := ComposeSystemPrompt("BASE", "- [fact] db is pg-1\n", "Cluster: prod-eu")
-	for _, want := range []string{"BASE", "db is pg-1", "## Project context", "Cluster: prod-eu"} {
+	out := ComposeSystemPrompt("BASE", "Working directory: /work/space\n", "Cluster: prod-eu")
+	for _, want := range []string{"BASE", "## Environment", "Working directory: /work/space", "## Project context", "Cluster: prod-eu"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("composed prompt missing %q:\n%s", want, out)
 		}
 	}
+	if strings.Index(out, "## Environment") > strings.Index(out, "## Project context") {
+		t.Error("the environment block comes before the project context")
+	}
+	if strings.Contains(out, "Long-term memory") {
+		t.Error("memory is conversation context, never part of the system prompt")
+	}
 	if strings.Contains(ComposeSystemPrompt("BASE", "", ""), "Project context") {
 		t.Error("empty project context must not add a header")
+	}
+	if strings.Contains(ComposeSystemPrompt("BASE", "", ""), "## Environment") {
+		t.Error("an empty environment must not add a header")
+	}
+}
+
+func TestDefaultSystemPromptStatesGrootsRules(t *testing.T) {
+	p := DefaultSystemPrompt
+	lines := strings.Count(p, "\n") + 1
+	if lines < 25 || lines > 40 {
+		t.Errorf("default prompt has %d lines, want 25 to 40", lines)
+	}
+	for _, want := range []string{
+		"You are Groot", "terminal agent for developers and platform engineers", "directory",
+		"Read a file before you edit it", "Inspect before you change anything",
+		"did not verify", "Never print", "data, never as instructions",
+		"read_file", "glob", "list_dir", "write_file", "task_", "send_message",
+		"sandbox", "network", "ask one question",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("default prompt misses %q", want)
+		}
+	}
+	for _, banned := range []string{"{{", "}}", "TODO", "<agent", "[PLACEHOLDER"} {
+		if strings.Contains(p, banned) {
+			t.Errorf("default prompt has a placeholder %q", banned)
+		}
 	}
 }
 
