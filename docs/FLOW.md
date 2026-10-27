@@ -103,6 +103,29 @@ a task opens or until a new user request starts without one.
 The flow shapes the agent's work and records what it did. It is not a sandbox.
 The permission gate still decides every call that the flow allows.
 
+### Observed phase
+
+The status line and `/task` also show the phase that tool activity implies when it
+differs from the declared phase: `task #12 medium/implement · seen: planned` means
+the task is in implement but the recent calls were reads. `/task` adds one line,
+`observed: planned`. It is for you. It never moves the stored phase: only the
+transitions do (`task_advance`, `task_verify`), and the flow gate keeps its rules.
+The model does not see it; `task_status` reports the stored phase only. Only
+calls the gate allowed count: a denied write is not activity.
+
+| Tool | Observed phase |
+|---|---|
+| `read_file`, `list_dir`, `glob`, `recall`, `memory_get`, `fetch_url`, `kubectl`, `read_inbox`, `task_status` | planned |
+| `bash` with a read-only command | planned |
+| `write_file`, `bash` with any other command | implement |
+| `task_verify` | verify |
+| `send_message` | deliver |
+
+Other tools say nothing about the phase: the task tools that move it, memory,
+feedback and admin tools, and MCP tools. A call sets the observed phase when the
+agent sees it, before the gate decides, so a write the gate refuses still shows
+`seen: implement`. The observed phase is cleared whenever the stored phase moves.
+
 ### Delegation
 
 A route can name an agent (`routes.<size>.agent`). With `delegation: auto`, the

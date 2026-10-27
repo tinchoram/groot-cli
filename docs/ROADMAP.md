@@ -131,7 +131,7 @@ the cheapest safety gap, then features.
 | 1 | `-race` in CI, macOS CI job for seatbelt | S | done 2026-10-26 |
 | 2 | Doc drift fixes, unsandboxed paths noted in SAFETY | S | done 2026-10-26 |
 | 3 | Destructive-command guard under the sandbox | S | done 2026-10-26 |
-| 4 | Task phase inferred from tool activity | S | open |
+| 4 | Task phase inferred from tool activity | S | done 2026-10-26 |
 | 5 | `bash_background` and `monitor` | M | open |
 | 6 | Context backstop | M | open |
 | 7 | Provider adapters (0.7.0 below) | L | on request |

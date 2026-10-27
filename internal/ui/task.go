@@ -15,7 +15,11 @@ func (m Model) taskLabel() string {
 	if !ok {
 		return ""
 	}
-	return styleDim.Render(" · ") + styleAccentBold.Render(fmt.Sprintf("task #%d %s/%s", t.ID, t.Size, t.Phase))
+	label := styleAccentBold.Render(fmt.Sprintf("task #%d %s/%s", t.ID, t.Size, t.Phase))
+	if seen, ok := m.session.Observed(); ok && seen != t.Phase {
+		label += styleDim.Render(" · seen: " + string(seen))
+	}
+	return styleDim.Render(" · ") + label
 }
 
 // runTaskCommand handles /task, which prints the classification and the open
@@ -51,5 +55,10 @@ func (m *Model) runTaskCommand(arg string) {
 	}
 	for _, line := range strings.Split(m.session.TaskStatus(ctx), "\n") {
 		m.append(styleDim.Render(line))
+	}
+	if seen, ok := m.session.Observed(); ok {
+		if t, has := m.session.Task(); has && seen != t.Phase {
+			m.append(styleDim.Render("observed: " + string(seen)))
+		}
 	}
 }

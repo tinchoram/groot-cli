@@ -108,6 +108,11 @@ type Controller struct {
 	// pending is the origin of the handover this conversation received; the next
 	// task it opens is linked to it.
 	pending *Parent
+	// observed is the phase the tool activity of the open task shows. It is
+	// for the human only: it never moves the stored phase, and it is cleared
+	// whenever the phase moves.
+	observed   Phase
+	observedAt time.Time
 }
 
 // Address is the conversation as an inbox address, "<space>/<agent>".
@@ -133,6 +138,7 @@ func (c *Controller) Refresh(ctx context.Context) error {
 		return fmt.Errorf("reload open task: %w", err)
 	}
 	c.active = nil
+	c.observed, c.observedAt = "", time.Time{}
 	if ok {
 		c.active = &tk
 	}
@@ -166,6 +172,33 @@ func (c *Controller) Warn(msg string) {
 	if c.opts.Warn != nil {
 		c.opts.Warn(msg)
 	}
+}
+
+// Observe records the phase that a tool call shows the open task is in. It
+// moves nothing: the stored phase changes only through the transitions.
+// Without an open task it does nothing.
+func (c *Controller) Observe(tool string, readOnly bool) {
+	phase, ok := InferPhase(tool, readOnly)
+	if !ok {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.active == nil {
+		return
+	}
+	c.observed, c.observedAt = phase, c.opts.Now()
+}
+
+// Observed returns the phase seen from the tool activity of the open task, if
+// any call has shown one since the phase last moved.
+func (c *Controller) Observed() (Phase, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.active == nil || c.observed == "" {
+		return "", false
+	}
+	return c.observed, true
 }
 
 // Active returns the open task, if there is one.
@@ -277,6 +310,7 @@ func (c *Controller) Open(ctx context.Context, goal, scope, doneWhen string) (Ta
 	}
 	c.pending = nil
 	c.active = &saved
+	c.observed, c.observedAt = "", time.Time{}
 	if c.opts.OnOpen != nil {
 		c.opts.OnOpen(saved)
 	}
@@ -397,6 +431,7 @@ func (c *Controller) Advance(ctx context.Context, to Phase, text string) (Task, 
 	}
 
 	c.active = &next
+	c.observed, c.observedAt = "", time.Time{}
 	if to == PhaseDeliver && c.opts.OnDeliver != nil {
 		c.opts.OnDeliver(next)
 	}

@@ -35,6 +35,7 @@ type fakeSession struct {
 	busyReply bool
 	resumed   *workspace.Resumed
 	task      *flow.Task
+	seen      flow.Phase
 	failed    []string
 	workOn    bool
 	review    string
@@ -123,6 +124,11 @@ func (f *fakeSession) Task() (flow.Task, bool) {
 		return flow.Task{}, false
 	}
 	return *f.task, true
+}
+
+// Observed answers the phase seen from tool activity; an empty phase is none.
+func (f *fakeSession) Observed() (flow.Phase, bool) {
+	return f.seen, f.seen != ""
 }
 
 func (f *fakeSession) TaskStatus(context.Context) string {

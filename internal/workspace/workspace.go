@@ -53,6 +53,8 @@ type Chat interface {
 	Resumed() (Resumed, bool)
 	// Task reports the open task of this conversation, if there is one.
 	Task() (flow.Task, bool)
+	// Observed is the phase the tool activity of the open task shows, if any.
+	Observed() (flow.Phase, bool)
 	// TaskStatus describes the classification and the open task.
 	TaskStatus(ctx context.Context) string
 	// FailTask closes the open task with a reason.
@@ -637,6 +639,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		System:            system,
 		MaxTurns:          maxTurns,
 		OnText:            keyedText(w.opts.Hooks, key),
+		OnToolRisk:        observedTool(ctl),
 		OnToolCall:        autoAwareTool(w.opts.Hooks, key, work, sess, g),
 		OnWarning:         keyedWarn(w.opts.Hooks, key),
 		// Checked before every model call, so a turn that goes over its budget
@@ -732,6 +735,7 @@ func (c idleChat) ContextTokens() int64                         { return 0 }
 func (c idleChat) ContextWindow() int                           { return provider.DefaultContextWindow }
 func (c idleChat) Reset()                                       {}
 func (c idleChat) Task() (flow.Task, bool)                      { return flow.Task{}, false }
+func (c idleChat) Observed() (flow.Phase, bool)                 { return "", false }
 func (c idleChat) TaskStatus(context.Context) string            { return "" }
 func (c idleChat) FailTask(context.Context, string) (string, error) {
 	return "", c.err

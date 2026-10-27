@@ -135,6 +135,24 @@ func (c *Conversation) Task() (flow.Task, bool) {
 	return c.ctl.Active()
 }
 
+// Observed reports the phase the tool activity of the open task shows, if any.
+// It is for the human; the model never sees it.
+func (c *Conversation) Observed() (flow.Phase, bool) {
+	if c.ctl == nil {
+		return "", false
+	}
+	return c.ctl.Observed()
+}
+
+// observedTool passes the read-only fact of each tool call to the flow.
+func observedTool(ctl *flow.Controller) func(string, bool) {
+	return func(name string, readOnly bool) {
+		if ctl != nil {
+			ctl.Observe(name, readOnly)
+		}
+	}
+}
+
 // TaskStatus describes the classification and the open task.
 func (c *Conversation) TaskStatus(ctx context.Context) string {
 	if c.ctl == nil {

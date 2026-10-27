@@ -72,6 +72,10 @@ type Agent struct {
 	// OnToolCall is called before a tool's gate decision. input is the
 	// tool's human-readable preview, not the raw JSON. May be nil.
 	OnToolCall func(name, input string)
+	// OnToolRisk is called once per tool call that the gate allowed, just before
+	// it runs, with whether the call is read-only after the taint check. A denied
+	// call is not reported: it is not activity. May be nil.
+	OnToolRisk func(name string, readOnly bool)
 	// OnWarning receives non-fatal persistence or compaction problems. May be nil.
 	OnWarning func(msg string)
 	// Limit is checked before each model call of a turn. A non-nil error ends
@@ -362,6 +366,9 @@ func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
 	if decision == gate.Deny {
 		a.audit(use.Name, risk, decision, input, true, 0, "", nil)
 		return api.Block{Type: api.BlockToolResult, ToolUseID: use.ID, Content: a.denial(req), IsError: true}
+	}
+	if a.OnToolRisk != nil {
+		a.OnToolRisk(use.Name, risk == tool.RiskRead)
 	}
 
 	start := time.Now()

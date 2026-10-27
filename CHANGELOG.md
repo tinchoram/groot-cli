@@ -14,6 +14,12 @@ built in one day of live testing, so they are grouped by what shipped.
   cover it, and the approval names it. The check is pattern-based, not a sandbox. See
   `docs/SAFETY.md`.
 
+### Flow
+- Observed phase. The status line and `/task` show the phase that tool activity implies
+  when it differs from the declared phase (`seen: planned` next to `implement`). It comes
+  from a fixed table of tools, never moves the stored phase and is not shown to the model.
+  See `docs/FLOW.md`.
+
 ## 0.6.0 — 2026-10-25
 
 First public release of Groot CLI, cut from main on 2026-10-25. It brings memory
