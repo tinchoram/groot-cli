@@ -3,7 +3,7 @@ PKG     := ./cmd/groot
 VERSION ?= 0.6.0
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: all build test e2e lint vet fmt run clean release-check snapshot install-check
+.PHONY: all build test e2e lint vet fmt run clean cleanall release-check snapshot install-check demo
 
 all: build test
 
@@ -49,3 +49,13 @@ snapshot:
 # installer's tests run with `make test`.
 install-check:
 	@if command -v shellcheck >/dev/null 2>&1; then shellcheck install.sh; else echo "shellcheck not installed: skipping install-check (brew install shellcheck)"; fi
+
+# demo re-renders assets/demo.gif from assets/demo.tape with vhs (brew install vhs).
+# It runs the built binary against a throwaway home so the recording never shows real data.
+# The working directory must hold an Anthropic key in .env; no model call is made.
+DEMO_HOME ?= $(HOME)/.cache/groot-demo
+demo: build
+	@command -v vhs >/dev/null 2>&1 || { echo "vhs is required: brew install vhs"; exit 1; }
+	rm -rf "$(DEMO_HOME)" && mkdir -p "$(DEMO_HOME)"
+	GROOT_DEMO_HOME="$(DEMO_HOME)" PATH="$(CURDIR)/bin:$$PATH" vhs assets/demo.tape
+	rm -rf "$(DEMO_HOME)"

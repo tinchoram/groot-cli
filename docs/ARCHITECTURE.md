@@ -171,3 +171,30 @@ directory (`memoryPathFor`, `auditPathFor` in `internal/workspace/workspace.go`)
   `os/exec` outside `internal/tool/exec.go`.
 - Fakes: `provider.NewMock` for model turns, `memory.OpenSQLite` on a temp path
   for stores.
+
+## Overview
+
+```
+cmd/groot/main.go             wiring only: flags, config, adapters, UI
+        |
+        v
+internal/agent               conversation loop (knows only the ports)
+   |        |        |        |         |          |
+   v        v        v        v         v          v
+provider   tool     gate    compact   memory     audit
+(port)    (port)   (port)   (port)    (port)     (JSONL)
+   |        |
+   v        v
+anthropic  read_file  write_file  bash  kubectl  remember/recall
+mock
+                    internal/api: provider-neutral messages and blocks
+                    internal/config: groot.yaml and AGENTS.md
+                    internal/ui: Bubble Tea screens, no agent logic
+                    internal/arch: test that enforces the import boundaries
+```
+
+A turn runs like this: compact the history, call the model with streaming, and
+for each `tool_use` block ask the gate. If the call is allowed, run the tool.
+Otherwise return a `tool_result` marked `denied by user`. Persist every message,
+and audit every call. Repeat until the model stops asking for tools. When
+`max_turns` is reached, the agent is asked for a final answer without tools.

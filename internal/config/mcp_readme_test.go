@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// TestREADMEMCPExampleLoads loads the MCP example of the README through the
+// TestREADMEMCPExampleLoads loads the MCP example of docs/INTEGRATIONS.md through the
 // real loader, so the documented config cannot drift from the parser.
 func TestREADMEMCPExampleLoads(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "INTEGRATIONS.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,7 +19,7 @@ func TestREADMEMCPExampleLoads(t *testing.T) {
 	i := strings.Index(text, start)
 	j := strings.Index(text, end)
 	if i < 0 || j < i {
-		t.Fatal("README lacks the mcp-example markers")
+		t.Fatal("docs/INTEGRATIONS.md lacks the mcp-example markers")
 	}
 	block := text[i+len(start) : j]
 	block = strings.TrimPrefix(strings.TrimSpace(block), "```yaml")
@@ -31,7 +31,7 @@ func TestREADMEMCPExampleLoads(t *testing.T) {
 	}
 	cfg, err := Load(path)
 	if err != nil {
-		t.Fatalf("README example does not load: %v\n%s", err, block)
+		t.Fatalf("docs/INTEGRATIONS.md example does not load: %v\n%s", err, block)
 	}
 	if len(cfg.MCP.Servers) != 2 {
 		t.Fatalf("example defines %d servers, want 2", len(cfg.MCP.Servers))
