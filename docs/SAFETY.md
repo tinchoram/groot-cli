@@ -45,9 +45,10 @@ How groot gates tool calls, sandboxes shell commands, and treats untrusted conte
   `work.max_turns`, `work.max_auto_turns`, `work.max_usd`, `bash.timeout`,
   `bash.max_timeout`, `mcp.enable` and `ui.*`. It never changes security settings
   (audit sinks, `bash.sandbox`, `fetch`, `guard`, `updates`, `mcp.servers`,
-  `user.name`) and never reads environment variables: a `${VAR}` in a project
+  `user.name`) and never expands environment variables: a `${VAR}` in a project
   file is an error. Any other key is refused, and so is an unknown one. Set those
-  in `~/.groot/groot.yaml`.
+  in `~/.groot/groot.yaml`. Which layers expand `${VAR}` is listed in
+  [Environment expansion](CONFIGURATION.md#environment-expansion).
 
 ### Audit
 
@@ -159,6 +160,27 @@ Limits to plan for:
 
 To check it, run `echo test > /tmp/x` (it works) and `echo test > ~/x` (it fails;
 on macOS the error is `Operation not permitted`).
+
+### What the sandbox does not cover
+
+The sandbox wraps only the bash tool. Three other paths run outside it:
+
+- **kubectl tool.** It runs `kubectl` directly, with your kubeconfig and the
+  network. It is still gated and audited like any tool call: reads are allowed
+  without asking under `interactive`, only the read-only verbs run, credential
+  and cluster overrides are refused, and with `kubectl.namespaces` set, `-A` is
+  refused and a namespace is required.
+- **MCP servers.** A stdio server is a child process started in the space
+  directory; an HTTP server is a remote endpoint. Neither runs in the sandbox. Only
+  the tools listed under the server's `tools` are exposed, and each call is gated
+  and audited. A tool counts as a read only when the server lists it under
+  `read_only`; any other tool is a write, and in work mode a write asks you. Output
+  is untrusted and capped at 64 KB. Servers come from the global config only.
+- **Terminal column (`ctrl-t`).** It is your own shell on a pseudo-terminal, started
+  in the space directory. Keystrokes go straight to that shell, which is not a
+  groot tool. It is neither gated nor audited, and the sandbox does not apply.
+  Commands you run there are outside groot's record; ask the agent to use bash
+  when you want a command gated, sandboxed and audited.
 
 ### Untrusted content
 

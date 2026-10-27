@@ -74,7 +74,7 @@ sandbox tests required on each.
 | Backlog sweep with `read_changelog` | tests | 0.5.3 |
 | Admin tools: delete, rename, move, copy; two-step confirm, `purge_data`, `with_memory` | live (first round) | 0.6.0, the user exercised create/edit/delete/move |
 | `groot auth`, layered config, `groot doctor` | live (`doctor` on the dev machine) | 0.6.0 |
-| goreleaser pipeline, `groot upgrade`, `install.sh` | tests + local snapshot | 0.6.0; the GitHub release workflow has not published yet |
+| goreleaser pipeline, `groot upgrade`, `install.sh` | tests, published release | 0.6.0; the release workflow published v0.6.0 on 2026-10-26 (four archives, `checksums.txt`, `install.sh`) |
 | `debug` from the library, movable | tests | 0.6.0 |
 | `/clear` summary fallback, 15 s close budget | tests | 0.6.0 |
 
@@ -85,8 +85,9 @@ Known limits carried forward:
 - `/audit stats` streams the whole file; audit records carry no taint field.
 - A message to an agent is read on its next turn; only work mode starts a
   turn by itself.
-- The memory block of the prompt is rebuilt on open and on `/clear`, not on
-  every `remember`.
+- The memory block of the prompt is rebuilt on open, on `/clear`, and after each
+  `remember`, `forget` or `update_memory` call, so a new entry is in view on the
+  next model call.
 
 Decisions waiting on the user before 0.7.0 is planned:
 
@@ -128,7 +129,7 @@ the cheapest safety gap, then features.
 | # | Item | Size | State |
 |---|---|---|---|
 | 1 | `-race` in CI, macOS CI job for seatbelt | S | done 2026-10-26 |
-| 2 | Doc drift fixes, unsandboxed paths noted in SAFETY | S | open |
+| 2 | Doc drift fixes, unsandboxed paths noted in SAFETY | S | done 2026-10-26 |
 | 3 | Destructive-command guard under the sandbox | S | open |
 | 4 | Task phase inferred from tool activity | S | open |
 | 5 | `bash_background` and `monitor` | M | open |

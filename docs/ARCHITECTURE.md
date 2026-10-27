@@ -167,8 +167,11 @@ directory (`memoryPathFor`, `auditPathFor` in `internal/workspace/workspace.go`)
 
 - `make test` runs `go test ./... -count=1`.
 - `make lint` runs `go vet` and a gofmt check.
-- `internal/arch` fails the build when a core package imports an SDK, the UI, or
-  `os/exec` outside `internal/tool/exec.go`.
+- `internal/arch` fails `go test` when a core package (`agent`, `api`, `gate`,
+  `compact`, `tool`) imports a vendor SDK or UI library, `internal/ui`,
+  `internal/provider/` or `cmd/`, or runs `os/exec` outside `internal/tool/exec.go`.
+  `api` may import no groot package. `internal/ui` may not import the PTY or the
+  terminal emulator directly; it reaches them through `internal/term`.
 - Fakes: `provider.NewMock` for model turns, `memory.OpenSQLite` on a temp path
   for stores.
 
@@ -185,8 +188,8 @@ provider   tool     gate    compact   memory     audit
 (port)    (port)   (port)   (port)    (port)     (JSONL)
    |        |
    v        v
-anthropic  read_file  write_file  bash  kubectl  remember/recall
-mock
+anthropic  tool families: files/search, commands, web, memory,
+mock       messaging, flow, backlog, admin, MCP
                     internal/api: provider-neutral messages and blocks
                     internal/config: groot.yaml and AGENTS.md
                     internal/ui: Bubble Tea screens, no agent logic

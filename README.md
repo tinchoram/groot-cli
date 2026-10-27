@@ -14,7 +14,7 @@
 
 ## What it does
 
-- **Safety**: every tool call passes a permission gate, and bash runs in an OS sandbox. See [Safety](docs/SAFETY.md).
+- **Safety**: every tool call the agent makes passes a permission gate, and bash runs in an OS sandbox. The terminal column is your own shell and is neither gated nor audited. See [Safety](docs/SAFETY.md).
 - **Spaces and agents**: work in a directory with its own agents, tools and audit log. See [Spaces and agents](docs/SPACES-AND-AGENTS.md).
 - **Memory**: agents keep scoped long-term memory in SQLite. See [Memory](docs/MEMORY.md).
 - **ODD flow**: each task is sized, then moves through implement, verify and deliver. See [ODD flow](docs/FLOW.md).

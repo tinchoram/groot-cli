@@ -39,8 +39,8 @@ is the plan for the first public release.
    project's `groot.yaml` (done).
 8. **Releases are built by goreleaser from a tag** (`v*`): one archive per
    platform plus `checksums.txt`, release notes taken from the embedded
-   changelog by `cmd/relnotes` (done, exercised locally with a snapshot; the
-   GitHub workflow has not run to completion yet).
+   changelog by `cmd/relnotes` (done; exercised locally with a snapshot, and the
+   GitHub release workflow published v0.6.0 on 2026-10-26).
 9. **`groot upgrade` replaces the binary in place** after verifying the sha256;
    a daily cached check shows a short notice when a newer version exists (done).
 10. **No Gatekeeper signing for now.** Binaries installed through the install
@@ -116,7 +116,8 @@ Consequences:
 
 1. `install.sh` for macOS and Linux (done: detects OS and arch, downloads, verifies
    the checksum, installs to `~/.local/bin`, runs `groot doctor`).
-2. First public release, 0.6.0: make the repository public, tag `v0.6.0`, let the
-   release workflow publish, verify `groot upgrade --check` against the real release.
+2. First public release, 0.6.0: the repository is public, `v0.6.0` is tagged and
+   the release workflow published it on 2026-10-26. Still open: check
+   `groot upgrade --check` against that release.
 3. Homebrew tap through goreleaser.
 4. Later: `.deb`/`.rpm`, signing and notarization, Windows.

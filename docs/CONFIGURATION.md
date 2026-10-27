@@ -4,8 +4,9 @@ The groot.yaml fields, the context window, and spend budgets.
 
 ## Configuration
 
-Copy `groot.yaml.example` to `groot.yaml`. Every field is optional. String values
-accept `${VAR}` and `${VAR:-default}`. If `AGENTS.md` exists in the working
+Copy `groot.yaml.example` to `groot.yaml`. Every field is optional. In the global
+file, string values accept `${VAR}` and `${VAR:-default}`; the project file never
+expands them (see [Environment expansion](#environment-expansion)). If `AGENTS.md` exists in the working
 directory, Groot adds it to the system prompt under "Project context".
 
 | Field | Default | Meaning |
@@ -31,17 +32,31 @@ Never put API keys in `groot.yaml`. Keys come from `groot auth login`, from
 `ANTHROPIC_API_KEY` in the environment, or from a `.env` file in the working
 directory (the environment wins). `.env` is git-ignored.
 
-Two files are loaded, in this order, and each one overrides the one before:
+Three files are loaded, in this order, and each one overrides the one before:
 
 1. `<home>/groot.yaml`, that is `~/.groot/groot.yaml` (or under `GROOT_HOME`), when it exists.
-2. The project file: `--config`, default `./groot.yaml`, when it exists. An explicit
+2. `<home>/user.yaml`, which holds only the operator's `name`.
+3. The project file: `--config`, default `./groot.yaml`, when it exists. An explicit
    `--config` that does not exist is an error.
 
 Scalars in the project file override the global ones, lists are replaced whole,
-and only the keys listed under [Safety model](SAFETY.md) may be set in it. Settings made from
+and only the keys listed under [Safety model](SAFETY.md#safety-model) may be set in it. Settings made from
 inside groot (`/model --default`) are written to the project
 file when it exists, and to the global file otherwise. `set_context_window` always writes the global file. `groot doctor` shows which
 files were loaded.
+
+### Environment expansion
+
+| File | `${VAR}` | Keys it may set |
+|---|---|---|
+| `~/.groot/groot.yaml` | expanded at load, in every string, except the `mcp` section | all |
+| `~/.groot/user.yaml` | expanded at load | `name` only |
+| `./groot.yaml` (project) | never: a `${` there is an error | the allow-list under [Safety model](SAFETY.md#safety-model) |
+
+The `mcp` section of the global file keeps `${VAR}` literal at load. Its values
+expand when a server connects, and an unset variable is an error that names it.
+A `.env` in the working directory is read into the environment at startup, so its
+values count for every layer above; a variable already exported in the shell wins.
 
 ## Context
 
