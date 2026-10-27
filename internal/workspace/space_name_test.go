@@ -9,7 +9,7 @@ import (
 // the space, so items read "space: default" and not the directory.
 func TestFeedbackRecordsTheSpaceNameNotThePath(t *testing.T) {
 	f := newFixture(t, text("ok"))
-	reg, err := f.ws.buildTools(f.dir, []string{"feedback_report"}, nil, nil, nil, nil, "reader")
+	reg, err := f.ws.buildTools(f.dir, []string{"feedback_report"}, nil, nil, nil, nil, nil, "reader")
 	if err != nil {
 		t.Fatal(err)
 	}

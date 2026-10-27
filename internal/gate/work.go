@@ -168,7 +168,7 @@ func (s *WorkState) approves(req Request) bool {
 	switch req.Tool {
 	case "write_file":
 		return insideSpace(s.cfg.Space, inputField(req.Input, "path"))
-	case "bash":
+	case "bash", "bash_background", "monitor":
 		return !s.asks(inputField(req.Input, "command"))
 	}
 	return true

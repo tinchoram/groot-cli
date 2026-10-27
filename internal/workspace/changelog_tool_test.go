@@ -11,7 +11,7 @@ import (
 
 func TestBuildToolsRegistersReadChangelog(t *testing.T) {
 	w := &Workspace{}
-	reg, err := w.buildTools(t.TempDir(), []string{"read_changelog"}, nil, nil, nil, nil, debugAgent)
+	reg, err := w.buildTools(t.TempDir(), []string{"read_changelog"}, nil, nil, nil, nil, nil, debugAgent)
 	if err != nil {
 		t.Fatalf("buildTools: %v", err)
 	}

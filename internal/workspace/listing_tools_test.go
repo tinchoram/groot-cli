@@ -11,7 +11,7 @@ import (
 
 func TestBuildToolsRegistersTheReadOnlyListing(t *testing.T) {
 	w := &Workspace{}
-	reg, err := w.buildTools(t.TempDir(), []string{"list_dir", "glob"}, nil, nil, nil, nil, "reader")
+	reg, err := w.buildTools(t.TempDir(), []string{"list_dir", "glob"}, nil, nil, nil, nil, nil, "reader")
 	if err != nil {
 		t.Fatalf("buildTools: %v", err)
 	}

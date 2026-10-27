@@ -27,6 +27,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/flowgate"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
+	"github.com/tinchoram/groot-cli/internal/jobs"
 	"github.com/tinchoram/groot-cli/internal/mcp"
 	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/provider"
@@ -536,6 +537,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	key := sp.Name + "/" + agentName
 	files := &fileLog{}
 	box := &reviewBox{}
+	jm := jobs.NewManager(jobs.DefaultLimit, nil)
 	work, err := w.workStateFor(key, sp.Path, prov)
 	if err != nil {
 		return nil, err
@@ -562,7 +564,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	// without any: the MCP servers are reached in the background (attachMCP), so
 	// a slow server never holds the open.
 	build := func(names []string, extra []tool.Tool) (*tool.Registry, error) {
-		reg, err := w.buildTools(sp.Path, names, mem, w.messengerFor(sp.Name, agentName), ctl, files, agentName)
+		reg, err := w.buildTools(sp.Path, names, mem, w.messengerFor(sp.Name, agentName), ctl, files, jm, agentName)
 		if err != nil {
 			return nil, err
 		}
@@ -651,7 +653,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		Limit: func(ctx context.Context) error { return conv.checkBudget(ctx, 0) },
 	}
 	resumed := w.startOrResume(ctx, ag, st.mem, agentName)
-	conv = &Conversation{Agent: ag, prov: prov, store: mem.store, mem: mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, rebuildSystem: rebuildSystem, work: work, files: files, review: box,
+	conv = &Conversation{Agent: ag, prov: prov, store: mem.store, mem: mem, name: agentName, space: sp.Name, inbox: w.inbox, resumed: resumed, ctl: ctl, baseSystem: ag.System, rebuildSystem: rebuildSystem, work: work, files: files, jobs: jm, review: box,
 		startModel: prov.Model(), revertWarn: keyedWarn(w.opts.Hooks, key), rebuildTools: rebuild,
 		toolNames:    slices.Clone(def.Tools),
 		clock:        w.opts.Now,

@@ -37,7 +37,7 @@ func TestGrootPromptDescribesDeletesAndRenames(t *testing.T) {
 func TestEditToolsAreBuiltForAnAgent(t *testing.T) {
 	f := newFixture(t)
 	f.ws.mu.Lock()
-	reg, err := f.ws.buildTools(f.dir, editTools, nil, nil, nil, &fileLog{}, managedAgent)
+	reg, err := f.ws.buildTools(f.dir, editTools, nil, nil, nil, &fileLog{}, nil, managedAgent)
 	f.ws.mu.Unlock()
 	if err != nil {
 		t.Fatalf("buildTools: %v", err)

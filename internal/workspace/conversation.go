@@ -17,6 +17,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/flow"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
+	"github.com/tinchoram/groot-cli/internal/jobs"
 	"github.com/tinchoram/groot-cli/internal/mcp"
 	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/provider"
@@ -58,9 +59,11 @@ type Conversation struct {
 	// resumed is set when the conversation continued a stored session.
 	resumed *Resumed
 	// ctl enforces the ODD flow; baseSystem is the prompt before the flow block.
-	ctl       *flow.Controller
-	work      *gate.WorkState
-	files     *fileLog
+	ctl   *flow.Controller
+	work  *gate.WorkState
+	files *fileLog
+	// jobs are the background jobs of this conversation: they die with it.
+	jobs      *jobs.Manager
 	review    *reviewBox
 	busy      atomic.Bool  // a turn is running: UI-driven or triggered by a message
 	autoTurns atomic.Int64 // turns triggered by messages in this session
@@ -339,16 +342,43 @@ func tail(s string, n int) string {
 	return string(r[len(r)-n:])
 }
 
+// bashTool returns the bash tool of a space with the bash settings of the config.
+// The background job tools use the same tool, so they share its sandbox.
+func (w *Workspace) bashTool(root string) *tool.Bash {
+	b := tool.NewBash(root)
+	b.Timeout = w.opts.Config.Bash.Timeout
+	b.MaxTimeout = w.opts.Config.Bash.MaxTimeout
+	b.Runner = w.opts.Sandbox
+	b.Network = w.opts.Config.Bash.Sandbox.Network
+	b.ExtraWritable = w.opts.Config.Bash.Sandbox.ExtraWritable
+	return b
+}
+
+// newJobTool returns one of the background job tools, bound to the conversation's jobs.
+func newJobTool(name string, b *tool.Bash, jm *jobs.Manager) tool.Tool {
+	switch name {
+	case "bash_background":
+		return tool.NewBashBackground(b, jm)
+	case "monitor":
+		return tool.NewMonitor(b, jm)
+	case "job_output":
+		return tool.NewJobOutput(jm, b.Dir)
+	case "job_stop":
+		return tool.NewJobStop(jm)
+	}
+	return tool.NewJobList(jm)
+}
+
 // buildTools creates the registry an agent may use. root confines file tools
 // and sets the working directory for bash, so it is the space path.
-func (w *Workspace) buildTools(root string, names []string, mem *memoryState, msg tool.Messenger, ctl *flow.Controller, files *fileLog, agentName string) (*tool.Registry, error) {
+func (w *Workspace) buildTools(root string, names []string, mem *memoryState, msg tool.Messenger, ctl *flow.Controller, files *fileLog, jm *jobs.Manager, agentName string) (*tool.Registry, error) {
 	reg := tool.NewRegistry()
 	for _, n := range names {
 		// MCP names are served by mcpTools, from the space's manager.
 		if _, _, ok := mcp.SplitToolName(n); ok {
 			continue
 		}
-		t, err := w.newTool(n, root, mem, msg, ctl, files, agentName)
+		t, err := w.newTool(n, root, mem, msg, ctl, files, jm, agentName)
 		if err != nil {
 			return nil, err
 		}
@@ -359,7 +389,7 @@ func (w *Workspace) buildTools(root string, names []string, mem *memoryState, ms
 	return reg, nil
 }
 
-func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messenger, ctl *flow.Controller, files *fileLog, agentName string) (tool.Tool, error) {
+func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messenger, ctl *flow.Controller, files *fileLog, jm *jobs.Manager, agentName string) (tool.Tool, error) {
 	switch name {
 	case "task_classify", "task_open", "task_advance", "task_verify", "task_status":
 		if ctl == nil {
@@ -417,16 +447,16 @@ func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messen
 		}
 		return trackedTool{Tool: tool.NewWriteFile(root), log: files}, nil
 	case "bash":
-		b := tool.NewBash(root)
-		b.Timeout = w.opts.Config.Bash.Timeout
-		b.MaxTimeout = w.opts.Config.Bash.MaxTimeout
-		b.Runner = w.opts.Sandbox
-		b.Network = w.opts.Config.Bash.Sandbox.Network
-		b.ExtraWritable = w.opts.Config.Bash.Sandbox.ExtraWritable
+		b := w.bashTool(root)
 		if ctl == nil {
 			return b, nil
 		}
 		return recordingTool{Tool: b, ctl: ctl}, nil
+	case "bash_background", "monitor", "job_list", "job_output", "job_stop":
+		if jm == nil {
+			return nil, errors.New("background jobs are not available")
+		}
+		return newJobTool(name, w.bashTool(root), jm), nil
 	case "kubectl":
 		k := tool.NewKubectl("kubectl", w.opts.Config.Kubectl.Namespaces)
 		k.OutDir = root

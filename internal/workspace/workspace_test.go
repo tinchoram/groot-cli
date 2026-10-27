@@ -246,7 +246,7 @@ func TestAssignRequiresCatalogEntry(t *testing.T) {
 
 func TestBuildToolsRejectsUnknownNames(t *testing.T) {
 	f := newFixture(t)
-	if _, err := f.ws.buildTools(f.dir, []string{"teleport"}, nil, nil, nil, nil, "reader"); err == nil {
+	if _, err := f.ws.buildTools(f.dir, []string{"teleport"}, nil, nil, nil, nil, nil, "reader"); err == nil {
 		t.Fatal("unknown tool must be rejected")
 	}
 }

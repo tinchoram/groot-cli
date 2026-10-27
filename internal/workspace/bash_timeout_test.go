@@ -17,7 +17,7 @@ func TestBashToolGetsConfiguredTimeouts(t *testing.T) {
 	cfg.Bash.Timeout = 90 * time.Second
 	cfg.Bash.MaxTimeout = 20 * time.Minute
 	w := &Workspace{opts: Options{Config: cfg}}
-	tl, err := w.newTool("bash", t.TempDir(), nil, nil, nil, nil, "reader")
+	tl, err := w.newTool("bash", t.TempDir(), nil, nil, nil, nil, nil, "reader")
 	if err != nil {
 		t.Fatal(err)
 	}

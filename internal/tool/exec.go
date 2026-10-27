@@ -178,51 +178,82 @@ func (b *Bash) execute(ctx context.Context, input string) (string, bool) {
 	if err := json.Unmarshal([]byte(input), &in); err != nil || strings.TrimSpace(in.Command) == "" {
 		return "invalid input: a non-empty command is required", true
 	}
+	timeout, notice, err := b.callTimeout(in.TimeoutSeconds)
+	if err != nil {
+		return err.Error(), true
+	}
+	out, isErr := b.run(ctx, in.Command, timeout, b.maxTimeout())
+	return notice + out, isErr
+}
+
+// maxTimeout is the ceiling for timeout_seconds, the default when unset.
+func (b *Bash) maxTimeout() time.Duration {
+	if b.MaxTimeout <= 0 {
+		return defaultExecMaxTimeout
+	}
+	return b.MaxTimeout
+}
+
+// callTimeout resolves the timeout_seconds of a call: the configured timeout
+// when the call names none, the value when it fits the ceiling, and the ceiling
+// when it does not, with a notice that says so.
+func (b *Bash) callTimeout(secs *int) (time.Duration, string, error) {
 	timeout := b.Timeout
 	if timeout <= 0 {
 		timeout = defaultExecTimeout
 	}
-	maxTimeout := b.MaxTimeout
-	if maxTimeout <= 0 {
-		maxTimeout = defaultExecMaxTimeout
+	if secs == nil {
+		return timeout, "", nil
 	}
-	var notice string
-	if in.TimeoutSeconds != nil {
-		secs := *in.TimeoutSeconds
-		if secs <= 0 {
-			return "invalid input: timeout_seconds must be a positive integer", true
-		}
-		maxSecs := int(maxTimeout / time.Second)
-		if secs > maxSecs {
-			notice = fmt.Sprintf("[bash: timeout_seconds %d clamped to %d]\n", secs, maxSecs)
-			timeout = maxTimeout
-		} else {
-			timeout = time.Duration(secs) * time.Second
-		}
+	if *secs <= 0 {
+		return 0, "", errors.New("invalid input: timeout_seconds must be a positive integer")
 	}
-	out, isErr := b.run(ctx, in.Command, timeout, maxTimeout)
-	return notice + out, isErr
+	maxTimeout := b.maxTimeout()
+	maxSecs := int(maxTimeout / time.Second)
+	if *secs > maxSecs {
+		return maxTimeout, fmt.Sprintf("[bash: timeout_seconds %d clamped to %d]\n", *secs, maxSecs), nil
+	}
+	return time.Duration(*secs) * time.Second, "", nil
 }
 
-func (b *Bash) run(ctx context.Context, command string, timeout, maxTimeout time.Duration) (string, bool) {
-	argv := []string{"sh", "-c", command}
-	if b.Runner == nil {
-		res := runCapped(ctx, timeout, b.Dir, argv[0], argv[1:]...)
-		return describeBash(res, timeout, maxTimeout)
-	}
+// sandboxSpec describes one `sh -c` command for the Runner: the working
+// directory, the network and the extra writable paths of the bash settings.
+// Foreground and background commands both use it, so they get the same sandbox.
+func (b *Bash) sandboxSpec(command string) shellsandbox.Spec {
 	dir := b.Dir
 	if dir == "" {
 		dir, _ = os.Getwd()
 	}
-	spec := shellsandbox.Spec{
+	return shellsandbox.Spec{
 		Dir:           dir,
-		Command:       argv,
+		Command:       []string{"sh", "-c", command},
 		AllowNetwork:  b.Network,
 		WritablePaths: append([]string{dir}, b.ExtraWritable...),
 	}
-	res := runCmd(ctx, timeout, func(c context.Context) (*exec.Cmd, error) {
+}
+
+// buildCommand returns the builder of one command for runCmd or a job: the
+// Runner wraps it, or without a Runner it runs unwrapped in Dir.
+func (b *Bash) buildCommand(command string) func(context.Context) (*exec.Cmd, error) {
+	if b.Runner == nil {
+		return func(c context.Context) (*exec.Cmd, error) {
+			cmd := exec.CommandContext(c, "sh", "-c", command)
+			cmd.Dir = b.Dir
+			return cmd, nil
+		}
+	}
+	spec := b.sandboxSpec(command)
+	return func(c context.Context) (*exec.Cmd, error) {
 		return b.Runner.Wrap(c, spec)
-	})
+	}
+}
+
+func (b *Bash) run(ctx context.Context, command string, timeout, maxTimeout time.Duration) (string, bool) {
+	if b.Runner == nil {
+		res := runCapped(ctx, timeout, b.Dir, "sh", "-c", command)
+		return describeBash(res, timeout, maxTimeout)
+	}
+	res := runCmd(ctx, timeout, b.buildCommand(command))
 	out, isErr := describeBash(res, timeout, maxTimeout)
 	if b.Runner.Name() == shellsandbox.BackendNone && res.startErr == nil {
 		out = noSandboxNotice + "\n" + out

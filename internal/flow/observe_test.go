@@ -29,6 +29,7 @@ var observedTable = map[string]Phase{
 // admin tools.
 var silentTools = []string{
 	"task_classify", "task_open", "task_advance", "remember", "forget", "update_memory",
+	"bash_background", "monitor", "job_list", "job_output", "job_stop",
 	"feedback_report", "feedback_list", "feedback_update", "read_changelog", "current_time",
 	"list_spaces", "create_space", "assign_agent", "unassign_agent", "list_agents", "create_agent",
 	"import_agent", "list_library", "install_agent", "upgrade_agent", "set_work_mode",
