@@ -35,6 +35,12 @@ type ptyTerminal struct {
 	emu   *vt.Emulator
 	alive atomic.Bool
 
+	// closing is set by Close. The reply pump owns the emulator's reader side,
+	// so it is the one that closes the emulator: vt.Emulator keeps its closed
+	// flag without a lock, and Read and Close from two goroutines would race.
+	closing     atomic.Bool
+	repliesDone chan struct{}
+
 	// Mode flags kept up to date by the emulator's callbacks.
 	tracking  atomic.Bool
 	bracketed atomic.Bool
@@ -100,8 +106,9 @@ func (p *ptyTerminal) Start(cols, rows int, dir string) error {
 	})
 	p.ptmx, p.cmd, p.emu = ptmx, cmd, emu
 	p.alive.Store(true)
+	p.repliesDone = make(chan struct{})
 	go p.pumpOutput(ptmx)
-	go p.pumpReplies(emu, ptmx)
+	go p.pumpReplies(emu, ptmx, p.repliesDone)
 	return nil
 }
 
@@ -133,11 +140,21 @@ func (p *ptyTerminal) pumpOutput(ptmx *os.File) {
 }
 
 // pumpReplies sends the emulator's answers (cursor reports, pastes and mouse
-// reports written into its input pipe) back to the shell.
-func (p *ptyTerminal) pumpReplies(emu *vt.Emulator, ptmx *os.File) {
+// reports written into its input pipe) back to the shell. It is the only
+// reader of the emulator, so it closes the emulator when Close asks for it:
+// Close wakes it with one byte that is dropped instead of forwarded.
+func (p *ptyTerminal) pumpReplies(emu *vt.Emulator, ptmx *os.File, done chan<- struct{}) {
+	defer close(done)
 	buf := make([]byte, 256)
 	for {
 		n, err := emu.Read(buf)
+		if p.closing.Load() {
+			// Under mu, so the output pump's writes are ordered before it.
+			p.mu.Lock()
+			_ = emu.Close()
+			p.mu.Unlock()
+			return
+		}
 		if n > 0 {
 			_, _ = ptmx.Write(buf[:n])
 		}
@@ -236,7 +253,6 @@ func (p *ptyTerminal) Alive() bool { return p.alive.Load() }
 
 func (p *ptyTerminal) Close() error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.alive.Store(false)
 	if p.ptmx != nil {
 		_ = p.ptmx.Close()
@@ -246,8 +262,18 @@ func (p *ptyTerminal) Close() error {
 		_ = p.cmd.Process.Kill()
 		_ = p.cmd.Wait()
 	}
-	if p.emu != nil {
-		_ = p.emu.Close()
+	emu, done := p.emu, p.repliesDone
+	p.mu.Unlock()
+	if emu == nil {
+		return nil
 	}
+	if p.closing.CompareAndSwap(false, true) {
+		// Wake the reply pump outside mu: the pipe write returns once the
+		// pump has read it, and the pump then takes mu to close the emulator.
+		// When the pump is already gone the pipe is closed and the write
+		// returns at once.
+		_, _ = emu.InputPipe().Write([]byte{0})
+	}
+	<-done
 	return nil
 }

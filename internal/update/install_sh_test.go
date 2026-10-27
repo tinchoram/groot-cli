@@ -67,7 +67,8 @@ func newInstallRelease(t *testing.T, gated bool, archName string, archive, sums 
 	t.Helper()
 	files := map[string][]byte{archName: archive, ChecksumsName: sums}
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Unstarted, so no handler goroutine can read srv before it is assigned.
+	srv = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hidden := gated && r.Header.Get("Authorization") != "Bearer "+testToken
 		send := func(name string) {
 			body, ok := files[name]
@@ -108,6 +109,7 @@ func newInstallRelease(t *testing.T, gated bool, archName string, archive, sums 
 			http.NotFound(w, r)
 		}
 	}))
+	srv.Start()
 	t.Cleanup(srv.Close)
 	return srv
 }
