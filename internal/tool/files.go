@@ -159,8 +159,8 @@ func NewReadFile(root string) *ReadFile {
 func (*ReadFile) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "read_file",
-		Description: "Read a text file inside the working directory. Up to 64 KB per call; larger files say so in the first line and are read in parts with offset.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","description":"Path relative to the working directory"},"offset":{"type":"integer","description":"Byte offset to start reading at (default 0)"},"limit":{"type":"integer","description":"Maximum bytes to return (default 65536, max 65536)"}},"required":["path"]}`),
+		Description: "Read a text file inside the working directory and return its contents. Use it to read a known path, a window of a long file, or a saved output under .groot/outputs; use glob or list_dir first when you do not know the path. Paths outside the working directory are refused. Each call returns up to 64 KB; a larger file says so in its first line, and you continue with offset.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","description":"Path relative to the working directory, or an absolute path inside it"},"offset":{"type":"integer","description":"Byte offset to start reading at; default 0"},"limit":{"type":"integer","description":"Maximum bytes to return; default 65536, which is also the maximum"}},"required":["path"]}`),
 	}
 }
 
@@ -270,8 +270,8 @@ func NewWriteFile(root string) *WriteFile {
 func (*WriteFile) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "write_file",
-		Description: "Create or overwrite a file inside the working directory. The user reviews a diff and must approve.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}`),
+		Description: "Create or overwrite a text file inside the working directory with the full content you give. Use it for new files and complete rewrites; for a change that is scripted or touches many files, use bash. The user sees a diff and must approve it before anything is written. Paths outside the working directory are refused, and a successful call reports the bytes written.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","description":"File path relative to the working directory; missing parent directories are created"},"content":{"type":"string","description":"The complete new file content, replacing any previous content"}},"required":["path","content"]}`),
 	}
 }
 

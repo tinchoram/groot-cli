@@ -7,13 +7,13 @@ import (
 	"github.com/tinchoram/groot-cli/internal/tool"
 )
 
-const toolEditSchema = `{"type":"object","properties":{"agent":{"type":"string"},"tool":{"type":"string"}},"required":["agent","tool"],"additionalProperties":false}`
+const toolEditSchema = `{"type":"object","properties":{"agent":{"type":"string","description":"Agent name, as list_agents shows it"},"tool":{"type":"string","description":"Builtin tool name, such as bash or recall"}},"required":["agent","tool"],"additionalProperties":false}`
 
 // NewGrantTool returns grant_tool: it gives an agent one tool. Admin tools are
 // granted the same way, but only to agents the user has not protected.
 func NewGrantTool(m Manager) tool.Tool {
 	return toolEdit{base{"grant_tool",
-		"Give an agent one tool it does not have yet. The change is saved in the agent's file and applies right away, including its open conversations, which keep their session.",
+		"Give an agent one tool it does not have yet. The change is saved in the agent's file and applies right away, including its open conversations, which keep their session. Use revoke_tool to take a tool away again.",
 		toolEditSchema, tool.RiskWrite}, m, true}
 }
 
@@ -21,7 +21,7 @@ func NewGrantTool(m Manager) tool.Tool {
 // required tools of the managed agents cannot be taken away.
 func NewRevokeTool(m Manager) tool.Tool {
 	return toolEdit{base{"revoke_tool",
-		"Take one tool away from an agent. The change is saved in the agent's file and applies right away, including its open conversations, which keep their session.",
+		"Take one tool away from an agent. The change is saved in the agent's file and applies right away, including its open conversations, which keep their session. Use grant_tool to give it back.",
 		toolEditSchema, tool.RiskWrite}, m, false}
 }
 

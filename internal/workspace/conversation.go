@@ -384,11 +384,13 @@ func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messen
 		return tool.NewReadChangelog(changelog.Text), nil
 	case "fetch_url":
 		fc := w.opts.Config.Fetch
-		return tool.NewFetch(w.opts.Version, tool.FetchPolicy{
+		f := tool.NewFetch(w.opts.Version, tool.FetchPolicy{
 			AllowPrivate: fc.AllowPrivate,
 			Allow:        fc.Allow,
 			Deny:         fc.Deny,
-		}), nil
+		})
+		f.OutDir = root
+		return f, nil
 	case "feedback_update":
 		return tool.NewFeedbackUpdate(w.feedback), nil
 	case "send_message":
@@ -426,7 +428,9 @@ func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messen
 		}
 		return recordingTool{Tool: b, ctl: ctl}, nil
 	case "kubectl":
-		return tool.NewKubectl("kubectl", w.opts.Config.Kubectl.Namespaces), nil
+		k := tool.NewKubectl("kubectl", w.opts.Config.Kubectl.Namespaces)
+		k.OutDir = root
+		return k, nil
 	case "remember":
 		return tool.NewRemember(mem.access()), nil
 	case "recall":

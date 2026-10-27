@@ -31,8 +31,13 @@ type feedbackReportInput struct {
 func (*FeedbackReport) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "feedback_report",
-		Description: "Write a bug or a feature request about Groot itself into the backlog. type is bug or feat. Give a short title and a body with the steps, the expected and the actual behaviour.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"type":{"type":"string","enum":["bug","feat"]},"title":{"type":"string"},"body":{"type":"string"},"area":{"type":"string"}},"required":["type","title"]}`),
+		Description: "Write a bug or a feature request about Groot itself into the backlog. Use it when the user reports a defect in groot or asks for a groot feature, after feedback_list has shown no duplicate. Give a short title and a body with the steps, the expected behavior and the actual behavior. Problems in the user's own project do not belong here; handle them in the conversation.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"type":{"type":"string","enum":["bug","feat"],"description":"bug or feat"},` +
+			`"title":{"type":"string","description":"One-line summary of the report"},` +
+			`"body":{"type":"string","description":"Steps to reproduce, the expected behavior and the actual behavior; optional but advised"},` +
+			`"area":{"type":"string","description":"The part of groot concerned, such as tui or tools; optional"}},` +
+			`"required":["type","title"]}`),
 	}
 }
 
@@ -70,8 +75,8 @@ func NewFeedbackList(store *feedback.Store) *FeedbackList { return &FeedbackList
 func (*FeedbackList) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "feedback_list",
-		Description: "List the backlog of bugs and feature requests about Groot, optionally by status (open, in_progress, done, wontfix). Use it to find duplicates before reporting.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"status":{"type":"string"}}}`),
+		Description: "List the backlog of bugs and feature requests about Groot, optionally filtered by status. Use it to find duplicates before feedback_report, or to check the state of an item the user mentions. It only reads the backlog and changes nothing.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"status":{"type":"string","description":"open, in_progress, done or wontfix; omit for every item"}}}`),
 	}
 }
 
@@ -113,8 +118,12 @@ func NewFeedbackUpdate(store *feedback.Store) *FeedbackUpdate {
 func (*FeedbackUpdate) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "feedback_update",
-		Description: "Set the status of a backlog item (open, in_progress, done, wontfix) and add an optional note. Use it when the user says an item is done or dropped.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"status":{"type":"string","enum":["open","in_progress","done","wontfix"]},"note":{"type":"string"}},"required":["id","status"]}`),
+		Description: "Set the status of one backlog item and add an optional note. Use it when the user says an item is done or dropped, after feedback_list has shown its id. It changes only the status and the note; use feedback_report to file a new item.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"id":{"type":"string","description":"Backlog item id, as feedback_list shows it"},` +
+			`"status":{"type":"string","enum":["open","in_progress","done","wontfix"],"description":"open, in_progress, done or wontfix"},` +
+			`"note":{"type":"string","description":"Free-text note recorded with the change; optional"}},` +
+			`"required":["id","status"]}`),
 	}
 }
 

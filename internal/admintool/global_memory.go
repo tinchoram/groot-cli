@@ -7,14 +7,14 @@ import (
 	"github.com/tinchoram/groot-cli/internal/tool"
 )
 
-const globalMemorySchema = `{"type":"object","properties":{"agent":{"type":"string"}},"required":["agent"],"additionalProperties":false}`
+const globalMemorySchema = `{"type":"object","properties":{"agent":{"type":"string","description":"Agent name, as list_agents shows it"}},"required":["agent"],"additionalProperties":false}`
 
 // NewGrantGlobalMemoryTool returns grant_global_memory: it lets an agent read the
 // global memory of the root database. The change is saved in the agent's file and
 // applies to its open conversations right away.
 func NewGrantGlobalMemoryTool(m Manager) tool.Tool {
 	return globalMemoryTool{base{"grant_global_memory",
-		"Let an agent read global memory (entries that groot keeps for every space). The change is saved in the agent's file and applies right away, including its open conversations.",
+		"Let an agent read global memory, the entries that groot keeps for every space. The change is saved in the agent's file and applies right away, including its open conversations. Use revoke_global_memory to stop it.",
 		globalMemorySchema, tool.RiskWrite}, m, true}
 }
 
@@ -22,7 +22,7 @@ func NewGrantGlobalMemoryTool(m Manager) tool.Tool {
 // away from an agent. groot always reads it and cannot lose it.
 func NewRevokeGlobalMemoryTool(m Manager) tool.Tool {
 	return globalMemoryTool{base{"revoke_global_memory",
-		"Stop an agent from reading global memory. The change is saved in the agent's file and applies right away, including its open conversations. groot always reads global memory.",
+		"Stop an agent from reading global memory. The change is saved in the agent's file and applies right away, including its open conversations. groot always reads global memory, so it cannot be revoked.",
 		globalMemorySchema, tool.RiskWrite}, m, false}
 }
 

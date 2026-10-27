@@ -15,14 +15,14 @@ type budgetInput struct {
 	USD   *float64 `json:"usd"`
 }
 
-const budgetSchemaUSD = `"usd":{"type":"number","minimum":0,"description":"dollars; 0 clears the budget"}`
+const budgetSchemaUSD = `"usd":{"type":"number","minimum":0,"description":"Budget in US dollars; 0 clears it"}`
 
 // NewSetSpaceBudget returns set_space_budget: it caps the total spend of all
 // agents of one space.
 func NewSetSpaceBudget(m Manager) tool.Tool {
 	return setSpaceBudget{base{"set_space_budget",
-		"Set the spend budget of one space: the total that all its agents may spend in it, in dollars. Zero clears it. When the budget is spent, the agents of that space stop before their next model call until the budget is raised.",
-		`{"type":"object","properties":{"space":{"type":"string"},` + budgetSchemaUSD + `},"required":["space","usd"],"additionalProperties":false}`,
+		"Set the spend budget of one space: the total in dollars that all its agents may spend there. Zero clears it. When the budget is spent, its agents stop before their next model call until the budget is raised.",
+		`{"type":"object","properties":{"space":{"type":"string","description":"Space whose budget changes"},` + budgetSchemaUSD + `},"required":["space","usd"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -66,8 +66,8 @@ func (t setSpaceBudget) Execute(_ context.Context, input string) (string, bool) 
 // every space it works in.
 func NewSetAgentBudget(m Manager) tool.Tool {
 	return setAgentBudget{base{"set_agent_budget",
-		"Set the spend budget of one agent, in dollars, counted per space. Zero clears it. When the agent's budget is spent in a space, the agent stops before its next model call there until the budget is raised.",
-		`{"type":"object","properties":{"agent":{"type":"string"},` + budgetSchemaUSD + `},"required":["agent","usd"],"additionalProperties":false}`,
+		"Set the spend budget of one agent, in dollars, counted separately in each space. Zero clears it. When the agent's budget is spent in a space, the agent stops there before its next model call until the budget is raised.",
+		`{"type":"object","properties":{"agent":{"type":"string","description":"Agent whose budget changes"},` + budgetSchemaUSD + `},"required":["agent","usd"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 

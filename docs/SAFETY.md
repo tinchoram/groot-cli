@@ -32,9 +32,12 @@ How groot gates tool calls, sandboxes shell commands, and treats untrusted conte
   outside the sandbox, since it needs your kubeconfig and the network.
 - **Limits.** Commands time out after 60 seconds by default. A bash call can pass
   `timeout_seconds` to run a test suite or build longer, up to `bash.max_timeout`.
-  Output is capped (32 KB for
-  bash, 64 KB for kubectl). `read_file` returns 64 KB per call and takes `offset`
-  and `limit` in bytes to read the rest of a larger file.
+  Output up to 30,000 characters comes back inline. Longer output from `bash`,
+  `kubectl` and `fetch_url` is saved in full under `<space>/.groot/outputs/` (mode
+  0600, at most 50 files per space, files older than 7 days removed), and the
+  result keeps the first 2,000 and the last 500 characters with the file path.
+  `read_file` returns 64 KB per call and takes `offset` and `limit` in bytes to
+  read a saved file or any larger one.
 - **Redaction.** Obvious secrets (`password=`, `token:`, `api_key=`, `Bearer`)
   are masked in tool output, previews and the audit log.
 - **Audit.** Every tool call is logged in a JSON line, readable with `/audit` and

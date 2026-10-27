@@ -19,11 +19,11 @@ import (
 const (
 	defaultExecTimeout    = 60 * time.Second
 	defaultExecMaxTimeout = 10 * time.Minute
-	bashOutputLimit       = 32 * 1024
-	kubectlOutputLimit    = 64 * 1024
 )
 
 // cappedBuffer keeps at most limit bytes and records that it dropped the rest.
+// The limit is maxCapturedOutput: the saved output of a call is the full text
+// up to that ceiling (see finishOutput).
 type cappedBuffer struct {
 	buf       bytes.Buffer
 	limit     int
@@ -48,7 +48,7 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 func (c *cappedBuffer) String() string {
 	s := c.buf.String()
 	if c.truncated {
-		s += fmt.Sprintf("\n... [output truncated at %d KB]", c.limit/1024)
+		s += fmt.Sprintf("\n... [output capture stopped at %d MiB]", c.limit>>20)
 	}
 	return s
 }
@@ -62,8 +62,8 @@ type runResult struct {
 
 // runCapped runs a process with a timeout, capped output, and a process group
 // kill so that children (for example `sleep` under `sh -c`) die with it.
-func runCapped(ctx context.Context, timeout time.Duration, outLimit int, dir, name string, args ...string) runResult {
-	return runCmd(ctx, timeout, outLimit, func(c context.Context) (*exec.Cmd, error) {
+func runCapped(ctx context.Context, timeout time.Duration, dir, name string, args ...string) runResult {
+	return runCmd(ctx, timeout, func(c context.Context) (*exec.Cmd, error) {
 		cmd := exec.CommandContext(c, name, args...)
 		cmd.Dir = dir
 		return cmd, nil
@@ -73,7 +73,7 @@ func runCapped(ctx context.Context, timeout time.Duration, outLimit int, dir, na
 // runCmd runs the command that build returns, with the limits of runCapped.
 // build receives the context that carries the timeout, so a sandbox wrapper
 // can bind the command to it.
-func runCmd(ctx context.Context, timeout time.Duration, outLimit int, build func(context.Context) (*exec.Cmd, error)) runResult {
+func runCmd(ctx context.Context, timeout time.Duration, build func(context.Context) (*exec.Cmd, error)) runResult {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -90,7 +90,7 @@ func runCmd(ctx context.Context, timeout time.Duration, outLimit int, build func
 	}
 	cmd.WaitDelay = time.Second
 
-	out := &cappedBuffer{limit: outLimit}
+	out := &cappedBuffer{limit: maxCapturedOutput}
 	cmd.Stdout = out
 	cmd.Stderr = out
 
@@ -147,8 +147,11 @@ type commandInput struct {
 func (*Bash) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "bash",
-		Description: "Run a shell command in the space. Default timeout 60s; pass timeout_seconds (up to the configured maximum, default 600) for test suites or builds instead of backgrounding them and polling.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer"}},"required":["command"]}`),
+		Description: "Run a shell command with sh -c in the space and return its output and exit code. Use it for builds, tests, git and command-line tools that no other tool covers; for reading files and searching names, prefer read_file, list_dir or glob. A command still running at its timeout is stopped, so pass timeout_seconds for a slow test suite instead of backgrounding it. Output over 30,000 characters is saved in full under .groot/outputs and the result names the file; a non-zero exit is reported as an error.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"command":{"type":"string","description":"The shell command line, run with sh -c in the space directory"},` +
+			`"timeout_seconds":{"type":"integer","description":"Seconds before the command is stopped; default 60, and the ceiling comes from the bash config (600 by default)"}},` +
+			`"required":["command"]}`),
 	}
 }
 
@@ -167,7 +170,7 @@ func (*Bash) Preview(input string) string {
 
 func (b *Bash) Execute(ctx context.Context, input string) (string, bool) {
 	out, isErr := b.execute(ctx, input)
-	return Redact(out), isErr
+	return finishOutput(b.Dir, "bash", out), isErr
 }
 
 func (b *Bash) execute(ctx context.Context, input string) (string, bool) {
@@ -204,7 +207,7 @@ func (b *Bash) execute(ctx context.Context, input string) (string, bool) {
 func (b *Bash) run(ctx context.Context, command string, timeout, maxTimeout time.Duration) (string, bool) {
 	argv := []string{"sh", "-c", command}
 	if b.Runner == nil {
-		res := runCapped(ctx, timeout, bashOutputLimit, b.Dir, argv[0], argv[1:]...)
+		res := runCapped(ctx, timeout, b.Dir, argv[0], argv[1:]...)
 		return describeBash(res, timeout, maxTimeout)
 	}
 	dir := b.Dir
@@ -217,7 +220,7 @@ func (b *Bash) run(ctx context.Context, command string, timeout, maxTimeout time
 		AllowNetwork:  b.Network,
 		WritablePaths: append([]string{dir}, b.ExtraWritable...),
 	}
-	res := runCmd(ctx, timeout, bashOutputLimit, func(c context.Context) (*exec.Cmd, error) {
+	res := runCmd(ctx, timeout, func(c context.Context) (*exec.Cmd, error) {
 		return b.Runner.Wrap(c, spec)
 	})
 	out, isErr := describeBash(res, timeout, maxTimeout)
@@ -263,6 +266,7 @@ type Kubectl struct {
 	Binary     string
 	Namespaces []string
 	Timeout    time.Duration
+	OutDir     string // space dir whose .groot/outputs keeps long output; empty means the working directory
 }
 
 // NewKubectl returns the kubectl tool. An empty binary means "kubectl" on PATH.
@@ -361,8 +365,8 @@ func contains(list []string, v string) bool {
 func (*Kubectl) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "kubectl",
-		Description: "Run a read-only kubectl command. Pass args as an array, without the leading 'kubectl'. Allowed verbs: get, describe, logs, top, version, api-resources, explain.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"args":{"type":"array","items":{"type":"string"},"description":"Arguments, e.g. [\"get\",\"pods\",\"-n\",\"prod\"]"}},"required":["args"]}`),
+		Description: "Run a read-only kubectl command against the configured cluster and return its output. Use it to inspect pods, logs, events, resource usage and API resources; use bash only for work this tool cannot do. Verbs other than get, describe, logs, top, version, api-resources and explain, credential or cluster overrides, and namespaces outside the configured allowlist are refused before anything runs. Output over 30,000 characters is saved in full under .groot/outputs and the result names the file.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"args":{"type":"array","items":{"type":"string"},"description":"Arguments as strings, without the leading kubectl, for example [\"get\",\"pods\",\"-n\",\"prod\"]"}},"required":["args"]}`),
 	}
 }
 
@@ -381,7 +385,7 @@ func (*Kubectl) Preview(input string) string {
 
 func (k *Kubectl) Execute(ctx context.Context, input string) (string, bool) {
 	out, isErr := k.execute(ctx, input)
-	return Redact(out), isErr
+	return finishOutput(k.OutDir, "kubectl", out), isErr
 }
 
 func (k *Kubectl) execute(ctx context.Context, input string) (string, bool) {
@@ -400,7 +404,7 @@ func (k *Kubectl) execute(ctx context.Context, input string) (string, bool) {
 	if timeout <= 0 {
 		timeout = defaultExecTimeout
 	}
-	res := runCapped(ctx, timeout, kubectlOutputLimit, "", path, in.Args...)
+	res := runCapped(ctx, timeout, "", path, in.Args...)
 	return describeResult(res, timeout, "kubectl")
 }
 

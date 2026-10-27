@@ -11,8 +11,8 @@ import (
 // run commands that are not on the always-ask list, within its limits.
 func NewSetWorkMode(m Manager) tool.Tool {
 	return setWorkMode{base{"set_work_mode",
-		"Turn work mode on or off for an agent in a space. In work mode the agent writes inside its space and runs commands without asking, within the configured limits; risky commands still ask.",
-		`{"type":"object","properties":{"space":{"type":"string"},"agent":{"type":"string"},"on":{"type":"boolean"}},"required":["space","agent","on"],"additionalProperties":false}`,
+		"Turn work mode on or off for an agent in a space. In work mode the agent writes inside its space and runs commands without asking, within the configured limits; risky commands still ask. Use it when the user wants an agent to work unattended in one space.",
+		`{"type":"object","properties":{"space":{"type":"string","description":"Space name"},"agent":{"type":"string","description":"Agent name"},"on":{"type":"boolean","description":"true turns work mode on, false turns it off"}},"required":["space","agent","on"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 

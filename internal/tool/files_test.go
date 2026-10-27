@@ -219,9 +219,10 @@ func TestReadFileSchemaAdvertisesWindowFields(t *testing.T) {
 	if !slices.Equal(schema.Required, []string{"path"}) {
 		t.Errorf("required = %v, want [path]", schema.Required)
 	}
-	want := "Read a text file inside the working directory. Up to 64 KB per call; larger files say so in the first line and are read in parts with offset."
-	if def.Description != want {
-		t.Errorf("description = %q", def.Description)
+	for _, phrase := range []string{"Use it to read a known path", "Each call returns up to 64 KB", "continue with offset"} {
+		if !strings.Contains(def.Description, phrase) {
+			t.Errorf("read_file description must say %q: %q", phrase, def.Description)
+		}
 	}
 }
 

@@ -35,8 +35,8 @@ type currentTimeInput struct {
 func (*CurrentTime) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "current_time",
-		Description: "Current date, time and zone. Pass an IANA timezone (for example America/Argentina/Buenos_Aires) to see that zone; with none, the local time of this machine is returned.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"timezone":{"type":"string","description":"IANA timezone name; empty for local time"}}}`),
+		Description: "Return the current date, time and zone. Use it whenever an answer depends on today's date or the time of day, instead of guessing. Pass an IANA timezone such as America/Argentina/Buenos_Aires to see that zone; with none, the local time of this machine is returned. It only reads this machine's clock.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"timezone":{"type":"string","description":"IANA timezone name, such as America/Argentina/Buenos_Aires; empty for local time"}}}`),
 	}
 }
 

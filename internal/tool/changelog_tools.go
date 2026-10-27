@@ -19,8 +19,8 @@ func NewReadChangelog(text string) *ReadChangelog { return &ReadChangelog{text: 
 func (*ReadChangelog) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "read_changelog",
-		Description: "Read the changelog of Groot itself. It is embedded in the program, so it does not depend on the space. Without version it returns the whole changelog; with version (for example 0.5.2) it returns that release's section.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"version":{"type":"string"}}}`),
+		Description: "Read the changelog of Groot itself, which is embedded in the program so it works without a space. Use it to answer what changed in a release or whether a version has a given fix; use bash for the repository history instead. Without version it returns the whole changelog; with a version such as 0.5.2 it returns that release's section.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"version":{"type":"string","description":"Release version such as 0.5.2; omit for the whole changelog"}}}`),
 	}
 }
 

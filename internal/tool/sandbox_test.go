@@ -54,6 +54,31 @@ func TestBashHandsTheSpaceAndPolicyToTheRunner(t *testing.T) {
 	}
 }
 
+func TestBashSandboxWriteRootCoversTheOutputsDir(t *testing.T) {
+	dir := t.TempDir()
+	rec := &recordRunner{name: shellsandbox.BackendBwrap}
+	b := NewBash(dir)
+	b.Runner = rec
+
+	out, isErr := b.Execute(context.Background(), `{"command":"yes x | head -c 40000"}`)
+	if isErr {
+		t.Fatalf("unexpected error: %.200q", out)
+	}
+	saved := spilledPath(t, out)
+	if !strings.HasPrefix(saved, outputsDirOf(dir)+"/") {
+		t.Fatalf("saved %q outside the outputs dir", saved)
+	}
+	covered := false
+	for _, w := range rec.spec.WritablePaths {
+		if strings.HasPrefix(outputsDirOf(dir), w+"/") || outputsDirOf(dir) == w {
+			covered = true
+		}
+	}
+	if !covered {
+		t.Fatalf("outputs dir %q not under any writable root %q", outputsDirOf(dir), rec.spec.WritablePaths)
+	}
+}
+
 func TestBashUsesProcessCwdWhenDirIsEmpty(t *testing.T) {
 	rec := &recordRunner{name: shellsandbox.BackendBwrap}
 	b := NewBash("")

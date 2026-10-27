@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -109,26 +110,41 @@ func TestFetchTruncatesToMaxChars(t *testing.T) {
 	}
 }
 
-func TestFetchDefaultMaxCharsIs32000(t *testing.T) {
+func TestFetchWithoutMaxCharsSpillsTheWholeText(t *testing.T) {
 	srv := fetchServer(t, serveBody("text/plain", strings.Repeat("b", 33000)))
+	f := NewFetch("v", allowPrivate())
+	f.OutDir = t.TempDir()
 
-	got, _ := fetchURL(t, NewFetch("v", allowPrivate()), srv.URL, 0)
-	if !strings.HasSuffix(got, "\n[truncated: 1000 more chars]") || strings.Count(got, "b") != 32000 {
-		t.Fatalf("default max_chars not applied: tail %q", got[len(got)-40:])
+	got, isErr := fetchURL(t, f, srv.URL, 0)
+	if isErr || !strings.Contains(got, "[output: 33000 characters total;") {
+		t.Fatalf("long page must spill: isErr=%v head %.80q", isErr, got)
+	}
+	saved, err := os.ReadFile(spilledPath(t, got))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(saved), "b") != 33000 {
+		t.Fatalf("saved text must hold the whole page, got %d b", strings.Count(string(saved), "b"))
 	}
 }
 
 func TestFetchCapsBodyAtOneMegabyte(t *testing.T) {
 	srv := fetchServer(t, serveBody("text/plain", strings.Repeat("c", 3<<20)))
+	f := NewFetch("v", allowPrivate())
+	f.OutDir = t.TempDir()
 
-	got, isErr := fetchURL(t, NewFetch("v", allowPrivate()), srv.URL, 4<<20)
+	got, isErr := fetchURL(t, f, srv.URL, 4<<20)
 	if isErr {
 		t.Fatalf("unexpected error: %s", got)
 	}
 	if !strings.HasSuffix(got, "[body truncated at 1 MB]") {
 		t.Fatalf("missing body cap marker, tail %q", got[len(got)-60:])
 	}
-	body := strings.TrimSuffix(got, "\n[body truncated at 1 MB]")
+	saved, err := os.ReadFile(spilledPath(t, got))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.TrimSuffix(string(saved), "\n[body truncated at 1 MB]")
 	if n := strings.Count(body, "c"); n != 1<<20 {
 		t.Fatalf("read %d bytes, want exactly 1 MB", n)
 	}

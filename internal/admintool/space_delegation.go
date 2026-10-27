@@ -12,8 +12,8 @@ import (
 // task to another agent and which agent tracks the handovers.
 func NewSetSpaceDelegation(m Manager) tool.Tool {
 	return setSpaceDelegation{base{"set_space_delegation",
-		"Set how one space hands a task to another agent: delegation auto (hand over through the inbox), hint (only name the agent) or off, and the manager that tracks the handovers. The manager must be assigned to the space; manager \"none\" removes it. Omitted fields keep their value. Conversations opened from now on use it.",
-		`{"type":"object","properties":{"space":{"type":"string"},"mode":{"type":"string","enum":["auto","hint","off"]},"manager":{"type":"string"}},"required":["space"],"additionalProperties":false}`,
+		"Set how one space hands a task to another agent: delegation auto (hand over through the inbox), hint (only name the agent) or off, and the manager that tracks the handovers. The manager must be assigned to the space; manager \"none\" removes it, and omitted fields keep their value. Conversations opened from now on use it.",
+		`{"type":"object","properties":{"space":{"type":"string","description":"Space whose delegation changes"},"mode":{"type":"string","enum":["auto","hint","off"],"description":"auto, hint or off"},"manager":{"type":"string","description":"Agent that tracks the handovers; none removes it; optional"}},"required":["space"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 

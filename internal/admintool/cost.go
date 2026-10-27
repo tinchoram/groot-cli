@@ -10,7 +10,7 @@ import (
 // their budgets. It is read-only, so work mode does not ask before it.
 func NewGetCost(m Manager) tool.Tool {
 	return getCost{base{"get_cost",
-		"Read the spend in dollars of a space and of each of its agents, with their budgets. Omit space for the active space. Use it to answer how much was spent.",
+		"Read the spend in dollars of a space and of each of its agents, with their budgets. Use it to answer how much was spent; set_space_budget and set_agent_budget change the limits. Omit space to read the active space.",
 		`{"type":"object","properties":{"space":{"type":"string","description":"space name; omit for the active space"}},"additionalProperties":false}`,
 		tool.RiskRead}, m}
 }

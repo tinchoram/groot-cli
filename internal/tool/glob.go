@@ -53,14 +53,12 @@ func parseGlobInput(input string) (globInput, error) {
 func (*Glob) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name: "glob",
-		Description: "Find files under a directory inside the working directory by pattern, read-only. " +
-			"** matches any number of directories and * matches within one name, so **/*.md finds every Markdown file. " +
-			"Paths in the result are relative to the working directory. Skips .git, node_modules, vendor, .groot, " +
-			"target, dist and build; dotfiles only when the pattern starts with a dot. Symlinks that leave the working " +
-			"directory are not returned. At most 500 results.",
+		Description: "Find files by name pattern under a directory inside the working directory, read-only, and return their paths relative to the working directory. Use it to locate files by name or extension, for example **/*.md; use list_dir to browse one folder and read_file to open a match. " +
+			"Skips .git, node_modules, vendor, .groot, target, dist and build, and dotfiles unless the pattern starts with a dot. " +
+			"Symlinks that leave the working directory are not returned, and at most 500 results come back.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
-			`"pattern":{"type":"string","description":"Glob pattern, for example **/*.md"},` +
-			`"path":{"type":"string","description":"Directory to search, relative to the working directory; default \".\""},` +
+			`"pattern":{"type":"string","description":"Glob pattern: ** matches any number of directories and * matches within one name, so **/*.md finds every Markdown file"},` +
+			`"path":{"type":"string","description":"Directory to search, relative to the working directory; default . (the working directory)"},` +
 			`"max_results":{"type":"integer","description":"Most results to return; default 500"}},` +
 			`"required":["pattern"]}`),
 	}

@@ -49,9 +49,11 @@ User-Agent `groot-cli/<version>`. No cookies and no credentials are sent.
   links as `text (url)` and table rows with cells joined by ` | `. Scripts,
   styles, navigation and footers are dropped. Other types must be `text/*` or
   `application/json`; anything else returns `unsupported content type`.
-- Output is capped at `max_chars` (default 32000) with a trailing
-  `[truncated: N more chars]` note, and passes through the same redaction as
-  every other tool.
+- Text longer than 30,000 characters is saved in full under
+  `<space>/.groot/outputs/`, and the result keeps the start and the end with the
+  file path; see `docs/SAFETY.md`. `max_chars` cuts the text first when it is set,
+  with a trailing `[truncated: N more chars]` note. The text passes through the
+  same redaction as every other tool.
 - Loopback, RFC1918, link-local and unique-local addresses are refused, including
   redirect targets and names that resolve to them. Set `fetch.allow_private: true`
   to lift this.

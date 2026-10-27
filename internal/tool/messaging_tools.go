@@ -46,8 +46,13 @@ type sendMessageInput struct {
 func (*SendMessage) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "send_message",
-		Description: "Send a message to another agent or to groot. Use \"groot\" for groot, \"<agent>\" for an agent in this space, or \"<space>/<agent>\". Keep requests concrete: goal, constraints, definition of done. Use ack: true for a short confirmation that needs no answer (for example \"FEAT-016 recorded\"): the recipient sees it once as a note, it does not start a turn, and it is limited to 200 characters.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"to":{"type":"string"},"subject":{"type":"string"},"body":{"type":"string"},"ack":{"type":"boolean","description":"Short confirmation that needs no answer; body up to 200 characters. Default false."}},"required":["to","body"]}`),
+		Description: "Send a message to another agent or to groot. Use \"groot\" for groot, \"<agent>\" for an agent in this space, or \"<space>/<agent>\". Keep requests concrete, with the goal, the constraints and the definition of done, and read the replies with read_inbox. Use ack: true for a short confirmation that needs no answer, such as \"FEAT-016 recorded\": the recipient sees it once as a note, it does not start a turn, and the body is limited to 200 characters.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"to":{"type":"string","description":"Recipient: groot, an agent name in this space, or space/agent"},` +
+			`"subject":{"type":"string","description":"Short subject line; optional"},` +
+			`"body":{"type":"string","description":"Message text; up to 200 characters when ack is true"},` +
+			`"ack":{"type":"boolean","description":"Short confirmation that needs no answer; body up to 200 characters. Default false."}},` +
+			`"required":["to","body"]}`),
 	}
 }
 
@@ -117,7 +122,7 @@ func NewReadInbox(m Messenger) *ReadInbox { return &ReadInbox{messenger: m} }
 func (*ReadInbox) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "read_inbox",
-		Description: "Read your unread messages from other agents and from groot. They are marked read once returned.",
+		Description: "Read your unread messages from other agents and from groot. Use it at the start of a turn and while you wait for an answer; reply with send_message. Messages are marked read once returned, so the next call shows only new ones.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 	}
 }

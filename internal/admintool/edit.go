@@ -52,8 +52,8 @@ type deleteSpaceInput struct {
 // NewDeleteSpace returns the delete_space tool.
 func NewDeleteSpace(m Manager) tool.Tool {
 	return deleteSpace{base{"delete_space",
-		"Delete a space from spaces.yaml. The first call, without confirm: true, changes nothing and reports the agents assigned and the open tasks per agent. Call again with confirm: true to delete. The directory and the .groot data stay on disk unless purge_data is true, which also deletes <space path>/.groot (memory database and audit log). The root space cannot be deleted. Deleting the active space switches to root.",
-		`{"type":"object","properties":{"name":{"type":"string","description":"the space to delete"},"confirm":{"type":"boolean","description":"true to delete; omit for the report"},"purge_data":{"type":"boolean","description":"with confirm: true, also delete <space path>/.groot; default false"}},"required":["name"],"additionalProperties":false}`,
+		"Delete a space from spaces.yaml. The first call, without confirm: true, changes nothing and reports the assigned agents and open tasks; a second call with confirm: true deletes it. The directory stays on disk, and so does the .groot data unless purge_data is true; the root space cannot be deleted. Deleting the active space switches to root.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"Space to delete"},"confirm":{"type":"boolean","description":"true to delete; omit for the report only"},"purge_data":{"type":"boolean","description":"With confirm true, also delete <space path>/.groot (memory and audit log); default false"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -100,8 +100,8 @@ type editSpace struct {
 // NewEditSpace returns the edit_space tool.
 func NewEditSpace(m Manager, home string) tool.Tool {
 	return editSpace{base{"edit_space",
-		"Rename a space and/or point it at another directory. The root space cannot be renamed. A rename keeps the selection and the unread messages. A new path does not move the .groot data under the old path.",
-		`{"type":"object","properties":{"name":{"type":"string","description":"the space to edit"},"new_name":{"type":"string","description":"lowercase slug; optional"},"path":{"type":"string","description":"existing directory, absolute or starting with ~; optional"}},"required":["name"],"additionalProperties":false}`,
+		"Rename a space, point it at another directory, or both. The root space cannot be renamed. A rename keeps the selection and the unread messages, and a new path does not move the .groot data under the old path.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"Space to edit"},"new_name":{"type":"string","description":"New lowercase slug; optional"},"path":{"type":"string","description":"Existing directory, absolute or starting with ~; optional"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m, home}
 }
 
@@ -155,8 +155,8 @@ type deleteAgent struct {
 // NewDeleteAgent returns the delete_agent tool.
 func NewDeleteAgent(m Manager) tool.Tool {
 	return deleteAgent{base{"delete_agent",
-		"Delete an agent from the catalog and unassign it from every space. The first call, without confirm: true, changes nothing and reports the spaces it is assigned to with open tasks per space. Call again with confirm: true to delete. Its open conversations end; its memory and sessions stay in each space's database. groot cannot be deleted; an installed debug can, and its backlog files stay.",
-		`{"type":"object","properties":{"name":{"type":"string","description":"the agent to delete"},"confirm":{"type":"boolean","description":"true to delete; omit for the report"}},"required":["name"],"additionalProperties":false}`,
+		"Delete an agent from the catalog and unassign it from every space. The first call, without confirm: true, changes nothing and reports the spaces it is assigned to with their open tasks; a second call with confirm: true deletes it, ends its open conversations, and keeps its memory and sessions in each space's database. groot cannot be deleted.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"Agent to delete"},"confirm":{"type":"boolean","description":"true to delete; omit for the report only"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -205,8 +205,8 @@ type editAgent struct {
 // NewEditAgent returns the edit_agent tool.
 func NewEditAgent(m Manager) tool.Tool {
 	return editAgent{base{"edit_agent",
-		"Change an agent's description or prompt, or rename it. Keeps its model, tools and budget. Managed agents (groot, debug) keep their name; only their description and prompt can change.",
-		`{"type":"object","properties":{"name":{"type":"string","description":"the agent to edit"},"new_name":{"type":"string","description":"new slug name; optional"},"description":{"type":"string","description":"one-line description; optional"},"prompt":{"type":"string","description":"the full new system prompt; optional"}},"required":["name"],"additionalProperties":false}`,
+		"Change an agent's description or prompt, or rename it. It keeps its model, tools and budget. Managed agents (groot and debug) keep their name, and only their description and prompt can change.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"Agent to edit"},"new_name":{"type":"string","description":"New slug name; optional"},"description":{"type":"string","description":"One-line description; optional"},"prompt":{"type":"string","description":"The full new system prompt; optional"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -262,8 +262,8 @@ type moveAgent struct {
 // NewMoveAgent returns the move_agent tool.
 func NewMoveAgent(m Manager) tool.Tool {
 	return moveAgent{base{"move_agent",
-		"Move an agent from one space to another in one step. The agent must be assigned to the source space and not yet to the target. The conversation in the source space ends; its sessions stay stored there. With with_memory: true, its memory, sessions (with their messages) and tasks (with their evidence) are copied to the target space's database; the source keeps its copies.",
-		`{"type":"object","properties":{"agent":{"type":"string"},"from":{"type":"string","description":"space the agent leaves"},"to":{"type":"string","description":"space the agent joins"},"with_memory":{"type":"boolean","description":"copy the agent's memory, sessions and tasks to the target; default false"}},"required":["agent","from","to"],"additionalProperties":false}`,
+		"Move an agent from one space to another in one step. The agent must be assigned to the source space and not yet to the target. Its conversation in the source space ends, and its sessions stay stored there; with with_memory: true, its memory, sessions and tasks are also copied to the target, and the source keeps its copies.",
+		`{"type":"object","properties":{"agent":{"type":"string","description":"Agent to move"},"from":{"type":"string","description":"Space the agent leaves"},"to":{"type":"string","description":"Space the agent joins"},"with_memory":{"type":"boolean","description":"true copies memory, sessions and tasks to the target; default false"}},"required":["agent","from","to"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -306,8 +306,8 @@ type copyAgent struct {
 // NewCopyAgent returns the copy_agent tool.
 func NewCopyAgent(m Manager) tool.Tool {
 	return copyAgent{base{"copy_agent",
-		"Copy an agent under a new name: its description, prompt, model, tools and max_turns. Optionally assign the copy to a space. The budget is not copied.",
-		`{"type":"object","properties":{"agent":{"type":"string","description":"the agent to copy"},"new_name":{"type":"string","description":"slug name of the copy"},"space":{"type":"string","description":"space to assign the copy to (optional)"}},"required":["agent","new_name"],"additionalProperties":false}`,
+		"Copy an agent under a new name, with its description, prompt, model, tools and max_turns. Use it to make a variant of an agent; the budget is not copied. Optionally assign the copy to a space.",
+		`{"type":"object","properties":{"agent":{"type":"string","description":"Agent to copy"},"new_name":{"type":"string","description":"Slug name of the copy"},"space":{"type":"string","description":"Space to assign the copy to; optional"}},"required":["agent","new_name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 

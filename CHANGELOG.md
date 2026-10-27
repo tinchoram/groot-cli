@@ -50,6 +50,14 @@ built in one day of live testing, so they are grouped by what shipped.
 - Resume summary. A resumed session that is longer than the 200-message transcript
   gets a summary of the messages out of context, on its first turn. If the summary
   fails, the model is told how many messages are not in context.
+- Tool descriptions. Every builtin and admin tool now says what it does, when to use
+  it, when to use another tool instead and what it returns, in three or four sentences,
+  and each parameter is documented in the schema. Names and parameters are unchanged.
+- Long tool output is saved, not cut. Output up to 30,000 characters stays inline.
+  Longer output from `bash`, `kubectl` and `fetch_url` is written in full to
+  `<space>/.groot/outputs/`, and the result keeps the first 2,000 and the last 500
+  characters with the file path. This replaces the 32 KB bash and 64 KB kubectl
+  limits; the saved files are redacted and capped at 50 per space. See `docs/SAFETY.md`.
 
 ## 0.6.0 — 2026-10-25
 

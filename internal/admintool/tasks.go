@@ -11,8 +11,8 @@ import (
 // space, as the same table /tasks prints.
 func NewListTasks(m Manager) tool.Tool {
 	return listTasks{base{"list_tasks",
-		"List the open ODD flow tasks (phase not done or failed) across spaces: space, agent, task id, size, phase, evidence count, opened and updated time, whether its conversation is running a turn, and the goal. Set space to limit it to one space. Set include_closed to add the done and failed tasks of the last seven days with their final phase.",
-		`{"type":"object","properties":{"space":{"type":"string","description":"space name; omit for every space"},"include_closed":{"type":"boolean","description":"also list done and failed tasks closed in the last seven days"}},"additionalProperties":false}`,
+		"List the open ODD flow tasks (phase not done or failed) across spaces, with space, agent, task id, size, phase, evidence count, opened and updated time, whether its conversation is running a turn, and the goal. Set space to limit it to one space. Set include_closed to add the done and failed tasks of the last seven days with their final phase.",
+		`{"type":"object","properties":{"space":{"type":"string","description":"space name; omit for every space"},"include_closed":{"type":"boolean","description":"also list done and failed tasks closed in the last seven days; default false"}},"additionalProperties":false}`,
 		tool.RiskRead}, m}
 }
 

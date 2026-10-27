@@ -12,7 +12,7 @@ import (
 // the same text as /context.
 func NewGetContext(m Manager) tool.Tool {
 	return getContext{base{"get_context",
-		"Read the context of each agent in a space: the model, its context window, the size of the last model answer, the percentage used, the compaction strategy in effect and whether a compaction would run now. Omit space for the active space.",
+		"Read the context of each agent in a space: its model, context window, the size of its last model answer, the percentage used, the compaction strategy in effect and whether a compaction would run now. Use it when the user asks about context use or compaction. Omit space for the active space.",
 		`{"type":"object","properties":{"space":{"type":"string","description":"space name; omit for the active space"}},"additionalProperties":false}`,
 		tool.RiskRead}, m}
 }
@@ -54,7 +54,7 @@ func (t getContext) Execute(ctx context.Context, input string) (string, bool) {
 func NewSetContextWindow(m Manager) tool.Tool {
 	return setContextWindow{base{"set_context_window",
 		"Set the context window, in tokens, of a model or of a model id prefix, saved in groot.yaml under models.context_window. It overrides the built-in table. Conversations use it from their next model call.",
-		`{"type":"object","properties":{"model":{"type":"string","description":"model id or prefix"},"tokens":{"type":"integer","minimum":1}},"required":["model","tokens"],"additionalProperties":false}`,
+		`{"type":"object","properties":{"model":{"type":"string","description":"Model id, or a prefix of one"},"tokens":{"type":"integer","minimum":1,"description":"Context window size in tokens; at least 1"}},"required":["model","tokens"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 

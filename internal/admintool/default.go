@@ -11,8 +11,8 @@ import (
 // new conversations and writes it into the configuration file.
 func NewSetDefaultModel(m Manager) tool.Tool {
 	return setDefaultModel{base{"set_default_model",
-		"Set the default model: the one new conversations use when their agent sets none. It is written to the configuration file. The id is checked against the provider's list when that list can be reached.",
-		`{"type":"object","properties":{"model":{"type":"string"}},"required":["model"],"additionalProperties":false}`,
+		"Set the default model, which new conversations use when their agent sets none. It is written to the configuration file, and the id is checked against the provider's list when that list can be reached. Use list_models first to see the valid ids.",
+		`{"type":"object","properties":{"model":{"type":"string","description":"Model id, as list_models shows it"}},"required":["model"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 

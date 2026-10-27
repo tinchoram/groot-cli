@@ -52,8 +52,14 @@ type rememberInput struct {
 func (*Remember) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "remember",
-		Description: "Save a durable fact, decision or runbook step to long-term memory for future sessions. Saving the same topic_key revises that entry; saving the same content again is counted, not stored twice. Scope: agent (only you), space (every agent of this space; the default), or global (groot only).",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"kind":{"type":"string","enum":["fact","decision","runbook"]},"text":{"type":"string"},"title":{"type":"string"},"topic_key":{"type":"string"},"scope":{"type":"string","enum":["agent","space","global"]}},"required":["kind","text"]}`),
+		Description: "Save a durable fact, decision or runbook step to long-term memory for future sessions. Use it for knowledge that will still matter next week, not for the progress of the current task, which belongs in the conversation. Saving the same topic_key revises that entry, and saving identical content again is counted instead of stored twice. Scope is agent (only you), space (every agent of this space, the default) or global (groot only).",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"kind":{"type":"string","enum":["fact","decision","runbook"],"description":"What the entry is: fact, decision or runbook"},` +
+			`"text":{"type":"string","description":"The content to remember, as one or a few self-contained sentences"},` +
+			`"title":{"type":"string","description":"Short title shown in recall lines; optional"},` +
+			`"topic_key":{"type":"string","description":"Stable slug for the topic; a later save with the same key revises this entry; optional"},` +
+			`"scope":{"type":"string","enum":["agent","space","global"],"description":"agent, space or global; default space"}},` +
+			`"required":["kind","text"]}`),
 	}
 }
 
@@ -133,8 +139,11 @@ type recallInput struct {
 func (*Recall) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "recall",
-		Description: "Search long-term memory for facts, decisions and runbooks saved earlier. Returns short lines with ids; use memory_get for the full text of one.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["query"]}`),
+		Description: "Search long-term memory for facts, decisions and runbooks saved earlier, and return short lines with their ids. Use it at the start of a task or when the user refers to something from a past session. It searches only saved memory, not the conversation or the files; use memory_get to read the full text of one id.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"query":{"type":"string","description":"Words or a phrase to match against the saved memory"},` +
+			`"limit":{"type":"integer","minimum":1,"maximum":50,"description":"Most lines to return; default 10, maximum 50"}},` +
+			`"required":["query"]}`),
 	}
 }
 
@@ -208,8 +217,8 @@ func NewMemoryGet(acc MemoryAccess) *MemoryGet {
 func (*MemoryGet) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "memory_get",
-		Description: "Read one long-term memory entry in full, by the id that recall or the memory list showed. Ids are per scope; pass scope global for an entry listed as global.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1},` + scopeProperty + `},"required":["id"]}`),
+		Description: "Read one long-term memory entry in full, by the id that recall showed. Use it when a short recall line is not enough to act on. It needs an id from recall, because it does not search. Ids are per scope; pass scope global for an entry listed as global.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1,"description":"Entry id as recall showed it, a positive integer"},` + scopeProperty + `},"required":["id"]}`),
 	}
 }
 
@@ -274,8 +283,8 @@ const scopeProperty = `"scope":{"type":"string","description":"global for an ent
 func (*Forget) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "forget",
-		Description: "Remove one long-term memory entry so it no longer appears in recall or in the prompt. Ids are per scope; pass scope global for an entry listed as global.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1},` + scopeProperty + `},"required":["id"]}`),
+		Description: "Remove one long-term memory entry so it no longer appears in recall or in the prompt. Use it when a saved fact is wrong or no longer applies; use update_memory to change the text instead. It needs an id from recall. Ids are per scope; pass scope global for an entry listed as global.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1,"description":"Entry id as recall showed it, a positive integer"},` + scopeProperty + `},"required":["id"]}`),
 	}
 }
 
@@ -328,8 +337,12 @@ func (in updateMemoryInput) ref() memory.Ref {
 func (*UpdateMemory) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "update_memory",
-		Description: "Change one long-term memory entry. Give only the fields to change: title, text, topic_key or pinned. Ids are per scope; pass scope global for an entry listed as global.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1},` + scopeProperty + `,"title":{"type":"string"},"text":{"type":"string"},"topic_key":{"type":"string"},"pinned":{"type":"boolean"}},"required":["id"]}`),
+		Description: "Change one long-term memory entry by correcting or extending it. Give only the fields to change: title, text, topic_key or pinned. Use remember to add a new entry and forget to delete one. Ids are per scope; pass scope global for an entry listed as global.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"integer","minimum":1,"description":"Entry id as recall showed it, a positive integer"},` + scopeProperty + `,` +
+			`"title":{"type":"string","description":"New title; omit to keep the current one"},` +
+			`"text":{"type":"string","description":"New text; omit to keep the current one"},` +
+			`"topic_key":{"type":"string","description":"New topic key; omit to keep the current one"},` +
+			`"pinned":{"type":"boolean","description":"Whether the entry is pinned; omit to keep the current value"}},"required":["id"]}`),
 	}
 }
 

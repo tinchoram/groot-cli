@@ -65,6 +65,7 @@ Every result is the state read back from `spaces.yaml` and the catalog.
   agents/<name>.md         one agent: frontmatter for the settings, body for the prompt
 <space path>/.groot/
   groot.db                 memory and sessions for this space
+  outputs/                 tool output too long to inline, in full (newest 50 kept)
   audit.jsonl              one line per tool call in this space
 ```
 

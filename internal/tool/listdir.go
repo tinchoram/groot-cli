@@ -78,13 +78,12 @@ func parseListInput(input string) (listInput, error) {
 func (*ListDir) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name: "list_dir",
-		Description: "List the entries of a directory inside the working directory, read-only. " +
-			"Lines are 'd <path>' for directories and 'f <path> <bytes>' for files, directories first. " +
-			"Not recursive unless asked. Skips .git, node_modules, vendor, .groot, target, dist and build; " +
-			"dotfiles only with include_hidden. Symlinks that leave the working directory are not listed. " +
-			"Output is capped at 500 entries.",
+		Description: "List the entries of a directory inside the working directory, read-only, without reading file contents. " +
+			"Each line is 'd <path>' for a directory or 'f <path> <bytes>' for a file, directories first. " +
+			"Use it to see what a folder holds; use glob to find files by name across folders. " +
+			"Not recursive unless asked; skips .git, node_modules, vendor, .groot, target, dist and build, and dotfiles unless include_hidden is set. At most 500 entries come back.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
-			`"path":{"type":"string","description":"Directory relative to the working directory; default \".\""},` +
+			`"path":{"type":"string","description":"Directory relative to the working directory; default . (the working directory)"},` +
 			`"recursive":{"type":"boolean","description":"Also list subdirectories; default false"},` +
 			`"max_depth":{"type":"integer","description":"Levels to descend when recursive; default 3, maximum 8"},` +
 			`"include_hidden":{"type":"boolean","description":"Include entries whose name starts with a dot; default false"}}}`),

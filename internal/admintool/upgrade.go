@@ -12,8 +12,8 @@ import (
 // itself at every start.
 func NewUpgradeAgent(m Manager) tool.Tool {
 	return upgradeAgent{base{"upgrade_agent",
-		"Add the managed tools (messaging, the task flow, recall and remember) to an agent that lacks them. Never removes a tool.",
-		`{"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}`,
+		"Add the managed tools (messaging, the task flow, recall and remember) to an agent that lacks them. Use it when an agent is missing them. It never removes a tool.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"Agent to upgrade"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 

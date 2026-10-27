@@ -232,7 +232,7 @@ type listSpaces struct {
 
 // NewListSpaces returns the list_spaces tool.
 func NewListSpaces(m Manager) tool.Tool {
-	return listSpaces{base{"list_spaces", "List every space with its path and assigned agents.", `{"type":"object","properties":{}}`, tool.RiskRead}, m}
+	return listSpaces{base{"list_spaces", "List every space with its path and the agents assigned to it. Use it before a change to a space, to confirm its name and where it points. It only reads the configuration and changes nothing.", `{"type":"object","properties":{}}`, tool.RiskRead}, m}
 }
 
 func (t listSpaces) Preview(string) string { return "list spaces" }
@@ -264,8 +264,8 @@ type createSpace struct {
 // NewCreateSpace returns the create_space tool.
 func NewCreateSpace(m Manager, home string) tool.Tool {
 	return createSpace{base{"create_space",
-		"Create a space: a named working directory. The path must exist. Use an absolute path or one starting with ~.",
-		`{"type":"object","properties":{"name":{"type":"string","description":"lowercase slug, letters digits and dashes"},"path":{"type":"string","description":"existing directory; absolute or starting with ~"}},"required":["name","path"],"additionalProperties":false}`,
+		"Create a space: a named working directory that agents can be assigned to. Use it when the user starts a new project area; to point an existing space elsewhere, use edit_space. The path must already exist and may be absolute or start with ~.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"Lowercase slug of letters, digits and dashes"},"path":{"type":"string","description":"Existing directory, absolute or starting with ~"}},"required":["name","path"],"additionalProperties":false}`,
 		tool.RiskWrite}, m, home}
 }
 
@@ -316,8 +316,8 @@ type assignAgent struct {
 // NewAssignAgent returns the assign_agent tool.
 func NewAssignAgent(m Manager) tool.Tool {
 	return assignAgent{base{"assign_agent",
-		"Assign a catalog agent to a space, so it shows in that space's sidebar.",
-		`{"type":"object","properties":{"space":{"type":"string"},"agent":{"type":"string"}},"required":["space","agent"],"additionalProperties":false}`,
+		"Assign a catalog agent to a space, so it appears in that space's sidebar. Use it when an agent should work in this space; use unassign_agent to remove it again. The agent must already be in the catalog.",
+		`{"type":"object","properties":{"space":{"type":"string","description":"Space name, as list_spaces shows it"},"agent":{"type":"string","description":"Catalog agent name, as list_agents shows it"}},"required":["space","agent"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -348,8 +348,8 @@ type unassignAgent struct {
 // NewUnassignAgent returns the unassign_agent tool.
 func NewUnassignAgent(m Manager) tool.Tool {
 	return unassignAgent{base{"unassign_agent",
-		"Remove an agent from a space. The agent stays in the catalog.",
-		`{"type":"object","properties":{"space":{"type":"string"},"agent":{"type":"string"}},"required":["space","agent"],"additionalProperties":false}`,
+		"Remove an agent from a space. The agent stays in the catalog, so assign_agent can add it back. Use it when an agent no longer works in this space; it does not delete the agent.",
+		`{"type":"object","properties":{"space":{"type":"string","description":"Space name, as list_spaces shows it"},"agent":{"type":"string","description":"Catalog agent name, as list_agents shows it"}},"required":["space","agent"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -381,7 +381,7 @@ type listAgents struct {
 
 // NewListAgents returns the list_agents tool.
 func NewListAgents(m Manager) tool.Tool {
-	return listAgents{base{"list_agents", "List agent definitions in the catalog with description, model and tools.", `{"type":"object","properties":{}}`, tool.RiskRead}, m}
+	return listAgents{base{"list_agents", "List the agent definitions in the catalog with their description, model and tools. Use it to check which agents exist before assigning, editing or copying one. It only reads the catalog and changes nothing.", `{"type":"object","properties":{}}`, tool.RiskRead}, m}
 }
 
 func (t listAgents) Preview(string) string { return "list agents" }
@@ -424,8 +424,8 @@ type createAgent struct {
 // NewCreateAgent returns the create_agent tool.
 func NewCreateAgent(m Manager) tool.Tool {
 	return createAgent{base{"create_agent",
-		"Create an agent in the catalog. Give a slug name, a one-line description, the system prompt, a subset of the builtin tools, and optionally a model.",
-		`{"type":"object","properties":{"name":{"type":"string"},"description":{"type":"string"},"prompt":{"type":"string"},"tools":{"type":"array","items":{"type":"string"}},"model":{"type":"string"}},"required":["name","description","prompt","tools"],"additionalProperties":false}`,
+		"Create an agent in the catalog from a slug name, a one-line description, a system prompt, a list of builtin tools and an optional model. Use it for a new role; use edit_agent to change an existing agent. Assigning the new agent to a space is a separate step with assign_agent.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"Lowercase slug name for the agent"},"description":{"type":"string","description":"One-line description of the agent's role"},"prompt":{"type":"string","description":"The full system prompt"},"tools":{"type":"array","items":{"type":"string"},"description":"Builtin tool names the agent may use"},"model":{"type":"string","description":"Model id; optional, omit to use the default model"}},"required":["name","description","prompt","tools"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -474,8 +474,8 @@ type importAgent struct {
 // NewImportAgent returns the import_agent tool.
 func NewImportAgent(m Manager) tool.Tool {
 	return importAgent{base{"import_agent",
-		"Import an agent file (Markdown with YAML frontmatter, as used by Claude Code and OpenCode) from a local path or an http(s) URL. Read, Write, Edit, MultiEdit and Bash map to groot tools; other tools are dropped with a warning.",
-		`{"type":"object","properties":{"source":{"type":"string","description":"local path or http(s) URL of the agent file"},"overwrite":{"type":"boolean","description":"replace an existing agent with the same name"}},"required":["source"],"additionalProperties":false}`,
+		"Import an agent file (Markdown with YAML frontmatter, as used by Claude Code and OpenCode) from a local path or an http(s) URL. Use it for an agent you already have as a file; use install_agent for one from the library. Read, Write, Edit, MultiEdit and Bash map to groot tools, and other tools are dropped with a warning.",
+		`{"type":"object","properties":{"source":{"type":"string","description":"Local path or http(s) URL of the agent file"},"overwrite":{"type":"boolean","description":"Replace an existing agent with the same name; default false"}},"required":["source"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 
@@ -526,7 +526,7 @@ type listLibrary struct {
 // NewListLibrary returns the list_library tool.
 func NewListLibrary(m Manager) tool.Tool {
 	return listLibrary{base{"list_library",
-		"List the agents that can be installed from the library, with description, tools and source (builtin or user).",
+		"List the agents that can be installed from the library, with their description, tools and source (builtin or user). Use it before install_agent to find the exact name. It only reads the library and changes nothing.",
 		`{"type":"object","properties":{}}`, tool.RiskRead}, m}
 }
 
@@ -583,8 +583,8 @@ type installAgent struct {
 // NewInstallAgent returns the install_agent tool.
 func NewInstallAgent(m Manager) tool.Tool {
 	return installAgent{base{"install_agent",
-		"Copy an agent from the library into the catalog, optionally assigning it to a space. Refuses to replace an existing agent unless overwrite is true. Never replaces groot.",
-		`{"type":"object","properties":{"name":{"type":"string","description":"library agent name"},"space":{"type":"string","description":"space to assign the agent to (optional)"},"overwrite":{"type":"boolean","description":"replace an existing agent with the same name"}},"required":["name"],"additionalProperties":false}`,
+		"Copy an agent from the library into the catalog, optionally assigning it to a space. Use it after list_library, and use import_agent for an agent file outside the library. It refuses to replace an existing agent unless overwrite is true, and it never replaces groot.",
+		`{"type":"object","properties":{"name":{"type":"string","description":"Library agent name, as list_library shows it"},"space":{"type":"string","description":"Space to assign the agent to; optional"},"overwrite":{"type":"boolean","description":"Replace an existing agent with the same name; default false"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 

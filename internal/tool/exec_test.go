@@ -43,10 +43,41 @@ func TestBashTimeout(t *testing.T) {
 	}
 }
 
-func TestBashOutputCapped(t *testing.T) {
-	out, _ := NewBash("").Execute(context.Background(), mustJSON(t, map[string]string{"command": "yes x | head -c 100000"}))
-	if len(out) > 32*1024+200 || !strings.Contains(out, "truncated") {
-		t.Fatalf("output not capped, len=%d", len(out))
+func TestBashSpillsLongOutputAndKeepsTheFullText(t *testing.T) {
+	space := t.TempDir()
+	out, isErr := NewBash(space).Execute(context.Background(), mustJSON(t, map[string]string{"command": "yes x | head -c 100000; printf END"}))
+	if isErr {
+		t.Fatalf("unexpected error: %.200q", out)
+	}
+	if !strings.Contains(out, "[output: 100003 characters total;") || !strings.HasSuffix(out, "END") {
+		t.Fatalf("long output must spill with the note and keep the end: tail %q", out[len(out)-60:])
+	}
+	saved, err := os.ReadFile(spilledPath(t, out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) != 100003 {
+		t.Fatalf("saved %d bytes, want the full 100003", len(saved))
+	}
+}
+
+func TestBashExitLineSurvivesSpill(t *testing.T) {
+	out, isErr := NewBash(t.TempDir()).Execute(context.Background(), mustJSON(t, map[string]string{"command": "yes x | head -c 60000; exit 4"}))
+	if !isErr || !strings.HasSuffix(out, "[exit 4]") {
+		t.Fatalf("exit line must stay at the end: isErr=%v tail %q", isErr, out[len(out)-40:])
+	}
+}
+
+func TestKubectlSpillsLongOutputIntoItsSpace(t *testing.T) {
+	space := t.TempDir()
+	k := NewKubectl(fakeBinary(t, `head -c 40000 /dev/zero | tr '\0' y`), nil)
+	k.OutDir = space
+	out, isErr := k.Execute(context.Background(), mustJSON(t, map[string]any{"args": []string{"get", "pods"}}))
+	if isErr || !strings.Contains(out, "[output: 40000 characters total;") {
+		t.Fatalf("kubectl must use the same spill: isErr=%v head %.80q", isErr, out)
+	}
+	if !strings.HasPrefix(spilledPath(t, out), outputsDirOf(space)+string(filepath.Separator)+"kubectl-") {
+		t.Fatalf("kubectl output saved outside the space: %q", spilledPath(t, out))
 	}
 }
 

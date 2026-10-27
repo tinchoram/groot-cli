@@ -24,7 +24,6 @@ const (
 	fetchTimeout      = 15 * time.Second
 	fetchMaxRedirects = 5
 	fetchMaxBody      = 1 << 20
-	fetchDefaultChars = 32000
 )
 
 // FetchPolicy constrains fetch_url. Allow and Deny are domain lists matched
@@ -42,6 +41,9 @@ type Fetch struct {
 	client  *http.Client
 	policy  FetchPolicy
 	version string
+	// OutDir is the space dir whose .groot/outputs keeps a page too long to
+	// return inline. Empty means the working directory.
+	OutDir string
 }
 
 // NewFetch returns the fetch_url tool. The User-Agent carries version.
@@ -64,8 +66,11 @@ func NewFetch(version string, policy FetchPolicy) *Fetch {
 func (*Fetch) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "fetch_url",
-		Description: "Read a web page or API response over http or https (GET only). HTML is returned as readable text with links and tables kept; JSON and text pass through. Use it when the answer lives at a URL the user gave you.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"},"max_chars":{"type":"integer"}},"required":["url"]}`),
+		Description: "Read a web page or API response over http or https with a GET request and return it as text. HTML becomes readable text with links and tables kept; JSON and plain text pass through unchanged. Use it when the answer lives at a URL the user gave you; it sends no cookies or credentials and cannot POST. Private addresses and denied domains are refused, bodies stop at 1 MB, and text over 30,000 characters is saved under .groot/outputs.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"url":{"type":"string","description":"Absolute http or https URL to read"},` +
+			`"max_chars":{"type":"integer","description":"Keep only this many characters of the text; default unset, which keeps the whole page"}},` +
+			`"required":["url"]}`),
 	}
 }
 
@@ -153,11 +158,10 @@ func (f *Fetch) Execute(ctx context.Context, input string) (string, bool) {
 		text += "\n[body truncated at 1 MB]"
 	}
 
-	max := in.MaxChars
-	if max <= 0 {
-		max = fetchDefaultChars
+	if in.MaxChars > 0 {
+		text = truncateRunes(text, in.MaxChars)
 	}
-	return truncateRunes(text, max), false
+	return finishOutput(f.OutDir, "fetch_url", text), false
 }
 
 func orNone(s string) string {

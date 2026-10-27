@@ -13,7 +13,7 @@ import (
 // with their list prices.
 func NewListModels(m Manager) tool.Tool {
 	return listModels{base{"list_models",
-		"List the models the provider offers, with their list prices per million tokens. Use it before set_agent_model.",
+		"List the models the provider offers, with their list prices per million tokens. Use it before set_agent_model, set_space_model or set_default_model to get a valid id. It only reads the provider's list and changes nothing.",
 		`{"type":"object","properties":{},"additionalProperties":false}`,
 		tool.RiskRead}, m}
 }
@@ -57,8 +57,8 @@ func (t listModels) Execute(ctx context.Context, input string) (string, bool) {
 // runs on into the agent's file.
 func NewSetAgentModel(m Manager) tool.Tool {
 	return setAgentModel{base{"set_agent_model",
-		"Set the model an agent runs on. The change is saved in the agent's file and applies to its next conversation. The model id is checked against the provider's list when that list can be reached.",
-		`{"type":"object","properties":{"agent":{"type":"string"},"model":{"type":"string"}},"required":["agent","model"],"additionalProperties":false}`,
+		"Set the model an agent runs on. The change is saved in the agent's file and applies to its next conversation, and the model id is checked against the provider's list when that list can be reached. Use list_models first to pick an id.",
+		`{"type":"object","properties":{"agent":{"type":"string","description":"Agent whose model changes"},"model":{"type":"string","description":"Model id, as list_models shows it"}},"required":["agent","model"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }
 

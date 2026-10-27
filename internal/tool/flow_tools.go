@@ -30,8 +30,12 @@ type taskClassifyInput struct {
 func (*TaskClassify) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "task_classify",
-		Description: "Classify the work before the first write with one test: could another agent resume it from the request plus the git diff alone? small = trivial: one or two reversible edits you fully understand and nothing to run; write directly. medium = yes, resumable: a task with command evidence is enough. large = no: it needs a feature document with numbered specs. Returns the route and what the flow will require.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"size":{"type":"string","enum":["small","medium","large"]},"resumable_from_diff":{"type":"boolean"},"reason":{"type":"string"}},"required":["size","resumable_from_diff","reason"]}`),
+		Description: "Classify the work before the first write with one test: could another agent resume it from the request plus the git diff alone? small means one or two reversible edits you fully understand, with nothing to run, so write directly. medium means yes, resumable, and command evidence is enough. large means no, so the work needs a feature document with numbered specs. It returns the route and what the flow will require next.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"size":{"type":"string","enum":["small","medium","large"],"description":"small, medium or large, by the test in the description"},` +
+			`"resumable_from_diff":{"type":"boolean","description":"True when another agent could resume from the request and the git diff alone"},` +
+			`"reason":{"type":"string","description":"One sentence on why this size was chosen"}},` +
+			`"required":["size","resumable_from_diff","reason"]}`),
 	}
 }
 
@@ -77,8 +81,12 @@ type taskOpenInput struct {
 func (*TaskOpen) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "task_open",
-		Description: "Open the task for a medium or large classification. Say the goal, the scope and how you will know it is done. Opening applies the route's model for this conversation.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"goal":{"type":"string"},"scope":{"type":"string"},"done_when":{"type":"string"}},"required":["goal","done_when"]}`),
+		Description: "Open the task after task_classify returned medium or large, with the goal, the scope and the condition that proves it is done. A small task is written directly and never opened. Opening applies the route's model to this conversation.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"goal":{"type":"string","description":"What the task must achieve, in one or two sentences"},` +
+			`"scope":{"type":"string","description":"Files, areas or systems the task may touch; optional"},` +
+			`"done_when":{"type":"string","description":"The observable condition that proves the task is finished"}},` +
+			`"required":["goal","done_when"]}`),
 	}
 }
 
@@ -154,8 +162,11 @@ type taskAdvanceInput struct {
 func (*TaskAdvance) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "task_advance",
-		Description: "Move the open task to the next phase. planned needs the plan file path as evidence (large tasks). implement after a planned or a failed verify needs a reason on failure. verify needs a command run during implement. deliver needs a note with the changes and the risks; a large task delivers only when every spec passed (task_verify). done closes the task. failed closes it with a reason.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"phase":{"type":"string","enum":["planned","implement","verify","deliver","done","failed"]},"evidence":{"type":"string"}},"required":["phase"]}`),
+		Description: "Move the open task to the next phase: planned, implement, verify, deliver, done, or failed to close it with a reason. planned needs the plan file path as evidence for a large task, and verify needs a command you ran during implement. Deliver needs a note with the changes and the risks, and a large task delivers only when every spec passed in task_verify. Going back to implement after a failed verify needs the reason as evidence.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"phase":{"type":"string","enum":["planned","implement","verify","deliver","done","failed"],"description":"The phase to move to; the flow rejects a move it does not allow"},` +
+			`"evidence":{"type":"string","description":"The evidence the phase needs: the plan path, the command, the change note or the reason; optional otherwise"}},` +
+			`"required":["phase"]}`),
 	}
 }
 
@@ -220,8 +231,12 @@ type taskVerifyInput struct {
 func (*TaskVerify) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "task_verify",
-		Description: "Record the verdict of one spec of the open large task in verify: result pass or fail, with the evidence (what you ran and what it showed). A fail sends the task back to implement with your reason.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"spec":{"type":"string"},"result":{"type":"string","enum":["pass","fail"]},"evidence":{"type":"string"}},"required":["spec","result","evidence"]}`),
+		Description: "Record the verdict of one spec of the open large task during verify, with the evidence: what you ran and what it showed. Call it once per spec, after running that spec's check; task_status shows which specs remain. A fail sends the task back to implement with your reason, and deliver proceeds only when every spec has passed.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"spec":{"type":"string","description":"The spec being judged, as numbered in the feature document"},` +
+			`"result":{"type":"string","enum":["pass","fail"],"description":"pass or fail"},` +
+			`"evidence":{"type":"string","description":"What you ran and what it showed"}},` +
+			`"required":["spec","result","evidence"]}`),
 	}
 }
 
@@ -271,7 +286,7 @@ func NewTaskStatus(ctl *flow.Controller) *TaskStatus { return &TaskStatus{ctl: c
 func (*TaskStatus) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "task_status",
-		Description: "Show the current classification and the open task, with its phase and evidence count.",
+		Description: "Show the current classification and the open task, with its phase and the number of evidence items recorded. Use it to check where the flow stands before a phase move or a verdict. It only reads state and changes nothing.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 	}
 }
