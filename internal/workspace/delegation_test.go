@@ -22,15 +22,15 @@ func saveAgent(t *testing.T, f *fixture, name, description string, tools []strin
 }
 
 // teamFixture is a space with the origin "reader" (a task planner), the
-// delegate "developer" and the "project-manager". A medium route names the
+// delegate "developer" and the "space-manager". A medium route names the
 // developer, so a medium task opened by reader is handed over.
 func teamFixture(t *testing.T, steps ...provider.Step) *fixture {
 	t.Helper()
 	f := newFixture(t, steps...)
 	saveAgent(t, f, "reader", "plans work", []string{"read_file", "task_classify", "task_open", "task_advance", "task_status"})
 	saveAgent(t, f, "developer", "builds things", []string{"read_file", "write_file", "bash", "task_classify", "task_open", "task_advance", "task_status"})
-	saveAgent(t, f, "project-manager", "tracks work", []string{"read_inbox", "send_message", "list_tasks"})
-	for _, name := range []string{"developer", "project-manager"} {
+	saveAgent(t, f, "space-manager", "tracks work", []string{"read_inbox", "send_message", "list_tasks"})
+	for _, name := range []string{"developer", "space-manager"} {
 		if err := f.spaces.Assign("default", name); err != nil {
 			t.Fatal(err)
 		}
@@ -90,7 +90,7 @@ func TestTaskOpenHandsOverAndSendsTheHandoverAndTracking(t *testing.T) {
 	if handover.FromAgent != "reader" || handover.FromSpace != "default" {
 		t.Fatalf("handover sender = %s/%s", handover.FromSpace, handover.FromAgent)
 	}
-	onlyMessage(t, f, "project-manager", "task:#1 tracking")
+	onlyMessage(t, f, "space-manager", "task:#1 tracking")
 
 	tk, ok := conv.Task()
 	if !ok || tk.Phase != flow.PhaseImplement || tk.Delegation.Status != flow.DelegationHandedOver || tk.Delegation.Delegate != "developer" {
@@ -142,7 +142,7 @@ func TestDeliveredReportMovesTheOriginToVerify(t *testing.T) {
 	if last := tk.Evidence[len(tk.Evidence)-1]; last.Kind != flow.KindNote || last.Text != "two files, tests pass" {
 		t.Fatalf("the report is evidence, last = %+v", last)
 	}
-	onlyMessage(t, f, "project-manager", "task:#1 delivered")
+	onlyMessage(t, f, "space-manager", "task:#1 delivered")
 	if !contains(notes, "default/reader ⇠ task #1 delivered by developer") {
 		t.Fatalf("the transcript must show the report, notes = %v", notes)
 	}
@@ -165,7 +165,7 @@ func TestReturnedReportSendsTheTaskBackToImplement(t *testing.T) {
 	if last := tk.Evidence[len(tk.Evidence)-1]; !strings.Contains(last.Text, "no time left") {
 		t.Fatalf("the reason is evidence, last = %+v", last)
 	}
-	onlyMessage(t, f, "project-manager", "task:#1 returned no time left")
+	onlyMessage(t, f, "space-manager", "task:#1 returned no time left")
 }
 
 func TestDelegationLoopEndToEnd(t *testing.T) {
@@ -230,7 +230,7 @@ func TestRulesReachTheDelegateAndTheManager(t *testing.T) {
 	if sys := f.mock.Calls[0].System; !strings.Contains(sys, "task:#N handover") || !strings.Contains(sys, "task:#N delivered") {
 		t.Fatalf("the delegate rule is missing:\n%s", sys)
 	}
-	if err := f.ws.SelectAgent("project-manager"); err != nil {
+	if err := f.ws.SelectAgent("space-manager"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.ws.Chat().Send(ctx, "hi"); err != nil {
@@ -242,14 +242,14 @@ func TestRulesReachTheDelegateAndTheManager(t *testing.T) {
 }
 
 func TestResolveFlowDelegationAndManagerWithOrigins(t *testing.T) {
-	assigned := space.Space{Name: "payments", Agents: []string{"reader", "project-manager"}}
+	assigned := space.Space{Name: "payments", Agents: []string{"reader", "space-manager"}}
 	global := config.Default().Flow
 
 	v := ResolveFlow(assigned, global)
 	if v.Delegation.Value != "auto" || v.Delegation.From != SourceDefault {
 		t.Fatalf("delegation = %+v", v.Delegation)
 	}
-	if v.Manager.Value != "project-manager" || v.Manager.From != SourceDefault {
+	if v.Manager.Value != "space-manager" || v.Manager.From != SourceDefault {
 		t.Fatalf("manager = %+v", v.Manager)
 	}
 
@@ -277,7 +277,7 @@ func TestResolveFlowDelegationAndManagerWithOrigins(t *testing.T) {
 	if v := ResolveFlow(none, global); v.Manager.Value != "" || v.Manager.From != SourceSpace {
 		t.Fatalf("an explicit none is no manager, got %+v", v.Manager)
 	}
-	if v := ResolveFlow(assigned, global); v.FlowConfig().Delegation != "auto" || v.FlowConfig().Manager != "project-manager" {
+	if v := ResolveFlow(assigned, global); v.FlowConfig().Delegation != "auto" || v.FlowConfig().Manager != "space-manager" {
 		t.Fatalf("the controller reads the merged values: %+v", v.FlowConfig())
 	}
 }
@@ -310,7 +310,7 @@ func TestSetSpaceDelegationValidatesModeAndManager(t *testing.T) {
 
 func TestManagerWithoutListTasksGetsANote(t *testing.T) {
 	f := teamFixture(t)
-	saveAgent(t, f, "project-manager", "tracks work", []string{"read_inbox", "send_message"})
+	saveAgent(t, f, "space-manager", "tracks work", []string{"read_inbox", "send_message"})
 	if err := f.ws.reload(); err != nil {
 		t.Fatal(err)
 	}

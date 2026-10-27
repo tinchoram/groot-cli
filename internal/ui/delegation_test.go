@@ -29,13 +29,13 @@ func TestSpaceRoutesShowsDelegationAndManagerWithTheirOrigins(t *testing.T) {
 	m, ws := newTestModel(t, &fakeSession{model: "m"})
 	ws.flow = sampleFlow()
 	ws.flow.Delegation = workspace.Setting{Value: "auto", From: workspace.SourceGlobal}
-	ws.flow.Manager = workspace.Setting{Value: "project-manager", From: workspace.SourceSpace}
-	ws.flow.ManagerNote = "manager project-manager lacks list_tasks: add it to its tools to answer status questions"
+	ws.flow.Manager = workspace.Setting{Value: "space-manager", From: workspace.SourceSpace}
+	ws.flow.ManagerNote = "manager space-manager lacks list_tasks: add it to its tools to answer status questions"
 	m = sendLine(t, m, "/space routes payments")
 	out := stripANSI(m.transcriptText())
 	for _, want := range []string{
 		"delegate auto (global)",
-		"manager  project-manager (space)",
+		"manager  space-manager (space)",
 		"lacks list_tasks",
 	} {
 		if !strings.Contains(out, want) {

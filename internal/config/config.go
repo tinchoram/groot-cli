@@ -230,7 +230,7 @@ func Default() Config {
 		Bash:       BashConfig{Timeout: DefaultBashTimeout, MaxTimeout: DefaultBashMaxTimeout, Sandbox: SandboxConfig{Mode: "auto"}},
 		Guard:      GuardConfig{Mode: "warn"},
 		Updates:    UpdatesConfig{Check: true},
-		Flow: FlowConfig{Mode: "strict", Delegation: "auto", Manager: "project-manager", Routes: FlowRoutes{
+		Flow: FlowConfig{Mode: "strict", Delegation: "auto", Manager: "space-manager", Routes: FlowRoutes{
 			Small:  FlowRoute{Model: "claude-haiku-5-5"},
 			Medium: FlowRoute{Model: "claude-sonnet-5-5"},
 			Large:  FlowRoute{Model: "claude-opus-5-5"},

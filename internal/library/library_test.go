@@ -18,7 +18,7 @@ import (
 )
 
 var wantTinchoram = []string{
-	"debug", "developer", "devsecops-platform", "observability", "project-manager", "security-tester", "ux-designer",
+	"debug", "developer", "devsecops-platform", "observability", "space-manager", "security-tester", "ux-designer",
 }
 
 // shortPromptAgents keep a prompt below the 25-line floor on purpose: debug only

@@ -17,9 +17,9 @@ agents:
   - name: observability
     description: "Observability, alerting and platform maintenance: SLOs, dashboards, alert quality, noise reduction, incident timelines, runbooks"
     url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/observability.md
-  - name: project-manager
-    description: "Plans releases and delivery dates, keeps the backlog and status notes, writes release notes and risk logs"
-    url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/project-manager.md
+  - name: space-manager
+    description: "Manager of a space: owns the project's context, phases, backlog and docs/ structure, delegates tasks to the space's agents and reports status simply"
+    url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/space-manager.md
   - name: security-tester
     description: "Offensive security testing of authorized targets only: reproduces vulnerabilities, documents impact and fixes"
     url: https://raw.githubusercontent.com/tinchoram/groot-cli/main/library/agents/security-tester.md

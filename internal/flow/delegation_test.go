@@ -38,14 +38,14 @@ func delegationRig(t *testing.T, mode DelegationMode, canDelegate bool, manager 
 
 func TestAutoDelegationHandsTheTaskOver(t *testing.T) {
 	ctx := context.Background()
-	ctl, store, applied := delegationRig(t, DelegationAuto, true, "project-manager")
+	ctl, store, applied := delegationRig(t, DelegationAuto, true, "space-manager")
 	_, _ = ctl.Classify(SizeMedium, true, "several files")
 
 	tk, op, err := ctl.Open(ctx, "build it", "payments/api", "tests pass")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if op.Handover == nil || op.Handover.Delegate != "developer" || op.Handover.Manager != "project-manager" {
+	if op.Handover == nil || op.Handover.Delegate != "developer" || op.Handover.Manager != "space-manager" {
 		t.Fatalf("auto mode must hand the task over, got %+v", op)
 	}
 	if op.Hint != "" {
@@ -67,7 +67,7 @@ func TestAutoDelegationHandsTheTaskOver(t *testing.T) {
 
 func TestHintDelegationOnlyNamesTheAgent(t *testing.T) {
 	ctx := context.Background()
-	ctl, _, _ := delegationRig(t, DelegationHint, true, "project-manager")
+	ctl, _, _ := delegationRig(t, DelegationHint, true, "space-manager")
 	_, _ = ctl.Classify(SizeMedium, true, "several files")
 
 	tk, op, err := ctl.Open(ctx, "build it", "payments/api", "tests pass")
@@ -87,7 +87,7 @@ func TestHintDelegationOnlyNamesTheAgent(t *testing.T) {
 
 func TestOffDelegationDoesNothing(t *testing.T) {
 	ctx := context.Background()
-	ctl, _, _ := delegationRig(t, DelegationOff, true, "project-manager")
+	ctl, _, _ := delegationRig(t, DelegationOff, true, "space-manager")
 	_, _ = ctl.Classify(SizeMedium, true, "several files")
 
 	tk, op, err := ctl.Open(ctx, "build it", "payments/api", "tests pass")
@@ -206,13 +206,13 @@ func TestDelegateDoesNotHandBackToItsOrigin(t *testing.T) {
 
 func TestStatusShowsTheDelegation(t *testing.T) {
 	ctx := context.Background()
-	ctl, _, _ := delegationRig(t, DelegationAuto, true, "project-manager")
+	ctl, _, _ := delegationRig(t, DelegationAuto, true, "space-manager")
 	_, _ = ctl.Classify(SizeMedium, true, "several files")
 	if _, _, err := ctl.Open(ctx, "build it", "s", "d"); err != nil {
 		t.Fatal(err)
 	}
 	status := ctl.Status(ctx)
-	if !strings.Contains(status, "delegation: → developer (handed over") || !strings.Contains(status, "manager project-manager") {
+	if !strings.Contains(status, "delegation: → developer (handed over") || !strings.Contains(status, "manager space-manager") {
 		t.Fatalf("status lacks the delegation line:\n%s", status)
 	}
 	if block := ctl.ContextBlock(ctx); !strings.Contains(block, "delegated to developer") {

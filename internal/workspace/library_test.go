@@ -20,7 +20,7 @@ func TestLibraryListsBuiltinAgents(t *testing.T) {
 	for _, e := range entries {
 		names[e.Name] = true
 	}
-	for _, want := range []string{"developer", "devsecops-platform", "observability", "project-manager", "security-tester", "ux-designer"} {
+	for _, want := range []string{"developer", "devsecops-platform", "observability", "space-manager", "security-tester", "ux-designer"} {
 		if !names[want] {
 			t.Errorf("library lacks %s", want)
 		}

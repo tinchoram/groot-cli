@@ -35,7 +35,7 @@ func TestDelegationAndParentPersistAcrossReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	origin.Delegation = flow.Delegation{
-		Delegate: "developer", Manager: "project-manager", Status: flow.DelegationHandedOver,
+		Delegate: "developer", Manager: "space-manager", Status: flow.DelegationHandedOver,
 		HandedAt: base.Add(time.Minute), StatusAt: base.Add(time.Minute),
 	}
 	origin.UpdatedAt = base.Add(time.Minute)
@@ -54,7 +54,7 @@ func TestDelegationAndParentPersistAcrossReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := got.Delegation
-	if d.Delegate != "developer" || d.Manager != "project-manager" || d.Status != flow.DelegationHandedOver ||
+	if d.Delegate != "developer" || d.Manager != "space-manager" || d.Status != flow.DelegationHandedOver ||
 		!d.HandedAt.Equal(base.Add(time.Minute)) {
 		t.Fatalf("delegation record after reopen = %+v", d)
 	}

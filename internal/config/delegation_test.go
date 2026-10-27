@@ -7,7 +7,7 @@ import (
 
 func TestDelegationDefaultsAndValidation(t *testing.T) {
 	cfg := Default()
-	if cfg.Flow.Delegation != "auto" || cfg.Flow.Manager != "project-manager" {
+	if cfg.Flow.Delegation != "auto" || cfg.Flow.Manager != "space-manager" {
 		t.Fatalf("delegation = %q, manager = %q", cfg.Flow.Delegation, cfg.Flow.Manager)
 	}
 	if err := cfg.Validate(); err != nil {
