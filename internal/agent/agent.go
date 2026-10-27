@@ -353,7 +353,11 @@ func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
 	}
 
 	_, external := t.(tool.External)
-	req := gate.Request{Tool: use.Name, Input: input, Risk: risk, Detail: detail, Tainted: tainted, External: external}
+	destructive, destructiveReason := destructiveOf(t, input)
+	req := gate.Request{
+		Tool: use.Name, Input: input, Risk: risk, Detail: detail, Tainted: tainted, External: external,
+		Destructive: destructive, DestructiveReason: destructiveReason,
+	}
 	decision := a.gate().Decide(ctx, req)
 	if decision == gate.Deny {
 		a.audit(use.Name, risk, decision, input, true, 0, "", nil)
@@ -366,6 +370,20 @@ func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
 	isErr = isErr || withheld
 	a.audit(use.Name, risk, decision, input, isErr, time.Since(start), sandboxOf(t), kinds)
 	return api.Block{Type: api.BlockToolResult, ToolUseID: use.ID, Content: out, IsError: isErr}
+}
+
+// destructiveOf reports whether a tool call carries a destructive command, and
+// names it as "kind: command", for example "git: git push --force".
+func destructiveOf(t tool.Tool, input string) (bool, string) {
+	d, ok := t.(tool.Destructive)
+	if !ok {
+		return false, ""
+	}
+	kind, reason, bad := d.DestructiveFor(input)
+	if !bad {
+		return false, ""
+	}
+	return true, string(kind) + ": " + reason
 }
 
 // sandboxOf returns the sandbox backend of a tool that runs processes, or "".

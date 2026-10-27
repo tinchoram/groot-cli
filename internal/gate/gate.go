@@ -36,11 +36,18 @@ type Request struct {
 	// External means the tool runs outside groot, such as an MCP server. Work
 	// mode never auto-approves its writes.
 	External bool
+	// Destructive means the input carries a command that deletes or destroys
+	// data, such as rm -rf or git push --force. Like Tainted, it is never
+	// auto-approved by work mode or a session grant, and always reaches the user
+	// under the interactive policy. DestructiveReason names the kind and the
+	// command, for example "git: git push --force".
+	Destructive       bool
+	DestructiveReason string
 }
 
 // CanGrant reports whether the user may approve this call for the rest of the
-// session. Admin tools never are, and neither is a tainted call.
-func (r Request) CanGrant() bool { return Grantable(r.Tool) && !r.Tainted }
+// session. Admin tools never are, and neither is a tainted or destructive call.
+func (r Request) CanGrant() bool { return Grantable(r.Tool) && !r.Tainted && !r.Destructive }
 
 // Gate is the permission policy port.
 type Gate interface {
@@ -76,7 +83,7 @@ type Interactive struct {
 }
 
 func (g Interactive) Decide(_ context.Context, req Request) Decision {
-	if req.Risk == tool.RiskRead && !req.Tainted {
+	if req.Risk == tool.RiskRead && !req.Tainted && !req.Destructive {
 		return Allow
 	}
 	if g.Confirm == nil {

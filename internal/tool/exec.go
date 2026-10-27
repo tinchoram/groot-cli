@@ -415,3 +415,20 @@ func (b *Bash) RiskFor(input string) Risk {
 }
 
 func (k *Kubectl) RiskFor(string) Risk { return k.Risk() }
+
+// Destructive is implemented by tools whose input can carry a destructive command.
+type Destructive interface {
+	DestructiveFor(input string) (kind DestructiveKind, reason string, ok bool)
+}
+
+var _ Destructive = (*Bash)(nil)
+
+// DestructiveFor classifies the command of the input. Unreadable input is not
+// reported as destructive; RiskFor already treats it as exec.
+func (b *Bash) DestructiveFor(input string) (DestructiveKind, string, bool) {
+	var in commandInput
+	if err := json.Unmarshal([]byte(input), &in); err != nil {
+		return "", "", false
+	}
+	return ClassifyDestructive(in.Command)
+}

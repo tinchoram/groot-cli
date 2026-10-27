@@ -4,6 +4,16 @@ All notable changes to Groot CLI. Versions follow semver; the first three were
 built in one day of live testing, so they are grouped by what shipped.
 
 
+## Unreleased
+
+### Safety
+- Destructive-command guard, a second layer under the bash sandbox. A bash command
+  that deletes or destroys data (`rm -rf`, `git push --force`, `git reset --hard`, a
+  DROP through `psql`, `kubectl delete`, `terraform destroy`, and similar) is marked
+  destructive. It always asks, work mode never approves it, a session grant does not
+  cover it, and the approval names it. The check is pattern-based, not a sandbox. See
+  `docs/SAFETY.md`.
+
 ## 0.6.0 — 2026-10-25
 
 First public release of Groot CLI, cut from main on 2026-10-25. It brings memory

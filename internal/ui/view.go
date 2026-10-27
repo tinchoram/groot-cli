@@ -126,6 +126,9 @@ func (m Model) inputArea() string {
 	w := max(m.chatWidth()-2, 20)
 	if m.pending != nil {
 		prompt := styleConfirmMark.Render(" ? ") + m.pending.prompt + styleDim.Render(" "+approvalChoices(m.pending.req))
+		if line := destructiveLine(m.pending.req); line != "" {
+			prompt = styleError.Render(" "+line) + "\n" + prompt
+		}
 		box := styleModalBorder.BorderForeground(lipgloss.Color(colorBrown)).Width(w).Render(prompt)
 		hint := "  y: yes · n / esc / enter: no"
 		if approvalChoices(m.pending.req) == "(y/n/a)" {

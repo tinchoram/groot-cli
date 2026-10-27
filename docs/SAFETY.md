@@ -182,6 +182,45 @@ The sandbox wraps only the bash tool. Three other paths run outside it:
   Commands you run there are outside groot's record; ask the agent to use bash
   when you want a command gated, sandboxed and audited.
 
+### Destructive commands
+
+Before a bash command runs, groot classifies it. A command that deletes or destroys
+data is marked destructive, whatever the sandbox does:
+
+- **delete:** `rm` with a recursive flag (`rm -rf ./build`), `rm` of `/`, `~`, `$HOME`,
+  `.`, `..` or `*`, `find … -delete`, `shred`.
+- **git:** `git push --force` (also `-f`, `--force-with-lease`, `--delete`, a `:ref`
+  refspec), `git reset --hard`, `git clean -fd`, `git checkout -- .`, `git branch -D`,
+  `git stash drop`, `git reflog expire`, `git gc --prune=now`, `git filter-repo`.
+- **database:** a `DROP`, `TRUNCATE`, `DELETE FROM`, `FLUSHALL` or `FLUSHDB` sent through
+  `psql`, `mysql`, `sqlite3`, `mongosh`, `redis-cli` and the other clients, inline with
+  `-c` or `-e`, or in a heredoc.
+- **cluster:** `kubectl delete`, `drain` or `rollout undo`; `helm uninstall`;
+  `terraform destroy`; `docker rm` or `docker system prune`; `docker compose down -v`;
+  cloud CLI verbs such as `aws ec2 terminate-instances`.
+
+The classifier sees through wrappers (`sudo`, `env`, `timeout`, `xargs`, `sh -c`,
+`eval`, subshells, `$(…)`). Quoted text and heredoc bodies are data: `echo "rm -rf /"`
+and `git commit -m "reset --hard"` are not destructive.
+
+What changes for a destructive call:
+
+- Under the `interactive` policy it always asks you. The approval shows a line such as
+  `destructive (git): git push --force` above the prompt.
+- Work mode never approves it, whatever `work.always_ask` says.
+- It is never covered by a session grant, and the `a` option is not offered for it.
+
+What it does not do:
+
+- It is not a sandbox. It matches patterns, so a command it does not recognise is not
+  caught: a script file that runs `rm -rf`, or SQL read from a file. The sandbox still
+  confines the bash tool.
+- The terminal column (`ctrl-t`) is not covered; see the section above.
+- It does not stop a destructive command you approve.
+
+`work.always_ask` remains for your own patterns. It adds commands that always ask, on top
+of this classification.
+
 ### Untrusted content
 
 Text from outside the conversation is data, not instructions. Output from

@@ -32,6 +32,20 @@ func approvalPrompt(req gate.Request) string {
 	return prompt + "?"
 }
 
+// destructiveLine is the warning above a destructive approval: the kind and the
+// command, for example "destructive (git): git push --force". It is empty for
+// other calls.
+func destructiveLine(req gate.Request) string {
+	if !req.Destructive {
+		return ""
+	}
+	kind, command, ok := strings.Cut(req.DestructiveReason, ": ")
+	if !ok {
+		return "destructive"
+	}
+	return fmt.Sprintf("destructive (%s): %s", kind, command)
+}
+
 // inputPath is the "path" field of a tool input, or "" when there is none.
 func inputPath(input string) string {
 	var in struct {

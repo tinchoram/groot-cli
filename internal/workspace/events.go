@@ -3,7 +3,21 @@ package workspace
 import (
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/guard"
+	"github.com/tinchoram/groot-cli/internal/tool"
 )
+
+// destructiveRequest reports the destructive command of a call the way the
+// agent does, so the transcript labels a call as the gate will decide it.
+func destructiveRequest(name, input string) (bool, string) {
+	if name != "bash" {
+		return false, ""
+	}
+	kind, reason, ok := (&tool.Bash{}).DestructiveFor(input)
+	if !ok {
+		return false, ""
+	}
+	return true, string(kind) + ": " + reason
+}
 
 // keyedText binds the text hook to one conversation key.
 func keyedText(h Hooks, key string) func(string) {
@@ -39,6 +53,7 @@ func keyedWarn(h Hooks, key string) func(string) {
 func autoAwareTool(h Hooks, key string, work *gate.WorkState, sess gate.Session, g *guard.Guard) func(string, string) {
 	return func(name, input string) {
 		req := gate.Request{Tool: name, Input: input, Tainted: g.Tainted(input)}
+		req.Destructive, req.DestructiveReason = destructiveRequest(name, input)
 		if work.Would(req) || sess.Covers(req) {
 			if h.OnAuto != nil {
 				h.OnAuto(key, name, input)
