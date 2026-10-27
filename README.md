@@ -1,4 +1,4 @@
-<h1 align="center">groot</h1>
+<h1 align="center">Groot</h1>
 
 <p align="center"><em>A terminal agent for developers and platform engineers. Kubernetes, logs, files and shell, behind a permission gate.</em></p>
 
