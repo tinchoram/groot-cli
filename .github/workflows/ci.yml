@@ -40,11 +40,34 @@ jobs:
       - name: Test
         # GROOT_REQUIRE_SANDBOX turns a skipped sandbox integration test into a
         # failure, so CI proves the bwrap backend instead of silently passing.
+        # -race is on: conversations, pumps and sinks run in goroutines.
         env:
           GROOT_REQUIRE_SANDBOX: "1"
-        run: go test ./... -count=1
+        run: go test -race ./... -count=1
 
       - name: Sandbox integration (verbose)
         env:
           GROOT_REQUIRE_SANDBOX: "1"
         run: go test ./internal/sandbox/... -run 'Bwrap|Secret' -count=1 -v
+
+  macos:
+    # The seatbelt backend only exists on macOS. This job is the proof that the
+    # sandbox works where most users run groot.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test
+        env:
+          GROOT_REQUIRE_SANDBOX: "1"
+        run: go test -race ./... -count=1
+
+      - name: Sandbox integration (verbose)
+        env:
+          GROOT_REQUIRE_SANDBOX: "1"
+        run: go test ./internal/sandbox/... -run 'Darwin|Secret' -count=1 -v

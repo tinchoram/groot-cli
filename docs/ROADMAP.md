@@ -58,7 +58,9 @@ groot to run groot. The backlog items they close are in CHANGELOG.md.
 ## Status at 2026-10-25
 
 What is verified where. "Live" means the user exercised it in a real session;
-"tests" means unit, race and CI coverage only, including the Linux sandbox job.
+"tests" means unit and CI coverage only. Since 2026-10-26 CI runs the whole
+suite under the race detector on Linux and macOS, with the bwrap and seatbelt
+sandbox tests required on each.
 
 | Area | Verified | Notes |
 |---|---|---|
@@ -117,6 +119,29 @@ Cut from main on 2026-10-25. The CHANGELOG.md section `0.6.0` has the details.
 
 Backlog: BUG-005 and FEAT-014 are implemented and still marked open until debug
 is told or the sweep runs.
+
+## Next, in order (validated 2026-10-26)
+
+The rule behind the order: first prove what is already promised, then close
+the cheapest safety gap, then features.
+
+| # | Item | Size | State |
+|---|---|---|---|
+| 1 | `-race` in CI, macOS CI job for seatbelt | S | done 2026-10-26 |
+| 2 | Doc drift fixes, unsandboxed paths noted in SAFETY | S | open |
+| 3 | Destructive-command guard under the sandbox | S | open |
+| 4 | Task phase inferred from tool activity | S | open |
+| 5 | `bash_background` and `monitor` | M | open |
+| 6 | Context backstop | M | open |
+| 7 | Provider adapters (0.7.0 below) | L | on request |
+| 8 | ACP client, skills | L | owner decision |
+| 9 | Disjoint edit surfaces for parallel writers | L | after parallel writers |
+| 10 | PromQL and LogQL tools | M | on demand |
+
+Repo hygiene is outside the list and goes in one commit: `.idea/` ignored,
+`dist/` removed, `AGENTS.md` filled, dead fields out of `groot.yaml.example`,
+a `make notices` target or CI check for `THIRD_PARTY_NOTICES.md`, and a
+confirmation on `make cleanall`.
 
 ## 0.7.0: connectivity
 

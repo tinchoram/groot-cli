@@ -11,7 +11,7 @@ build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/$(BINARY) $(PKG)
 
 test:
-	go test ./... -count=1
+	go test -race ./... -count=1
 
 # End-to-end tests against the real API: needs ANTHROPIC_API_KEY, costs a few cents.
 e2e:
