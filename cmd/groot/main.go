@@ -207,7 +207,7 @@ func runApp(cfg config.Config, cfgPath, groot, apiKey string) error {
 			OnAuto:     bridge.Auto,
 		},
 		NewProvider: func(model string) provider.Provider {
-			return provider.NewAnthropic(provider.AnthropicOptions{Model: model, APIKey: apiKey})
+			return provider.NewAnthropic(provider.AnthropicOptions{Model: model, APIKey: apiKey, Effort: cfg.Provider.Effort})
 		},
 	})
 	if err != nil {

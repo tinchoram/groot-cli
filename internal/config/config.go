@@ -12,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/tinchoram/groot-cli/internal/api"
 	"github.com/tinchoram/groot-cli/internal/guard"
 )
 
@@ -77,6 +78,7 @@ type FetchConfig struct {
 
 // FlowConfig is the ODD task flow: strict denies writes that skip it, advisory
 // only warns. Routes name the model a size runs on, applied when its task opens.
+// An empty route model is the default: the agent keeps its own model.
 type FlowConfig struct {
 	Mode   string     `yaml:"mode"` // strict | advisory
 	Routes FlowRoutes `yaml:"routes"`
@@ -117,6 +119,9 @@ type LibrarySource struct {
 type ProviderConfig struct {
 	Name  string `yaml:"name"`
 	Model string `yaml:"model"`
+	// Effort is how much the model works on a response: low, medium, high,
+	// xhigh or max. Empty is not sent. An agent's own effort overrides it.
+	Effort string `yaml:"effort"`
 }
 
 // CompactionConfig selects the history compaction strategy. MaxContextPercent
@@ -222,7 +227,7 @@ func Default() Config {
 	return Config{
 		Provider:   ProviderConfig{Name: "anthropic"},
 		MaxTurns:   40,
-		Compaction: CompactionConfig{Strategy: "none", Keep: 40, Threshold: 60, MaxContextPercent: 80},
+		Compaction: CompactionConfig{Strategy: "summarize", Keep: 40, Threshold: 60, MaxContextPercent: 80},
 		Memory:     MemoryConfig{Path: ".groot/groot.db", PreambleTokens: 1500, PreambleSummaries: 3},
 		Audit:      AuditConfig{Path: ".groot/audit.jsonl"},
 		Gate:       GateConfig{Policy: "interactive"},
@@ -230,11 +235,7 @@ func Default() Config {
 		Bash:       BashConfig{Timeout: DefaultBashTimeout, MaxTimeout: DefaultBashMaxTimeout, Sandbox: SandboxConfig{Mode: "auto"}},
 		Guard:      GuardConfig{Mode: "warn"},
 		Updates:    UpdatesConfig{Check: true},
-		Flow: FlowConfig{Mode: "strict", Delegation: "auto", Manager: "space-manager", Routes: FlowRoutes{
-			Small:  FlowRoute{Model: "claude-haiku-5-5"},
-			Medium: FlowRoute{Model: "claude-sonnet-5-5"},
-			Large:  FlowRoute{Model: "claude-opus-5-5"},
-		}},
+		Flow:       FlowConfig{Mode: "strict", Delegation: "auto", Manager: "space-manager"},
 	}
 }
 
@@ -401,6 +402,9 @@ func (c Config) Validate() error {
 	}
 	if c.Provider.Name != "anthropic" {
 		return fmt.Errorf("provider.name %q is not supported (MVP supports: anthropic)", c.Provider.Name)
+	}
+	if !api.ValidEffort(c.Provider.Effort) {
+		return fmt.Errorf("provider.effort %q is invalid (use low, medium, high, xhigh or max, or leave it empty)", c.Provider.Effort)
 	}
 	switch c.Gate.Policy {
 	case "interactive", "readonly", "auto":

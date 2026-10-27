@@ -13,7 +13,7 @@ import (
 // size runs on in one space.
 func NewSetSpaceRoute(m Manager) tool.Tool {
 	return setSpaceRoute{base{"set_space_route",
-		"Set the model and agent that a task size (small, medium or large) runs on in one space, overriding the global routes. An empty model or agent clears that field. The model id is checked against the provider's list when that list can be reached. Conversations opened from now on use it; running ones keep their route.",
+		"Set the model and agent that a task size (small, medium or large) runs on in one space, overriding the global routes. An empty model or agent clears that field; an empty model means the route keeps the agent's own model. The model id is checked against the provider's list when that list can be reached. Conversations opened from now on use it; running ones keep their route.",
 		`{"type":"object","properties":{"space":{"type":"string"},"size":{"type":"string","enum":["small","medium","large"]},"model":{"type":"string"},"agent":{"type":"string"}},"required":["space","size"],"additionalProperties":false}`,
 		tool.RiskWrite}, m}
 }

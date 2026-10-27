@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/tinchoram/groot-cli/internal/api"
 )
 
 // AgentDef is one agent definition.
@@ -33,6 +35,9 @@ type AgentDef struct {
 	// collection it belongs to. Both are optional and kept on save.
 	Author     string
 	Collection string
+	// Effort is how much the model works on each call: low, medium, high, xhigh
+	// or max. Empty uses the provider's effort. It overrides the provider's value.
+	Effort string
 	// GlobalMemory lets the agent read the global memory of the root database.
 	// groot always reads it; other agents read it only when this is set.
 	GlobalMemory bool
@@ -108,6 +113,9 @@ func Validate(d AgentDef) error {
 	if d.BudgetUSD < 0 {
 		return fmt.Errorf("agent %q: budget cannot be negative", d.Name)
 	}
+	if !api.ValidEffort(d.Effort) {
+		return fmt.Errorf("agent %q: effort %q is invalid (use low, medium, high, xhigh or max, or leave it empty)", d.Name, d.Effort)
+	}
 	return nil
 }
 
@@ -122,6 +130,7 @@ type frontmatter struct {
 	Author       string    `yaml:"author"`
 	Collection   string    `yaml:"collection"`
 	GlobalMemory bool      `yaml:"global_memory"`
+	Effort       string    `yaml:"effort"`
 }
 
 // splitFrontmatter separates the frontmatter block from the body. It accepts
@@ -159,6 +168,10 @@ func ParseAgentFile(data []byte) (AgentDef, error) {
 	if err != nil {
 		return AgentDef{}, err
 	}
+	effort := strings.ToLower(strings.TrimSpace(fm.Effort))
+	if !api.ValidEffort(effort) {
+		return AgentDef{}, fmt.Errorf("effort %q is invalid (use low, medium, high, xhigh or max, or leave it out)", fm.Effort)
+	}
 	return AgentDef{
 		Name:         strings.TrimSpace(fm.Name),
 		Description:  fm.Description,
@@ -168,6 +181,7 @@ func ParseAgentFile(data []byte) (AgentDef, error) {
 		BudgetUSD:    fm.BudgetUSD,
 		Author:       strings.TrimSpace(fm.Author),
 		Collection:   strings.TrimSpace(fm.Collection),
+		Effort:       effort,
 		GlobalMemory: fm.GlobalMemory,
 		Prompt:       strings.TrimSpace(body),
 	}, nil
@@ -234,6 +248,7 @@ type renderFrontmatter struct {
 	BudgetUSD    float64  `yaml:"budget_usd,omitempty"`
 	Author       string   `yaml:"author,omitempty"`
 	Collection   string   `yaml:"collection,omitempty"`
+	Effort       string   `yaml:"effort,omitempty"`
 	GlobalMemory bool     `yaml:"global_memory,omitempty"`
 }
 
@@ -248,6 +263,7 @@ func RenderAgentFile(d AgentDef) ([]byte, error) {
 		BudgetUSD:    d.BudgetUSD,
 		Author:       d.Author,
 		Collection:   d.Collection,
+		Effort:       d.Effort,
 		GlobalMemory: d.GlobalMemory,
 	})
 	if err != nil {

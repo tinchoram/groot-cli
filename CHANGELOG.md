@@ -20,6 +20,18 @@ built in one day of live testing, so they are grouped by what shipped.
   from a fixed table of tools, never moves the stored phase and is not shown to the model.
   See `docs/FLOW.md`.
 
+### Models and context
+- Routes no longer switch the model by task size. The default route models (Haiku for
+  small, Sonnet for medium, Opus for large) are gone: every task runs on the agent's own
+  model. `flow.routes.<size>.model` stays as an explicit opt-in override, and
+  `/space routes` shows an empty route as "agent model". See `docs/FLOW.md`.
+- Effort knob. `provider.effort` and the agent file's `effort:` set `output_config.effort`
+  (`low`, `medium`, `high`, `xhigh`, `max`). Unset sends nothing, so the model's default
+  applies; an agent's value overrides the provider's. `/agent show` names it. See
+  `docs/CONFIGURATION.md` and `docs/SPACES-AND-AGENTS.md`.
+- Compaction on by default. `compaction.strategy` now defaults to `summarize` at the
+  80% context trigger. Set `strategy: none` to keep the whole history as before.
+
 ## 0.6.0 — 2026-10-25
 
 First public release of Groot CLI, cut from main on 2026-10-25. It brings memory

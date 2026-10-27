@@ -159,8 +159,10 @@ type AgentInfo struct {
 	Name        string
 	Description string
 	Model       string
-	Tools       []string
-	Prompt      string
+	// Effort is the agent's own effort; empty means the provider's applies.
+	Effort string
+	Tools  []string
+	Prompt string
 	// GlobalMemory is whether the agent reads global memory (groot always does).
 	GlobalMemory bool
 	Assigned     bool // assigned to the active space
@@ -371,6 +373,7 @@ func (w *Workspace) info(d catalog.AgentDef, assigned bool) AgentInfo {
 		Name:         d.Name,
 		Description:  d.Description,
 		Model:        model,
+		Effort:       d.Effort,
 		Tools:        slices.Clone(d.Tools),
 		Prompt:       d.Prompt,
 		GlobalMemory: readsGlobal(d.Name, d),
@@ -625,6 +628,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	ag := &agent.Agent{
 		Name:      agentName,
 		Provider:  prov,
+		Effort:    def.Effort,
 		Tools:     tools,
 		Gate:      &flowgate.Gate{Inner: gate.Work{Inner: sess, State: work}, Ctl: ctl, Warn: keyedWarn(w.opts.Hooks, key)},
 		Compactor: compactorFor(w.opts.Config.Compaction, prov),

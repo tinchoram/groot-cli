@@ -81,8 +81,8 @@ func TestFlowGatesWritesAndRunsTheLoop(t *testing.T) {
 	if got := lastResult(t, f.mock.Calls[4].Messages); !strings.Contains(got.Content, "hi") {
 		t.Fatalf("bash result = %q", got.Content)
 	}
-	if f.mock.Model() != "claude-sonnet-5-5" {
-		t.Fatalf("the medium route should switch the model, model = %s", f.mock.Model())
+	if f.mock.Model() != "mock-model" {
+		t.Fatalf("an empty medium route must keep the agent model, model = %s", f.mock.Model())
 	}
 
 	task, ok := conv.Task()

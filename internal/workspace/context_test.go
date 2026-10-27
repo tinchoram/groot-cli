@@ -71,7 +71,7 @@ func TestContextsReadTheLastSessionOfEachAgent(t *testing.T) {
 	if r.Agent != "reader" || r.Space != "default" || r.Tokens != 84_000 || r.Window != 200_000 || r.Percent != 42 {
 		t.Fatalf("row = %+v, want reader 84000 of 200000 (42%%)", r)
 	}
-	if r.Strategy != "none" || r.Triggers {
+	if r.Strategy != "summarize" || r.Triggers {
 		t.Fatalf("default strategy must not trigger: %+v", r)
 	}
 }

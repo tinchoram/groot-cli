@@ -57,7 +57,10 @@ type Agent struct {
 	Audit     *audit.Log
 	// Guard wraps and scans untrusted tool results and remembers the nonces of
 	// its envelopes. Nil, or an off guard, leaves results as they are.
-	Guard    *guard.Guard
+	Guard *guard.Guard
+	// Effort is the agent's effort for every model call. Empty leaves the
+	// provider's value in place.
+	Effort   string
 	System   string
 	MaxTurns int
 	// turnTainted is set when a tool of the current turn returned untrusted
@@ -578,6 +581,7 @@ func (a *Agent) call(ctx context.Context, msgs []api.Message, defs []api.ToolDef
 		Messages: msgs,
 		Tools:    defs,
 		OnText:   a.OnText,
+		Effort:   a.Effort,
 	})
 }
 

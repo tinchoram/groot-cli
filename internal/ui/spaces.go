@@ -500,9 +500,18 @@ func spaceRoutesBlock(v workspace.FlowView) string {
 		fmt.Fprintf(&sb, "%-8s %s\n", "", v.ManagerNote)
 	}
 	for _, r := range v.Routes {
-		fmt.Fprintf(&sb, "%-8s model %s · agent %s\n", r.Size, originOf(r.Model), originOf(r.Agent))
+		fmt.Fprintf(&sb, "%-8s model %s · agent %s\n", r.Size, routeModelOf(r.Model), originOf(r.Agent))
 	}
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+// routeModelOf shows the model of a route. An empty one means the agent keeps
+// its own model, which is named rather than shown as none.
+func routeModelOf(s workspace.Setting) string {
+	if s.Value == "" {
+		return "agent model (default)"
+	}
+	return originOf(s)
 }
 
 // originOf shows a value with its origin, such as "claude-haiku-5-5 (space)".
@@ -573,9 +582,18 @@ func agentDetailBlock(a workspace.AgentInfo) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%s %s\n", styleAccentBold.Render(a.Name), styleDim.Render("· "+a.Description))
 	fmt.Fprintf(&sb, "  %-8s %s\n", "model", a.Model)
+	fmt.Fprintf(&sb, "  %-8s %s\n", "effort", effortOf(a.Effort))
 	fmt.Fprintf(&sb, "  %-8s %s\n", "tools", strings.Join(a.Tools, ", "))
 	fmt.Fprintf(&sb, "  %-8s %s", "prompt", styleDim.Render(firstLine))
 	return sb.String()
+}
+
+// effortOf names the agent's effort, or says the provider's default applies.
+func effortOf(effort string) string {
+	if effort == "" {
+		return "default"
+	}
+	return effort
 }
 
 // sidebarLines renders the sidebar body. Full mode (chat hidden) adds the

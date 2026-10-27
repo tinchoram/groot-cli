@@ -26,6 +26,9 @@ type Request struct {
 	Messages []api.Message
 	Tools    []api.ToolDef
 	OnText   func(delta string) // streaming text callback, may be nil
+	// Effort overrides the provider's effort for this call. Empty uses the
+	// provider's value, and an empty value there sends none.
+	Effort string
 }
 
 // UsageReporter is implemented by providers that track token usage and cost.

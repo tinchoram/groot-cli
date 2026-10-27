@@ -13,8 +13,9 @@ directory, Groot adds it to the system prompt under "Project context".
 |---|---|---|
 | `provider.name` | `anthropic` | Only `anthropic` in this release |
 | `provider.model` | `claude-sonnet-5-5` | Model id |
+| `provider.effort` | unset | `low`, `medium`, `high`, `xhigh` or `max`, sent as `output_config.effort`. Unset sends nothing, so the model's own default applies. An agent's `effort` overrides it |
 | `max_turns` | `40` | Model calls allowed per request; at the limit the agent answers once more without tools |
-| `compaction.strategy` | `none` | `none`, `window` (keep N) or `summarize` |
+| `compaction.strategy` | `summarize` | `none` (keep everything), `window` (keep N) or `summarize` (the older half becomes a summary) |
 | `compaction.max_context_percent` | `80` | Compact before a call once the last context fills this share of the window; `0` turns it off. See Context |
 | `models.context_window` | empty | Map of model id or prefix to context window in tokens. Overrides the built-in table (200000) |
 | `ui.show_cost` | `false` | Show the estimated session cost in the status line and the spend of each agent in the sidebar. `/cost` and `/tokens` show it either way |

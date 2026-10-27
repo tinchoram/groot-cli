@@ -11,7 +11,8 @@ written when the session ends. Sessions are per agent in a space.
 - Selecting an agent resumes its latest session. The session id stays the same,
   so new turns append to it. The model gets the history back as the compaction
   setting allows: `none` keeps all of it, `window` keeps the last `keep`
-  messages, and `summarize` keeps the last 200. The cut always falls on a user
+  messages, and `summarize` (the default) keeps the last 200 stored messages with
+  no summary of the older ones. The cut always falls on a user
   message, so a tool call never loses its result.
 - The transcript shows the last 200 stored messages above a dim line:
   `resumed session <id> · N messages · last activity <time>`. User turns are

@@ -71,8 +71,9 @@ Configuration (`flow` in `groot.yaml`):
   Without a classification, the message asks for `task_classify` first.
 - `mode: advisory`. The same rules, but the call runs and a warning is shown.
 - `routes.small`, `routes.medium`, `routes.large`: `model` and `agent`. The defaults
-  are haiku, sonnet and opus. The model is applied when the task opens and restored
-  when it closes. A route's `agent` takes the task over when `delegation` is `auto`
+  are empty: a size runs on the agent's own model, whatever its size. Set a route's
+  `model` only to opt in to a different model for that size. When set, it is applied
+  when the task opens and restored when it closes. A route's `agent` takes the task over when `delegation` is `auto`
   (the default), with the model not applied to the origin; see
   [Delegation](#delegation). With `hint` it is only named in the result.
 

@@ -27,7 +27,7 @@ func TestDefaultsWhenFileMissing(t *testing.T) {
 	if cfg.MaxTurns != 40 {
 		t.Errorf("max_turns default = %d", cfg.MaxTurns)
 	}
-	if cfg.Compaction.Strategy != "none" {
+	if cfg.Compaction.Strategy != "summarize" {
 		t.Errorf("compaction default = %q", cfg.Compaction.Strategy)
 	}
 	if cfg.Memory.Path != ".groot/groot.db" || cfg.Audit.Path != ".groot/audit.jsonl" {

@@ -262,7 +262,7 @@ func (c *Controller) Classify(size Size, resumable bool, reason string) (string,
 }
 
 func describeRoute(r Route) string {
-	parts := []string{"model unchanged"}
+	parts := []string{"agent model"}
 	if r.Model != "" {
 		parts[0] = "model " + r.Model
 	}

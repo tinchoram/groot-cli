@@ -7,15 +7,14 @@ import (
 	"testing"
 )
 
-func TestFlowDefaultsAreStrictWithOneModelPerSize(t *testing.T) {
+func TestFlowDefaultsAreStrictAndKeepTheAgentModel(t *testing.T) {
 	cfg := Default()
 	if cfg.Flow.Mode != "strict" {
 		t.Fatalf("mode = %q, want strict", cfg.Flow.Mode)
 	}
-	if cfg.Flow.Routes.Small.Model != "claude-haiku-5-5" ||
-		cfg.Flow.Routes.Medium.Model != "claude-sonnet-5-5" ||
-		cfg.Flow.Routes.Large.Model != "claude-opus-5-5" {
-		t.Fatalf("routes = %+v", cfg.Flow.Routes)
+	// An empty route model means the agent's own model: no size switches it.
+	if cfg.Flow.Routes.Small.Model != "" || cfg.Flow.Routes.Medium.Model != "" || cfg.Flow.Routes.Large.Model != "" {
+		t.Fatalf("route models must default to empty, routes = %+v", cfg.Flow.Routes)
 	}
 }
 
@@ -32,8 +31,8 @@ func TestFlowFileOverridesOnlyWhatItNames(t *testing.T) {
 	if cfg.Flow.Mode != "advisory" || cfg.Flow.Routes.Large.Model != "claude-opus-6" {
 		t.Fatalf("flow = %+v", cfg.Flow)
 	}
-	if cfg.Flow.Routes.Medium.Model != "claude-sonnet-5-5" {
-		t.Fatal("unnamed routes keep their defaults")
+	if cfg.Flow.Routes.Medium.Model != "" {
+		t.Fatal("unnamed routes keep the agent model")
 	}
 }
 

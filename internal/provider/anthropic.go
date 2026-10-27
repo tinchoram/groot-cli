@@ -31,12 +31,15 @@ type AnthropicOptions struct {
 	MaxTokens int64
 	// MaxRetries: zero keeps the SDK default, negative disables retries.
 	MaxRetries int
+	// Effort is sent as output_config.effort when set (see api.Efforts).
+	Effort string
 }
 
 // Anthropic is the Provider backed by the Anthropic Messages API.
 type Anthropic struct {
 	client    anthropic.Client
 	maxTokens int64
+	effort    string
 
 	mu    sync.Mutex
 	model string
@@ -69,6 +72,7 @@ func NewAnthropic(o AnthropicOptions) *Anthropic {
 	return &Anthropic{
 		client:    anthropic.NewClient(opts...),
 		maxTokens: maxTokens,
+		effort:    o.Effort,
 		model:     model,
 	}
 }
@@ -105,6 +109,9 @@ func (a *Anthropic) EstimatedCostUSD() float64 {
 // arrive; the returned response is the fully accumulated message.
 func (a *Anthropic) Send(ctx context.Context, req Request) (api.Response, error) {
 	model := a.Model()
+	if req.Effort == "" {
+		req.Effort = a.effort
+	}
 	params, err := buildParams(req, model, a.maxTokens)
 	if err != nil {
 		return api.Response{}, err
@@ -151,6 +158,9 @@ func buildParams(req Request, model string, maxTokens int64) (anthropic.MessageN
 		Messages:  msgs,
 		Tools:     tools,
 		Thinking:  anthropic.ThinkingConfigParamUnion{OfAdaptive: &anthropic.ThinkingConfigAdaptiveParam{}},
+	}
+	if req.Effort != "" {
+		params.OutputConfig.Effort = anthropic.OutputConfigEffort(req.Effort)
 	}
 	if req.System != "" {
 		// Caching the system block caches tools and system together as one prefix.

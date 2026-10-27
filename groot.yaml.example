@@ -7,11 +7,14 @@
 provider:
   name: anthropic                # only "anthropic" in this release
   model: ${GROOT_MODEL:-claude-sonnet-5-5}
+  # effort: high                 # low | medium | high | xhigh | max. Unset: not sent,
+  #                              # so the model's own default applies. An agent's
+  #                              # effort overrides this value.
 
 max_turns: 20                    # model calls allowed per user request
 
 compaction:
-  strategy: none                 # none | window | summarize
+  strategy: summarize            # none | window | summarize (default: summarize)
   keep: 40                       # window: messages kept (strategy window)
   threshold: 60                  # summarize: history length that triggers a summary
 

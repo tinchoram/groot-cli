@@ -138,6 +138,7 @@ holds the settings; the body is the system prompt:
 name: groot
 description: "Groot: your guide. Creates spaces and agents"
 model: sonnet                  # optional: a full id, or opus | sonnet | haiku | inherit
+effort: high                   # optional: low | medium | high | xhigh | max; overrides provider.effort
 tools: [list_spaces, recall]   # optional: a list or a comma-separated string
 max_turns: 40                  # optional
 ---
@@ -149,6 +150,9 @@ You are Groot, the administrator of this CLI.
 - Model aliases: `opus` is `claude-opus-5-5`, `sonnet` is `claude-sonnet-5-5`,
   `haiku` is `claude-haiku-5-5`. `inherit` or an empty value uses the default
   model from `groot.yaml`.
+- `effort` is optional and unset by default. When set, it is sent with every model
+  call of the agent and overrides `provider.effort`; when unset, the provider's
+  value applies (and none is sent if that is unset too). `/agent show` names it.
 - Tools must be groot tool names: `read_file`, `list_dir`, `glob`, `write_file`,
   `bash`, `kubectl`, `recall`, `remember`, and the admin tools. Files that predate this format
   (`agents/<name>/agent.yaml` and `prompt.md`) are converted on the next start,
