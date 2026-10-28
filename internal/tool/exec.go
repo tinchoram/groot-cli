@@ -139,6 +139,12 @@ func (b *Bash) CredentialSets() []string { return b.Credentials }
 // when Network is off. Only a real backend does, so the network hint is never
 // given without one.
 func (b *Bash) networkEnforced() bool {
+	return b.sandboxEnforces()
+}
+
+// sandboxEnforces reports whether a real backend confines the commands, so that
+// the denials it applies (the network, the secret directories) happen.
+func (b *Bash) sandboxEnforces() bool {
 	return b.Runner != nil && b.Runner.Name() != shellsandbox.BackendNone && b.Runner.Name() != shellsandbox.BackendOff
 }
 
@@ -283,8 +289,12 @@ func (b *Bash) run(ctx context.Context, command string, timeout, maxTimeout time
 	}
 	res := runCmd(ctx, timeout, b.buildCommand(command))
 	out, isErr := describeBash(res, timeout, maxTimeout)
-	if isErr && b.networkBlocked(out) {
-		out += "\n" + networkHint
+	if isErr {
+		if b.networkBlocked(out) {
+			out += "\n" + networkHint
+		} else if hint := credentialHintFor(out, b.deniedSets()); hint != "" {
+			out += "\n" + hint
+		}
 	}
 	if b.Runner.Name() == shellsandbox.BackendNone && res.startErr == nil {
 		out = noSandboxNotice + "\n" + out

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tinchoram/groot-cli/internal/api"
 	"github.com/tinchoram/groot-cli/internal/catalog"
@@ -79,6 +80,62 @@ func TestSendRefusesUnassignedRecipient(t *testing.T) {
 	}
 }
 
+const selfSendError = "cannot send a message to yourself (default/reader): answer the operator directly, or pick another agent of the space"
+
+func TestSendToSelfIsRefusedForEveryAddressForm(t *testing.T) {
+	f := newFixture(t)
+	for _, to := range []string{"default/reader", "reader"} {
+		_, _, err := f.ws.messengerFor("default", "reader").Send(context.Background(), to, "s", "b")
+		if err == nil || err.Error() != selfSendError {
+			t.Fatalf("Send(%q) err = %v, want %q", to, err, selfSendError)
+		}
+	}
+	got, _ := f.ws.inbox.List(context.Background(), "default", "reader", 10)
+	if len(got) != 0 {
+		t.Fatalf("a refused self-message was stored: %+v", got)
+	}
+}
+
+func TestSelfSendToolResultIsAnErrorAndStartsNoTurn(t *testing.T) {
+	f := newFixture(t, sendCall("tu_1", "default/reader", "note", "to myself"), text("answered"))
+	h := wireTriggers(f)
+	if err := catalog.Save(f.home, catalog.AgentDef{Name: "reader", Description: "reads files",
+		Tools: []string{"read_file", "send_message", "read_inbox"}}, "You read files carefully."); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.ws.reload(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.ws.SelectAgent("reader"); err != nil {
+		t.Fatal(err)
+	}
+	conv, ok := f.ws.Chat().(*Conversation)
+	if !ok {
+		t.Fatal("Chat must return the open conversation of the active agent")
+	}
+	if _, err := conv.Send(context.Background(), "ask yourself"); err != nil {
+		t.Fatal(err)
+	}
+	result := f.mock.Calls[1].Messages[len(f.mock.Calls[1].Messages)-1].Content[0]
+	if result.Type != api.BlockToolResult || !result.IsError || result.Content != selfSendError {
+		t.Fatalf("tool result = %+v, want the self-send error", result)
+	}
+	select {
+	case got := <-h.notices:
+		t.Fatalf("a refused self-message started a turn: %q", got)
+	case <-time.After(150 * time.Millisecond):
+	}
+	if conv.busy.Load() {
+		t.Fatal("the conversation is busy after a refused self-message")
+	}
+	if n := len(f.mock.Calls); n != 2 {
+		t.Fatalf("model calls = %d, want the tool turn only", n)
+	}
+	if got, _ := f.ws.inbox.List(context.Background(), "default", "reader", 10); len(got) != 0 {
+		t.Fatalf("a refused self-message was stored: %+v", got)
+	}
+}
+
 func TestSendMessageToolRoundTripBetweenAgents(t *testing.T) {
 	f := newFixture(t, sendCall("tu_1", "writer", "review", "check notes.txt"), text("sent"))
 	addAgentToDefault(t, f, "writer")
@@ -150,7 +207,8 @@ func TestTurnWithoutUnreadHasNoNotice(t *testing.T) {
 
 func TestUnreadCountsKeyedBySpaceAndAgent(t *testing.T) {
 	f := newFixture(t)
-	_, _, _ = f.ws.messengerFor("default", "reader").Send(context.Background(), "reader", "self", "note")
+	addAgentToDefault(t, f, "writer")
+	_, _, _ = f.ws.messengerFor("default", "writer").Send(context.Background(), "reader", "self", "note")
 	counts, err := f.ws.UnreadCounts(context.Background())
 	if err != nil || counts["default/reader"] != 1 {
 		t.Fatalf("counts = %v, %v", counts, err)

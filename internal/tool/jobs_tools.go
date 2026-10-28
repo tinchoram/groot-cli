@@ -60,6 +60,7 @@ func startJob(ctx context.Context, b *Bash, m *jobs.Manager, toolName, command s
 		Tool:       toolName,
 		Sandbox:    b.SandboxName(),
 		NetworkOff: b.networkDenied(),
+		Denied:     b.deniedSets(),
 	})
 	return job, notice, err
 }
@@ -316,9 +317,13 @@ func (t *JobOutput) Execute(_ context.Context, input string) (string, bool) {
 	}
 	header := fmt.Sprintf("job #%d %s%s: %s\n", job.ID, job.State, exitSuffix(job), oneLine(job.Command))
 	body := Redact(header) + finishOutput(t.dir, "job_output", text)
-	// A job that failed for lack of network says so, as a bash result does.
-	if job.State != jobs.Running && job.ExitCode != 0 && job.NetworkOff && networkFailure(text) {
-		body += "\n" + networkHint
+	// A job that failed for lack of network or of a credential set says so, as a bash result does.
+	if job.State != jobs.Running && job.ExitCode != 0 {
+		if job.NetworkOff && networkFailure(text) {
+			body += "\n" + networkHint
+		} else if hint := credentialHintFor(text, job.Denied); hint != "" {
+			body += "\n" + hint
+		}
 	}
 	return body, false
 }

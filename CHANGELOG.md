@@ -21,6 +21,8 @@ built in one day of live testing, so they are grouped by what shipped.
 - Work mode that turns itself off names the reason and ends with `/work on turns it
   back on`: the turn limit, the budget, and a task delivered for review. Delivery turns
   off only the delivering agent.
+- `send_message` refuses a message to the sending agent itself, by `<space>/<agent>` or by
+  the bare name. The tool result is an error, nothing is stored and no turn starts.
 
 ### Background jobs
 - `bash_background` starts a command and returns at once. `monitor` turns its output
@@ -62,6 +64,9 @@ built in one day of live testing, so they are grouped by what shipped.
   `grant_credentials` and `revoke_credentials` are admin changes that always ask. The
   approval line names the sets of a call, `/audit` shows them, and `/agent show` lists
   them. See `docs/SAFETY.md`.
+- A failed command that could not read a credential directory the agent does not hold
+  (`~/.ssh`, `~/.aws`, `~/.kube`) ends with a line that names the set and the grant. It
+  appears only under an enforcing sandbox, and `job_output` shows it too.
 
 ### Flow
 - Observed phase. The status line and `/task` show the phase that tool activity implies

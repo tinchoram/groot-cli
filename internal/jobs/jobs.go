@@ -86,6 +86,8 @@ type Job struct {
 	Sandbox string
 	// NetworkOff is set when the job ran with the network denied by its sandbox.
 	NetworkOff bool
+	// Denied lists the credential sets whose directories the job's sandbox denies.
+	Denied []string
 }
 
 // Who stopped a job, as the observer and the audit log name it.
@@ -119,6 +121,8 @@ type StartSpec struct {
 	Sandbox string
 	// NetworkOff is recorded on the job: the sandbox denies its network.
 	NetworkOff bool
+	// Denied is recorded on the job: the credential sets its sandbox denies.
+	Denied []string
 }
 
 // Manager runs the jobs of one conversation. Events go to the channel given to
@@ -162,6 +166,7 @@ type job struct {
 	tool       string
 	sandbox    string
 	networkOff bool
+	denied     []string
 	cmd        *exec.Cmd
 	cancel     context.CancelFunc
 	timer      *time.Timer
@@ -269,6 +274,7 @@ func (m *Manager) Start(ctx context.Context, spec StartSpec) (Job, error) {
 		tool:       spec.Tool,
 		sandbox:    spec.Sandbox,
 		networkOff: spec.NetworkOff,
+		denied:     spec.Denied,
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = time.Second
@@ -534,7 +540,7 @@ func snapshotLocked(j *job) Job {
 		ID: j.id, Command: j.command, Started: j.started, State: j.state,
 		ExitCode: j.exitCode, Ended: j.ended, Monitor: j.monitor, Pattern: pattern,
 		EventsSent: j.eventsSent, Capped: j.capped,
-		Tool: j.tool, Sandbox: j.sandbox, NetworkOff: j.networkOff,
+		Tool: j.tool, Sandbox: j.sandbox, NetworkOff: j.networkOff, Denied: j.denied,
 	}
 }
 

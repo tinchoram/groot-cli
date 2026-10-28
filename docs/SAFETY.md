@@ -189,6 +189,8 @@ The sets are `aws` (`~/.aws`), `kube` (`~/.kube`), `ssh` (`~/.ssh`), `gcloud`
 (`~/.config/gcloud`), `azure` (`~/.azure`), `docker` (`~/.docker`), `gh`
 (`~/.config/gh`), `gnupg` (`~/.gnupg`) and `netrc` (`~/.netrc`). An unknown name
 is refused when the file is read. `/agent show` lists the sets of an agent.
+A command that fails on a set the agent does not hold (an SSH, AWS or kube error)
+ends with a `[sandbox: ~/.ssh is not readable by this agent; ...]` line that names the set.
 
 Rules:
 

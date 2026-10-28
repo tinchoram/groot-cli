@@ -265,6 +265,8 @@ Agents address you and each other with `@`. Three names matter: yours, `@groot`
 - **What agents know.** Every prompt has a People section. It names you, tells the
   agent to mention you only when it needs a decision, approval or information, and
   says that `@groot` is reached with `send_message`, not by a mention alone.
+  A message to yourself is refused: `send_message` returns an error, nothing is
+  stored, and no turn starts. Answer the operator directly or pick another agent.
 
 ## Agent library
 

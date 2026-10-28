@@ -38,6 +38,10 @@ func (m *messenger) Send(ctx context.Context, to, subject, body string) (string,
 	if err != nil {
 		return "", 0, err
 	}
+	// A message to oneself would start a turn on its own text: refuse it before anything is stored.
+	if space == m.space && agent == m.agent {
+		return "", 0, fmt.Errorf("cannot send a message to yourself (%s/%s): answer the operator directly, or pick another agent of the space", space, agent)
+	}
 	id, err := m.w.inbox.Send(ctx, inbox.Message{
 		FromSpace: m.space, FromAgent: m.agent,
 		ToSpace: space, ToAgent: agent,
