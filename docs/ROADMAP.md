@@ -150,8 +150,11 @@ Decision (2026-10-25): 0.6.0 shipped the base structure only, and 0.7.0 keeps th
 built when a real task needs them, not ahead of it. The first of those is in
 the backlog below.
 
-- Bedrock, Vertex, Ollama and OpenAI-compatible adapters, chosen by the model
-  id prefix. Only when asked: Anthropic stays the single provider until then.
+- Done: Gemini adapter (Gemini Developer API, API key), chosen by the `gemini-`
+  model id prefix, with a catalog that lists every provider that has a key and
+  `/model --all`. See `docs/tasks/gemini-provider.md`.
+- Not built: Bedrock, Vertex, Ollama and OpenAI-compatible adapters, chosen by the
+  model id prefix. Only when asked.
 - Candidates, see the decisions above: ACP client, skills.
 - A2A (Agent2Agent, spec 1.0, Apache-2.0, Linux Foundation) as a client for
   talking to remote agents outside groot, and later as an optional server behind

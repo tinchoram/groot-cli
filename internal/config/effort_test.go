@@ -57,3 +57,30 @@ func TestCompactionNoneStillDisablesCompaction(t *testing.T) {
 		t.Fatalf("strategy = %q, want none", cfg.Compaction.Strategy)
 	}
 }
+
+func TestProviderNameAcceptsAnthropicAndGemini(t *testing.T) {
+	for _, name := range []string{"anthropic", "gemini"} {
+		path := filepath.Join(t.TempDir(), "groot.yaml")
+		if err := os.WriteFile(path, []byte("provider:\n  name: "+name+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("provider.name %s: %v", name, err)
+		}
+		if cfg.Provider.Name != name {
+			t.Fatalf("provider.name = %q, want %q", cfg.Provider.Name, name)
+		}
+	}
+}
+
+func TestProviderNameRefusesUnknownProviders(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "groot.yaml")
+	if err := os.WriteFile(path, []byte("provider:\n  name: bedrock\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "anthropic, gemini") {
+		t.Fatalf("err = %v, want the supported names listed", err)
+	}
+}

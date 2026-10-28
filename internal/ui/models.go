@@ -40,7 +40,11 @@ func (m *Model) runModelsCommand() {
 		if mi.ID == current {
 			tags += " [session]"
 		}
-		m.append(styleDim.Render(fmt.Sprintf("%s%s  %s  %s%s", mark, mi.ID, mi.DisplayName, provider.PriceNote(mi.ID), tags)))
+		label := mi.ID
+		if mi.Provider != "" {
+			label = mi.Provider + "  " + mi.ID
+		}
+		m.append(styleDim.Render(fmt.Sprintf("%s%s  %s  %s%s", mark, label, mi.DisplayName, provider.PriceNote(mi.ID), tags)))
 	}
 }
 
@@ -50,21 +54,26 @@ func (m *Model) runModelsCommand() {
 // --force skips the check. --agent also saves the model into the active agent's
 // file. A refused id changes nothing.
 func (m *Model) runModelCommand(arg string) {
-	fields := strings.Fields(arg)
-	persist, force, setDefault := false, false, false
-parse:
-	for len(fields) > 0 {
-		switch fields[len(fields)-1] {
+	// The flags may appear before or after the id; what is left is the id.
+	var fields []string
+	persist, force, setDefault, all := false, false, false, false
+	for _, f := range strings.Fields(arg) {
+		switch f {
 		case "--agent":
 			persist = true
 		case "--force":
 			force = true
 		case "--default":
 			setDefault = true
+		case "--all":
+			all = true
 		default:
-			break parse
+			fields = append(fields, f)
 		}
-		fields = fields[:len(fields)-1]
+	}
+	if all {
+		m.setAllAgentsModel(strings.Join(fields, " "), force)
+		return
 	}
 	if len(fields) == 1 && (fields[0] == "list" || fields[0] == "ls") && !persist && !force {
 		m.runModelsCommand()
@@ -113,4 +122,34 @@ parse:
 		return
 	}
 	m.append(styleDim.Render("model: ") + styleAccentBold.Render(id))
+}
+
+// setAllAgentsModel is /model --all: every agent of the active space gets id in
+// its file, the open conversations of those agents switch, and the space default
+// follows. The id is checked against the merged catalog unless force is set.
+// It prints one line per agent changed.
+func (m *Model) setAllAgentsModel(id string, force bool) {
+	if id == "" {
+		m.append(styleDim.Render("usage: /model --all <id> [--force]"))
+		return
+	}
+	sp, ok := m.ws.ActiveSpace()
+	if !ok {
+		m.append(styleError.Render("error: no active space"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), modelsTimeout)
+	defer cancel()
+	changed, warn, err := m.ws.SetSpaceAgentsModel(ctx, sp.Name, id, force)
+	if err != nil {
+		m.append(styleError.Render("error: " + err.Error()))
+		return
+	}
+	if warn != "" {
+		m.append(styleDim.Render(warn))
+	}
+	for _, a := range changed {
+		m.append(styleDim.Render("model of " + a + " set to " + id + " in " + sp.Name))
+	}
+	m.append(styleDim.Render("space " + sp.Name + " default set to " + id))
 }

@@ -41,6 +41,9 @@ func isolate(t *testing.T, key string) (func(string) string, *fakeKeychain) {
 	prev := newKeychain
 	newKeychain = func() auth.Keychain { return kc }
 	t.Cleanup(func() { newKeychain = prev })
+	prevGemini := newGeminiKeychain
+	newGeminiKeychain = func() auth.Keychain { return &fakeKeychain{} }
+	t.Cleanup(func() { newGeminiKeychain = prevGemini })
 	t.Chdir(t.TempDir())
 	getenv := func(k string) string {
 		switch k {

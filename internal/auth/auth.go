@@ -1,8 +1,10 @@
-// Package auth finds and stores the Anthropic API key. The key is taken from the
-// first of these that holds one: the ANTHROPIC_API_KEY environment variable,
-// a .env file in the working directory, the macOS keychain, and the credentials
-// file in the groot home. The keychain is reached through the security command
-// on macOS only; elsewhere the credentials file is the only store.
+// Package auth finds and stores the provider API keys. A key is taken from the
+// first of these that holds one: the provider's environment variable (for
+// Anthropic, ANTHROPIC_API_KEY; for Gemini, GEMINI_API_KEY), a .env file in the
+// working directory, the macOS keychain, and the credentials file in the groot
+// home. The keychain is reached through the security command on macOS only;
+// elsewhere the credentials file is the only store. Every provider uses the
+// same stores, each under its own item or field.
 package auth
 
 import (
@@ -18,8 +20,22 @@ import (
 	"github.com/tinchoram/groot-cli/internal/config"
 )
 
-// EnvVar is the environment variable that carries the key.
+// EnvVar is the environment variable that carries the Anthropic key.
 const EnvVar = "ANTHROPIC_API_KEY"
+
+// Service is a provider whose key groot stores.
+type Service struct {
+	Name     string // shown in messages: "Anthropic", "Gemini"
+	EnvVar   string // environment variable and .env name
+	Keychain string // keychain service name of the item
+	FileKey  string // field of the credentials file
+}
+
+// The providers that have a stored key.
+var (
+	Anthropic = Service{Name: "Anthropic", EnvVar: EnvVar, Keychain: "groot.anthropic", FileKey: "anthropic_api_key"}
+	Gemini    = Service{Name: "Gemini", EnvVar: "GEMINI_API_KEY", Keychain: "groot.gemini", FileKey: "gemini_api_key"}
+)
 
 // Source labels, as shown by `groot auth status` and doctor.
 const (
@@ -30,11 +46,9 @@ const (
 	SourceNone        = "none"
 )
 
-// Keychain item identity. The account and service are fixed so that login,
-// status and logout always address the same item.
+// keychainAccount is the account of every keychain item groot stores.
 const (
 	keychainAccount = "groot"
-	keychainService = "groot.anthropic"
 	// securityNotFound is the exit status of the security command for an item
 	// that does not exist (errSecItemNotFound).
 	securityNotFound = 44
@@ -43,7 +57,7 @@ const (
 // ErrNotFound means the store holds no key. ErrUnavailable means the store does
 // not exist on this platform.
 var (
-	ErrNotFound    = errors.New("no Anthropic API key is stored")
+	ErrNotFound    = errors.New("no API key is stored")
 	ErrUnavailable = errors.New("the keychain is available on macOS only")
 )
 
@@ -71,11 +85,17 @@ func ExecCommand(name string, args ...string) ([]byte, int, error) {
 	return nil, -1, err
 }
 
-// SystemKeychain returns the keychain for goos. On darwin it uses the security
-// command through run; elsewhere every operation reports ErrUnavailable.
+// SystemKeychain returns the Anthropic keychain item for goos. See SystemKeychainFor.
 func SystemKeychain(goos string, run Command) Keychain {
+	return SystemKeychainFor(Anthropic, goos, run)
+}
+
+// SystemKeychainFor returns the keychain item of service for goos. On darwin it
+// uses the security command through run; elsewhere every operation reports
+// ErrUnavailable.
+func SystemKeychainFor(svc Service, goos string, run Command) Keychain {
 	if goos == "darwin" {
-		return securityKeychain{run: run}
+		return securityKeychain{run: run, service: svc.Keychain}
 	}
 	return unavailableKeychain{}
 }
@@ -83,10 +103,13 @@ func SystemKeychain(goos string, run Command) Keychain {
 // securityKeychain stores the key as a generic password item through the
 // security command. The key is passed as an argument, so it is visible to ps for
 // the moment the command runs; that is the trade-off of avoiding cgo.
-type securityKeychain struct{ run Command }
+type securityKeychain struct {
+	run     Command
+	service string
+}
 
 func (k securityKeychain) Get() (string, error) {
-	out, code, err := k.run("security", "find-generic-password", "-a", keychainAccount, "-s", keychainService, "-w")
+	out, code, err := k.run("security", "find-generic-password", "-a", keychainAccount, "-s", k.service, "-w")
 	if err != nil {
 		return "", fmt.Errorf("keychain: cannot run security: %w", err)
 	}
@@ -104,7 +127,7 @@ func (k securityKeychain) Get() (string, error) {
 }
 
 func (k securityKeychain) Set(key string) error {
-	_, code, err := k.run("security", "add-generic-password", "-U", "-a", keychainAccount, "-s", keychainService, "-w", key)
+	_, code, err := k.run("security", "add-generic-password", "-U", "-a", keychainAccount, "-s", k.service, "-w", key)
 	if err != nil {
 		return fmt.Errorf("keychain: cannot run security: %w", err)
 	}
@@ -115,7 +138,7 @@ func (k securityKeychain) Set(key string) error {
 }
 
 func (k securityKeychain) Delete() error {
-	_, code, err := k.run("security", "delete-generic-password", "-a", keychainAccount, "-s", keychainService)
+	_, code, err := k.run("security", "delete-generic-password", "-a", keychainAccount, "-s", k.service)
 	if err != nil {
 		return fmt.Errorf("keychain: cannot run security: %w", err)
 	}
@@ -139,14 +162,23 @@ func CredentialsPath(home string) string {
 	return filepath.Join(home, "credentials")
 }
 
-// Options are the inputs of Resolve. EnvKey is ANTHROPIC_API_KEY as the process
-// had it before .env was loaded, so a key from .env is told apart from one
-// exported in the shell. Keychain may be nil.
+// Options are the inputs of Resolve. EnvKey is the service's variable as the
+// process had it before .env was loaded, so a key from .env is told apart from
+// one exported in the shell. Keychain may be nil. Service selects the provider;
+// the zero value means Anthropic.
 type Options struct {
+	Service  Service
 	EnvKey   string
 	Cwd      string
 	Home     string
 	Keychain Keychain
+}
+
+func (o Options) service() Service {
+	if o.Service.EnvVar == "" {
+		return Anthropic
+	}
+	return o.Service
 }
 
 // Credential is the key that Resolve found and where it came from. Path is the
@@ -163,11 +195,12 @@ type Credential struct {
 // working directory, keychain, credentials file. No key is not an error: the
 // Source is SourceNone.
 func Resolve(o Options) (Credential, error) {
+	svc := o.service()
 	if o.EnvKey != "" {
 		return Credential{Key: o.EnvKey, Source: SourceEnvironment}, nil
 	}
 	dotEnv := filepath.Join(o.Cwd, ".env")
-	if v, found, err := config.DotEnvValue(dotEnv, EnvVar); err != nil {
+	if v, found, err := config.DotEnvValue(dotEnv, svc.EnvVar); err != nil {
 		return Credential{}, err
 	} else if found && v != "" {
 		return Credential{Key: v, Source: SourceDotEnv, Path: dotEnv}, nil
@@ -186,7 +219,7 @@ func Resolve(o Options) (Credential, error) {
 	}
 
 	path := CredentialsPath(o.Home)
-	key, warning, err := readCredentials(path)
+	key, warning, err := readCredentials(path, svc.FileKey)
 	if err != nil {
 		return Credential{}, err
 	}
@@ -244,9 +277,15 @@ const (
 	StoreFile     = "credentials file"
 )
 
-// Login stores key in the keychain and, when the keychain fails, in the
-// credentials file of home.
+// Login stores the Anthropic key in the keychain and, when the keychain fails,
+// in the credentials file of home.
 func Login(home string, kc Keychain, key string) (Where, error) {
+	return LoginFor(Anthropic, home, kc, key)
+}
+
+// LoginFor stores the key of svc in the keychain and, when the keychain fails,
+// in the credentials file of home.
+func LoginFor(svc Service, home string, kc Keychain, key string) (Where, error) {
 	if err := ValidKey(key); err != nil {
 		return Where{}, err
 	}
@@ -255,16 +294,23 @@ func Login(home string, kc Keychain, key string) (Where, error) {
 			return Where{Store: StoreKeychain}, nil
 		}
 	}
-	path, err := storeInFile(home, key)
+	path, err := storeInFile(home, svc, key)
 	if err != nil {
 		return Where{}, err
 	}
 	return Where{Store: StoreFile, Path: path}, nil
 }
 
-// Logout removes the key from the keychain and from the credentials file. It
-// returns the names of what it removed, empty when nothing was stored.
+// Logout removes the Anthropic key from the keychain and from the credentials
+// file. It returns the names of what it removed, empty when nothing was stored.
 func Logout(home string, kc Keychain) ([]string, error) {
+	return LogoutFor(Anthropic, home, kc)
+}
+
+// LogoutFor removes the key of svc from the keychain and from the credentials
+// file. The file is deleted when no key is left in it. It returns the names of
+// what it removed.
+func LogoutFor(svc Service, home string, kc Keychain) ([]string, error) {
 	var removed []string
 	if kc != nil {
 		err := kc.Delete()
@@ -277,48 +323,90 @@ func Logout(home string, kc Keychain) ([]string, error) {
 		}
 	}
 	path := CredentialsPath(home)
-	err := os.Remove(path)
-	switch {
-	case err == nil:
-		removed = append(removed, path)
-	case errors.Is(err, os.ErrNotExist):
-	default:
-		return removed, fmt.Errorf("remove %s: %w", path, err)
+	doc, err := readCredentialsDoc(path)
+	if err != nil {
+		return removed, err
 	}
-	return removed, nil
+	if doc == nil {
+		return removed, nil
+	}
+	if _, ok := doc[svc.FileKey]; !ok {
+		return removed, nil
+	}
+	delete(doc, svc.FileKey)
+	if len(doc) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return removed, fmt.Errorf("remove %s: %w", path, err)
+		}
+		return append(removed, path), nil
+	}
+	if err := writeCredentialsDoc(path, doc); err != nil {
+		return removed, err
+	}
+	return append(removed, path), nil
 }
 
-// credentialsDoc is the YAML layout of the credentials file.
-type credentialsDoc struct {
-	AnthropicAPIKey string `yaml:"anthropic_api_key"`
-}
-
-// storeInFile writes the key to the credentials file of home with mode 0600.
-func storeInFile(home, key string) (string, error) {
+// storeInFile writes the key of svc to the credentials file of home with mode
+// 0600, keeping the other fields of the file.
+func storeInFile(home string, svc Service, key string) (string, error) {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return "", fmt.Errorf("create %s: %w", home, err)
 	}
-	raw, err := yaml.Marshal(credentialsDoc{AnthropicAPIKey: key})
+	path := CredentialsPath(home)
+	doc, err := readCredentialsDoc(path)
 	if err != nil {
 		return "", err
 	}
-	path := CredentialsPath(home)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return "", fmt.Errorf("write %s: %w", tmp, err)
+	if doc == nil {
+		doc = map[string]string{}
 	}
-	if err := os.Chmod(tmp, 0o600); err != nil {
-		return "", fmt.Errorf("chmod %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return "", fmt.Errorf("replace %s: %w", path, err)
+	doc[svc.FileKey] = key
+	if err := writeCredentialsDoc(path, doc); err != nil {
+		return "", err
 	}
 	return path, nil
 }
 
-// readCredentials returns the key in the credentials file. A file that is
-// readable by group or others is ignored, with a warning that names its mode.
-func readCredentials(path string) (key, warning string, err error) {
+// writeCredentialsDoc replaces the credentials file with doc, mode 0600.
+func writeCredentialsDoc(path string, doc map[string]string) error {
+	raw, err := yaml.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", tmp, err)
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		return fmt.Errorf("chmod %s: %w", tmp, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("replace %s: %w", path, err)
+	}
+	return nil
+}
+
+// readCredentialsDoc parses the credentials file. A missing file is nil, not
+// an error. The parser error is not wrapped: it can echo a line of the file,
+// which holds the key.
+func readCredentialsDoc(path string) (map[string]string, error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	doc := map[string]string{}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("%s is not a valid credentials file", path)
+	}
+	return doc, nil
+}
+
+// readCredentials returns the key of field in the credentials file. A file that
+// is readable by group or others is ignored, with a warning that names its mode.
+func readCredentials(path, field string) (key, warning string, err error) {
 	fi, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", "", nil
@@ -329,14 +417,9 @@ func readCredentials(path string) (key, warning string, err error) {
 	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
 		return "", fmt.Sprintf("ignoring %s: its mode is %04o, expected 0600 (run chmod 600)", path, perm), nil
 	}
-	raw, err := os.ReadFile(path)
+	doc, err := readCredentialsDoc(path)
 	if err != nil {
-		return "", "", fmt.Errorf("read %s: %w", path, err)
+		return "", "", err
 	}
-	var doc credentialsDoc
-	// The parser error is not wrapped: it can echo a line of the file, which holds the key.
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return "", "", fmt.Errorf("%s is not a valid credentials file", path)
-	}
-	return strings.TrimSpace(doc.AnthropicAPIKey), "", nil
+	return strings.TrimSpace(doc[field]), "", nil
 }

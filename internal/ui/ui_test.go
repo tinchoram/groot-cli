@@ -197,6 +197,11 @@ func (f *fakeSession) SessionID() string { return "s-test" }
 
 // fakeWorkspace is an in-memory Workspace with two agents and two spaces.
 type fakeWorkspace struct {
+	// The /model --all call and the agents it reports as changed.
+	allSpace      string
+	allModel      string
+	allForce      bool
+	allChanged    []string
 	order         []string
 	spaces        map[string]workspace.SpaceInfo
 	catalog       []workspace.AgentInfo

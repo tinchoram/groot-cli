@@ -46,7 +46,9 @@ type Block struct {
 	Content   string `json:"content,omitempty"`
 	IsError   bool   `json:"is_error,omitempty"`
 
-	// Signature is set for BlockThinking (Text holds the reasoning text).
+	// Signature is set for BlockThinking (Text holds the reasoning text). A Gemini
+	// thought signature may also sit on a text or tool_use block; it is replayed
+	// only to the provider that issued it (the value carries a provider prefix).
 	Signature string `json:"signature,omitempty"`
 }
 

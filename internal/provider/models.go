@@ -11,6 +11,9 @@ import (
 type ModelInfo struct {
 	ID          string
 	DisplayName string
+	// Provider names the provider that offers the model (see NameAnthropic).
+	// The merged catalog sets it; a single provider leaves it empty.
+	Provider string
 }
 
 // ModelLister is implemented by providers that can list their models.

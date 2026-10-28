@@ -55,6 +55,9 @@ type Workspace interface {
 	LibraryAgent(name string) (workspace.LibraryDetail, error)
 	InstallLibraryAgent(name, space string, overwrite bool) error
 	Agent(name string) (workspace.AgentInfo, error)
+	// SetSpaceAgentsModel is /model --all: it returns the agents changed and
+	// the warning of the check, when the check could not run.
+	SetSpaceAgentsModel(ctx context.Context, space, model string, force bool) ([]string, string, error)
 	UnreadCounts(ctx context.Context) (map[string]int, error)
 	// JobCounts reads the waiting job events and running jobs of every open
 	// conversation. Jobs and StopJob serve /jobs for one conversation.

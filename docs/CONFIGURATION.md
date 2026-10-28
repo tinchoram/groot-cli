@@ -11,7 +11,7 @@ directory, Groot adds it to the system prompt under "Project context".
 
 | Field | Default | Meaning |
 |---|---|---|
-| `provider.name` | `anthropic` | Only `anthropic` in this release |
+| `provider.name` | `anthropic` | `anthropic` or `gemini`: the provider of a model id with no recognised prefix. See Providers |
 | `provider.model` | `claude-sonnet-5-5` | Model id |
 | `provider.effort` | unset | `low`, `medium`, `high`, `xhigh` or `max`, sent as `output_config.effort`. Unset sends nothing, so the model's own default applies. An agent's `effort` overrides it |
 | `max_turns` | `40` | Model calls allowed per request; at the limit the agent answers once more without tools |
@@ -63,6 +63,33 @@ The `mcp` section of the global file keeps `${VAR}` literal at load. Its values
 expand when a server connects, and an unset variable is an error that names it.
 A `.env` in the working directory is read into the environment at startup, so its
 values count for every layer above; a variable already exported in the shell wins.
+
+## Providers
+
+Two providers are built: Anthropic (`claude-*` model ids) and Gemini through the
+Gemini Developer API (`gemini-*` model ids). The model id picks the provider. An id
+with no recognised prefix runs on `provider.name`.
+
+| Provider | Model ids | Key | Stored in |
+|---|---|---|---|
+| Anthropic | `claude-*` | `ANTHROPIC_API_KEY` | keychain item `groot.anthropic`, or `anthropic_api_key` in the credentials file |
+| Gemini | `gemini-*` | `GEMINI_API_KEY` | keychain item `groot.gemini`, or `gemini_api_key` in the credentials file |
+
+Keys resolve in this order: the environment, a `.env` file in the working directory,
+the keychain, the credentials file in the groot home. Store a Gemini key with
+`groot auth login --provider gemini`; `groot auth status` and `logout` take the same
+flag. The default provider must have a key to start; the other one is optional.
+
+`/models` and `/model list` show the models of every provider that has a key, each
+tagged with its provider. `/model <id>` switches the conversation to that model,
+whichever provider it belongs to. `/model --all <id>` sets the model of every agent of
+the active space: each agent's file is saved, open conversations of those agents
+switch, and the space default is set. The id is checked against the merged list
+unless `--force` is given. One line is printed per agent changed.
+
+Gemini prices and context windows are in `internal/provider/pricing.go` and
+`context.go`. Gemini 4 Argon reads cached input at 5% of the input price; Gemini 3.8
+Flash and the Anthropic models at 10%. See `docs/tasks/gemini-provider.md`.
 
 ## Context
 

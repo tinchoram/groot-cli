@@ -16,6 +16,9 @@ var contextWindows = map[string]int{
 	"claude-opus-5-5":   DefaultContextWindow,
 	"claude-sonnet-5-5": DefaultContextWindow,
 	"claude-haiku-5-5":  DefaultContextWindow,
+	// Gemini input limit, from the model pages on ai.google.dev (checked 2026-10-28).
+	"gemini-4-argon":   1_048_576,
+	"gemini-3.8-flash": 1_048_576,
 }
 
 // ContextWindow returns the context window of model in tokens. An override

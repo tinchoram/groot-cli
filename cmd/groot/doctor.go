@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -8,20 +10,30 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/tinchoram/groot-cli/internal/auth"
 	"github.com/tinchoram/groot-cli/internal/config"
 	"github.com/tinchoram/groot-cli/internal/home"
+	"github.com/tinchoram/groot-cli/internal/provider"
 	"github.com/tinchoram/groot-cli/internal/sandbox"
 	"github.com/tinchoram/groot-cli/internal/space"
 	"github.com/tinchoram/groot-cli/internal/update"
 )
+
+// geminiProbeTimeout bounds the Gemini model listing doctor makes.
+const geminiProbeTimeout = 5 * time.Second
 
 // doctorEnv is everything doctor looks at. runDoctor fills it from the real
 // machine; tests fill it with fakes.
 type doctorEnv struct {
 	Version        string
 	EnvKey         string // ANTHROPIC_API_KEY as the shell had it
+	GeminiEnvKey   string // GEMINI_API_KEY as the shell had it
+	GeminiKeychain auth.Keychain
+	// ProbeGemini lists the Gemini models with the key and returns how many
+	// there are. Nil skips the probe; the report then says it was not probed.
+	ProbeGemini    func(ctx context.Context, key string) (int, error)
 	Cwd            string
 	Home           string
 	ConfigPath     string // project file
@@ -58,14 +70,20 @@ type doctorInput struct {
 	ConfigErr    error
 	Key          auth.Credential
 	KeyErr       error
-	Sandbox      string // backend name, see sandboxBackend
-	SandboxHint  string // install command, only when no backend is active
-	Kubectl      string // path, empty when not on PATH
-	Spaces       int    // -1 when spaces.yaml does not exist
-	SpacesErr    error
-	InboxPath    string
-	InboxFound   bool
-	Update       update.Status // from the cache only; doctor makes no network call
+	GeminiKey    auth.Credential
+	GeminiKeyErr error
+	GeminiProbed bool
+	GeminiModels int   // models the probe found
+	GeminiErr    error // the probe failed
+
+	Sandbox     string // backend name, see sandboxBackend
+	SandboxHint string // install command, only when no backend is active
+	Kubectl     string // path, empty when not on PATH
+	Spaces      int    // -1 when spaces.yaml does not exist
+	SpacesErr   error
+	InboxPath   string
+	InboxFound  bool
+	Update      update.Status // from the cache only; doctor makes no network call
 	// MCP is the probe of each enabled server, in name order. MCPNone is set
 	// when no server is enabled.
 	MCP     []mcpCheck
@@ -88,7 +106,8 @@ func runDoctor(args []string, stdout, stderr io.Writer, getenv func(string) stri
 		return 2
 	}
 
-	envKey := getenv(auth.EnvVar)
+	envKey := getenv(auth.Anthropic.EnvVar)
+	geminiEnvKey := getenv(auth.Gemini.EnvVar)
 	if err := config.LoadDotEnv(".env"); err != nil {
 		fmt.Fprintf(stderr, "groot: %v\n", err)
 		return 1
@@ -106,6 +125,9 @@ func runDoctor(args []string, stdout, stderr io.Writer, getenv func(string) stri
 	return doctor(stdout, doctorEnv{
 		Version:        version,
 		EnvKey:         envKey,
+		GeminiEnvKey:   geminiEnvKey,
+		GeminiKeychain: newGeminiKeychain(),
+		ProbeGemini:    probeGemini,
 		Cwd:            cwd,
 		Home:           groot,
 		ConfigPath:     *cfgPath,
@@ -165,6 +187,14 @@ func gatherDoctor(env doctorEnv) doctorInput {
 	}
 
 	in.Key, in.KeyErr = auth.Resolve(auth.Options{EnvKey: env.EnvKey, Cwd: env.Cwd, Home: env.Home, Keychain: env.Keychain})
+
+	in.GeminiKey, in.GeminiKeyErr = auth.Resolve(auth.Options{Service: auth.Gemini, EnvKey: env.GeminiEnvKey, Cwd: env.Cwd, Home: env.Home, Keychain: env.GeminiKeychain})
+	if in.GeminiKeyErr == nil && in.GeminiKey.Key != "" && env.ProbeGemini != nil {
+		in.GeminiProbed = true
+		ctx, cancel := context.WithTimeout(context.Background(), geminiProbeTimeout)
+		in.GeminiModels, in.GeminiErr = env.ProbeGemini(ctx, in.GeminiKey.Key)
+		cancel()
+	}
 
 	runner, _ := env.Detect(sandbox.Config{Mode: mode})
 	in.Sandbox = sandboxBackend(runner, mode)
@@ -234,6 +264,7 @@ func doctorLines(in doctorInput) ([]doctorLine, bool) {
 	for _, w := range in.Key.Warnings {
 		add("api key warning", w, false)
 	}
+	geminiLines(add, in)
 
 	sandboxValue := in.Sandbox
 	if in.SandboxHint != "" {
@@ -259,6 +290,46 @@ func doctorLines(in doctorInput) ([]doctorLine, bool) {
 	mcpLines(add, in)
 	add("update", updateValue(in.Update), false)
 	return lines, blocks
+}
+
+// geminiLines reports the Gemini key and, when there is one, the model listing.
+// Gemini is optional, so nothing here blocks startup.
+func geminiLines(add func(name, value string, blocking bool), in doctorInput) {
+	switch {
+	case in.GeminiKeyErr != nil:
+		add("gemini key", "error: "+in.GeminiKeyErr.Error(), false)
+	case in.GeminiKey.Key == "":
+		add("gemini key", "missing (optional: needed for gemini- models)", false)
+	default:
+		add("gemini key", auth.Label(in.GeminiKey)+" ("+auth.Mask(in.GeminiKey.Key)+")", false)
+	}
+	for _, w := range in.GeminiKey.Warnings {
+		add("gemini key warning", w, false)
+	}
+	switch {
+	case in.GeminiKeyErr != nil || in.GeminiKey.Key == "":
+		add("gemini models", "not checked (no key)", false)
+	case !in.GeminiProbed:
+		add("gemini models", "not probed", false)
+	case in.GeminiErr != nil:
+		add("gemini models", "unreachable: "+in.GeminiErr.Error(), false)
+	default:
+		add("gemini models", fmt.Sprintf("reachable, %d models", in.GeminiModels), false)
+	}
+}
+
+// probeGemini lists the Gemini models with key. The error names only the HTTP
+// status or that the connection failed, never the response body.
+func probeGemini(ctx context.Context, key string) (int, error) {
+	models, err := provider.NewGemini(provider.GeminiOptions{APIKey: key}).ListModels(ctx)
+	if err != nil {
+		var pe *provider.Error
+		if errors.As(err, &pe) && pe.Status != 0 {
+			return 0, fmt.Errorf("HTTP %d", pe.Status)
+		}
+		return 0, errors.New("connection failed")
+	}
+	return len(models), nil
 }
 
 // updateValue words the update status: available, up to date, or unknown with

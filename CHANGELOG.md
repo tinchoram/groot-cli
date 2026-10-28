@@ -6,6 +6,19 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## Unreleased
 
+### Providers
+- Gemini provider through the Gemini Developer API (API key). A `gemini-` model id runs
+  on Gemini; `provider.name: gemini` sets the default for ids with no known prefix.
+  Store the key with `groot auth login --provider gemini` or set `GEMINI_API_KEY`.
+- `/models` and `/model list` merge the models of every provider that has a key, tagged
+  with the provider. `/model <id>` switches to a model of any provider.
+- `/model --all <id>` sets the model of every agent of the active space and the space
+  default. The id is checked against the merged list unless `--force`.
+- Cached input is priced per model: Gemini 4 Argon at 5% of input, Gemini 3.8 Flash and
+  the Anthropic models at 10%. Gemini rows are introductory until their dates; the
+  comments in `pricing.go` give the later prices.
+- `groot doctor` reports the Gemini key and whether the model list is reachable.
+
 ### Agents
 - A message delivered to an idle agent starts a turn that reads it, in work mode or
   not, so the recipient answers without `/readinbox`. A message that arrives during a

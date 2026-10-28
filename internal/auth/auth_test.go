@@ -172,7 +172,7 @@ func TestCredentialsFileWiderThanOwnerIsIgnoredWithWarning(t *testing.T) {
 
 func TestSaveWritesCredentialsFileWith0600(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
-	path, err := storeInFile(home, "sk-ant-test-1234")
+	path, err := storeInFile(home, Anthropic, "sk-ant-test-1234")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestLoginPrefersKeychainAndFallsBackToFile(t *testing.T) {
 
 func TestLogoutRemovesKeychainEntryAndFile(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
-	if _, err := storeInFile(home, "sk-ant-three-0003"); err != nil {
+	if _, err := storeInFile(home, Anthropic, "sk-ant-three-0003"); err != nil {
 		t.Fatal(err)
 	}
 	kc := &fakeKeychain{key: "sk-ant-four-0004"}
@@ -250,7 +250,7 @@ func TestSecurityKeychainBuildsTheCommands(t *testing.T) {
 		calls = append(calls, append([]string{name}, args...))
 		return []byte("sk-ant-stored-9999\n"), 0, nil
 	}
-	kc := securityKeychain{run: run}
+	kc := securityKeychain{run: run, service: Anthropic.Keychain}
 
 	if err := kc.Set("sk-ant-stored-9999"); err != nil {
 		t.Fatal(err)
@@ -275,7 +275,7 @@ func TestSecurityKeychainBuildsTheCommands(t *testing.T) {
 
 func TestSecurityKeychainExitCode44IsNotFound(t *testing.T) {
 	run := func(string, ...string) ([]byte, int, error) { return nil, 44, nil }
-	kc := securityKeychain{run: run}
+	kc := securityKeychain{run: run, service: Anthropic.Keychain}
 	if _, err := kc.Get(); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("get: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestSecurityKeychainExitCode44IsNotFound(t *testing.T) {
 
 func TestSecurityKeychainErrorsNeverCarryTheKey(t *testing.T) {
 	run := func(string, ...string) ([]byte, int, error) { return nil, 1, nil }
-	err := securityKeychain{run: run}.Set("sk-ant-secret-7777")
+	err := securityKeychain{run: run, service: Anthropic.Keychain}.Set("sk-ant-secret-7777")
 	if err == nil || strings.Contains(err.Error(), "sk-ant-secret-7777") {
 		t.Fatalf("error must fail without the key: %v", err)
 	}

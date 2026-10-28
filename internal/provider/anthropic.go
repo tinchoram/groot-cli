@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 
 	"github.com/tinchoram/groot-cli/internal/api"
 )
@@ -33,11 +35,22 @@ type AnthropicOptions struct {
 	MaxRetries int
 	// Effort is sent as output_config.effort when set (see api.Efforts).
 	Effort string
+	// Messages, when set, carries the streaming calls instead of the client
+	// the adapter builds from the options above. Other backends that expose
+	// the same service plug in here.
+	Messages MessageStreamer
+}
+
+// MessageStreamer is the slice of the Anthropic Messages service the adapter
+// uses. *anthropic.MessageService satisfies it.
+type MessageStreamer interface {
+	NewStreaming(ctx context.Context, params anthropic.MessageNewParams, opts ...option.RequestOption) *ssestream.Stream[anthropic.MessageStreamEventUnion]
 }
 
 // Anthropic is the Provider backed by the Anthropic Messages API.
 type Anthropic struct {
 	client    anthropic.Client
+	messages  MessageStreamer
 	maxTokens int64
 	effort    string
 
@@ -69,8 +82,14 @@ func NewAnthropic(o AnthropicOptions) *Anthropic {
 	if maxTokens <= 0 {
 		maxTokens = DefaultMaxTokens
 	}
+	client := anthropic.NewClient(opts...)
+	messages := o.Messages
+	if messages == nil {
+		messages = &client.Messages
+	}
 	return &Anthropic{
-		client:    anthropic.NewClient(opts...),
+		client:    client,
+		messages:  messages,
 		maxTokens: maxTokens,
 		effort:    o.Effort,
 		model:     model,
@@ -117,7 +136,7 @@ func (a *Anthropic) Send(ctx context.Context, req Request) (api.Response, error)
 		return api.Response{}, err
 	}
 
-	stream := a.client.Messages.NewStreaming(ctx, params)
+	stream := a.messages.NewStreaming(ctx, params)
 	var msg anthropic.Message
 	for stream.Next() {
 		event := stream.Current()
@@ -190,7 +209,8 @@ func toSDKMessages(msgs []api.Message) ([]anthropic.MessageParam, error) {
 				blocks = append(blocks, anthropic.NewToolResultBlock(b.ToolUseID, b.Content, b.IsError))
 			case api.BlockThinking:
 				// Thinking must be replayed unmodified; a block without its signature would be rejected.
-				if b.Signature != "" {
+				// Signatures issued by another provider (Gemini) would be rejected here.
+				if b.Signature != "" && !strings.HasPrefix(b.Signature, geminiSignaturePrefix) {
 					blocks = append(blocks, anthropic.ContentBlockParamUnion{
 						OfThinking: &anthropic.ThinkingBlockParam{Thinking: b.Text, Signature: b.Signature},
 					})

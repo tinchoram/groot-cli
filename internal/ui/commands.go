@@ -72,6 +72,7 @@ var helpEntries = []helpEntry{
 	{"/memory show|pin|unpin|rm|reviewed <id>", "show one entry in full, pin or unpin it, forget it, or mark it reviewed"},
 	{"/memory review", "list the entries whose review date has passed"},
 	{"/model [name]", "show or change the model"},
+	{"/model --all <id> [--force]", "set every agent of the active space to a model, and the space default"},
 	{"/models", "list the models the provider offers, with their prices"},
 	{"/cost", "session cost, spend and budgets"},
 	{"/budget", "show the spend and budgets of the space and its agents"},

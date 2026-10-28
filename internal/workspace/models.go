@@ -233,3 +233,42 @@ func (w *Workspace) applyAgentModel(agent, model string) {
 		_ = c.SetModel(target)
 	}
 }
+
+// SetSpaceAgentsModel is /model --all. Every agent of spaceName gets model in its
+// file, as SetAgentModel does; the open conversations of those agents switch in
+// place, and the space default is set. The id is checked against the merged
+// catalog first unless force is set, and a refused id changes nothing. warn says
+// when the check could not run. It returns the agents changed, in space order.
+func (w *Workspace) SetSpaceAgentsModel(ctx context.Context, spaceName, model string, force bool) ([]string, string, error) {
+	sp, ok := w.opts.Spaces.Get(spaceName)
+	if !ok {
+		return nil, "", fmt.Errorf("unknown space %q", spaceName)
+	}
+	var warn string
+	if !force {
+		var err error
+		if warn, err = w.CheckModel(ctx, model, false); err != nil {
+			return nil, "", err
+		}
+	}
+	defs, err := catalog.Load(w.opts.Home)
+	if err != nil {
+		return nil, "", err
+	}
+	for _, a := range sp.Agents {
+		if !slices.ContainsFunc(defs, func(d catalog.AgentDef) bool { return d.Name == a }) {
+			return nil, "", fmt.Errorf("agent %q of space %s is not in the catalog", a, spaceName)
+		}
+	}
+	var changed []string
+	for _, a := range sp.Agents {
+		if err := w.SaveAgentModel(a, model); err != nil {
+			return changed, warn, err
+		}
+		changed = append(changed, a)
+	}
+	if err := w.opts.Spaces.SetModel(spaceName, model); err != nil {
+		return changed, warn, err
+	}
+	return changed, warn, nil
+}

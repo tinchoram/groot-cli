@@ -5,8 +5,11 @@
 # environment or in a .env file.
 
 provider:
-  name: anthropic                # only "anthropic" in this release
+  name: anthropic                # anthropic (default) or gemini: used when the model id has no known prefix
   model: ${GROOT_MODEL:-claude-sonnet-5-5}
+  # A gemini- model id runs on Gemini. Store its key with
+  # groot auth login --provider gemini, or set GEMINI_API_KEY.
+  # model: gemini-3.8-flash
   # effort: high                 # low | medium | high | xhigh | max. Unset: not sent,
   #                              # so the model's own default applies. An agent's
   #                              # effort overrides this value.

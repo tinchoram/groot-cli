@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -31,9 +32,66 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, os.Getenv))
 }
 
-// newKeychain builds the OS keychain store. Tests replace it with a fake.
+// newKeychain builds the Anthropic key's keychain item. Tests replace it with a fake.
 var newKeychain = func() auth.Keychain {
 	return auth.SystemKeychain(runtime.GOOS, auth.ExecCommand)
+}
+
+// newGeminiKeychain builds the Gemini key's keychain item. Tests replace it too.
+var newGeminiKeychain = func() auth.Keychain {
+	return auth.SystemKeychainFor(auth.Gemini, runtime.GOOS, auth.ExecCommand)
+}
+
+// providerKeys holds the key of each provider groot can call. A provider
+// without a stored key has an empty one.
+type providerKeys struct {
+	anthropic string
+	gemini    string
+}
+
+// of returns the key of the named provider.
+func (k providerKeys) of(name string) string {
+	if name == provider.NameGemini {
+		return k.gemini
+	}
+	return k.anthropic
+}
+
+// keyed lists the providers that have a key, in catalog order.
+func (k providerKeys) keyed() []string {
+	var out []string
+	if k.anthropic != "" {
+		out = append(out, provider.NameAnthropic)
+	}
+	if k.gemini != "" {
+		out = append(out, provider.NameGemini)
+	}
+	return out
+}
+
+// keyEnv holds the key variables as the shell had them, before .env was loaded.
+type keyEnv struct {
+	anthropic string
+	gemini    string
+}
+
+// missingKeyError says which provider has no key and how to add one. Its text is
+// meant to be printed as it is.
+type missingKeyError struct {
+	provider string
+}
+
+func (e *missingKeyError) Error() string {
+	if e.provider == provider.NameGemini {
+		return "groot: no Gemini API key found.\n" +
+			"  Run: groot auth login --provider gemini\n" +
+			"  Or export GEMINI_API_KEY=<your key> in this shell, or put it in a .env file in the working directory.\n" +
+			"  groot never reads the key from groot.yaml."
+	}
+	return "groot: no Anthropic API key found.\n" +
+		"  Run: groot auth login\n" +
+		"  Or export ANTHROPIC_API_KEY=<your key> in this shell, or put it in a .env file in the working directory.\n" +
+		"  groot never reads the key from groot.yaml."
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string) int {
@@ -51,7 +109,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(s
 	fs := flag.NewFlagSet("groot", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfgPath := fs.String("config", "groot.yaml", "path to the configuration file")
-	model := fs.String("model", "", "model override (for example claude-opus-5-5)")
+	model := fs.String("model", "", "model override (for example claude-opus-5-5 or gemini-3.8-flash)")
 	policy := fs.String("policy", "", "permission policy override: interactive, readonly or auto")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
@@ -63,9 +121,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(s
 		return 0
 	}
 
-	// The key from the shell is read before .env fills in the variables the
+	// The keys from the shell are read before .env fills in the variables the
 	// shell did not export, so that the source can be reported correctly.
-	envKey := getenv(auth.EnvVar)
+	env := keyEnv{anthropic: getenv(auth.Anthropic.EnvVar), gemini: getenv(auth.Gemini.EnvVar)}
 	// A .env in the working directory fills in variables the shell did not export.
 	if err := config.LoadDotEnv(".env"); err != nil {
 		fmt.Fprintf(stderr, "groot: %v\n", err)
@@ -77,53 +135,75 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(s
 		fmt.Fprintf(stderr, "groot: %v\n", err)
 		return 1
 	}
-	cred, err := resolveKey(envKey, groot)
-	if err != nil {
-		fmt.Fprintf(stderr, "groot: %v\n", err)
-		return 1
+	// A missing key is reported before a configuration error: the key is what
+	// the user needs first. The key required is that of the configured model.
+	cfg, cfgErr := loadConfig(explicitFlag(fs, "config"), *cfgPath, filepath.Join(groot, "groot.yaml"))
+	if cfgErr == nil {
+		if *model != "" {
+			cfg.Provider.Model = *model
+		}
+		if *policy != "" {
+			cfg.Gate.Policy = *policy
+		}
+		cfgErr = cfg.Validate()
 	}
-	for _, w := range cred.Warnings {
+	keys, warnings, keyErr := resolveKeys(env, groot, provider.NameOf(cfg.Provider.Model, cfg.Provider.Name))
+	for _, w := range warnings {
 		fmt.Fprintf(stderr, "warning: %s\n", w)
 	}
-	if cred.Key == "" {
-		fmt.Fprintln(stderr, "groot: no Anthropic API key found.")
-		fmt.Fprintln(stderr, "  Run: groot auth login")
-		fmt.Fprintln(stderr, "  Or export ANTHROPIC_API_KEY=<your key> in this shell, or put it in a .env file in the working directory.")
-		fmt.Fprintln(stderr, "  groot never reads the key from groot.yaml.")
+	var missing *missingKeyError
+	switch {
+	case errors.As(keyErr, &missing):
+		fmt.Fprintln(stderr, keyErr)
+		return 1
+	case keyErr != nil:
+		fmt.Fprintf(stderr, "groot: %v\n", keyErr)
+		return 1
+	case cfgErr != nil:
+		fmt.Fprintf(stderr, "groot: %v\n", cfgErr)
 		return 1
 	}
 
-	cfg, err := loadConfig(explicitFlag(fs, "config"), *cfgPath, filepath.Join(groot, "groot.yaml"))
-	if err != nil {
-		fmt.Fprintf(stderr, "groot: %v\n", err)
-		return 1
-	}
-	if *model != "" {
-		cfg.Provider.Model = *model
-	}
-	if *policy != "" {
-		cfg.Gate.Policy = *policy
-	}
-	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(stderr, "groot: %v\n", err)
-		return 1
-	}
-
-	if err := runApp(cfg, *cfgPath, groot, cred.Key); err != nil {
+	if err := runApp(cfg, *cfgPath, groot, keys); err != nil {
 		fmt.Fprintf(stderr, "groot: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-// resolveKey finds the Anthropic key for groot home groot. envKey is the
-// variable as the shell had it, before .env was loaded.
-func resolveKey(envKey, groot string) (auth.Credential, error) {
+// resolveKeys finds the key of each provider for groot home groot. The key of
+// defaultName, the provider of the configured model, is required; the other is
+// optional and lets a conversation switch to its models. Warnings explain stores
+// that were skipped.
+func resolveKeys(env keyEnv, groot, defaultName string) (providerKeys, []string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return auth.Credential{}, fmt.Errorf("working directory: %w", err)
+		return providerKeys{}, nil, fmt.Errorf("working directory: %w", err)
 	}
-	return auth.Resolve(auth.Options{EnvKey: envKey, Cwd: cwd, Home: groot, Keychain: newKeychain()})
+	ant, err := resolveService(auth.Anthropic, env.anthropic, groot, cwd, newKeychain())
+	if err != nil {
+		return providerKeys{}, nil, err
+	}
+	gem, err := resolveService(auth.Gemini, env.gemini, groot, cwd, newGeminiKeychain())
+	if err != nil {
+		return providerKeys{}, nil, err
+	}
+	keys := providerKeys{anthropic: ant.Key, gemini: gem.Key}
+	warnings := append(ant.Warnings, gem.Warnings...)
+	if keys.of(defaultName) == "" {
+		name := defaultName
+		if name == "" {
+			name = provider.NameAnthropic
+		}
+		return keys, warnings, &missingKeyError{provider: name}
+	}
+	return keys, warnings, nil
+}
+
+// resolveService finds the key of one provider. shellKey is its variable as
+// the shell had it.
+func resolveService(svc auth.Service, shellKey, groot, cwd string, kc auth.Keychain) (auth.Credential, error) {
+	return auth.Resolve(auth.Options{Service: svc, EnvKey: shellKey, Cwd: cwd, Home: groot, Keychain: kc})
 }
 
 // explicitFlag reports whether the flag was set on the command line.
@@ -163,9 +243,20 @@ func buildGate(policy string, confirm func(req gate.Request) bool) (gate.Gate, e
 	return nil, fmt.Errorf("unknown gate policy %q", policy)
 }
 
+// buildProvider creates the adapter of a provider kind with its key. The
+// router calls it for every provider a conversation uses.
+func buildProvider(keys providerKeys, effort string) provider.Builder {
+	return func(name, model string) provider.Provider {
+		if name == provider.NameGemini {
+			return provider.NewGemini(provider.GeminiOptions{Model: model, APIKey: keys.gemini, Effort: effort})
+		}
+		return provider.NewAnthropic(provider.AnthropicOptions{Model: model, APIKey: keys.anthropic, Effort: effort})
+	}
+}
+
 // runApp resolves the groot home, bootstraps it on first run, builds the
 // workspace, and runs the terminal UI.
-func runApp(cfg config.Config, cfgPath, groot, apiKey string) error {
+func runApp(cfg config.Config, cfgPath, groot string, keys providerKeys) error {
 	userHome, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("home directory: %w", err)
@@ -185,6 +276,8 @@ func runApp(cfg config.Config, cfgPath, groot, apiKey string) error {
 		return err
 	}
 	runner, sandboxWarning := sandbox.Detect(sandbox.Config{Mode: cfg.Bash.Sandbox.Mode})
+	build := buildProvider(keys, cfg.Provider.Effort)
+	keyed := keys.keyed()
 	ws, err := workspace.New(workspace.Options{
 		Home:             groot,
 		UserHome:         userHome,
@@ -207,8 +300,15 @@ func runApp(cfg config.Config, cfgPath, groot, apiKey string) error {
 			OnJobs:     bridge.Jobs,
 			OnAuto:     bridge.Auto,
 		},
+		// The router sends each conversation to the provider of its model, and
+		// the catalog merges the providers that have a key.
 		NewProvider: func(model string) provider.Provider {
-			return provider.NewAnthropic(provider.AnthropicOptions{Model: model, APIKey: apiKey, Effort: cfg.Provider.Effort})
+			return provider.NewRouter(provider.RouterOptions{
+				Default: cfg.Provider.Name,
+				Model:   model,
+				Keyed:   keyed,
+				Build:   build,
+			})
 		},
 	})
 	if err != nil {

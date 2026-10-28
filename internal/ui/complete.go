@@ -129,6 +129,14 @@ func subCommandItems(command, prefix string) []completionItem {
 	if !knownCommands[command] {
 		return nil
 	}
+	if command == "model" && strings.HasPrefix(prefix, "-") {
+		// Flags complete once a dash is typed, so "/model " still offers no rows.
+		var out []completionItem
+		if strings.HasPrefix("--all", prefix) {
+			out = append(out, completionItem{usage: "/model --all <id> [--force]", insert: "/model --all", help: "set every agent of the active space to a model, and the space default"})
+		}
+		return out
+	}
 	var out []completionItem
 	for _, e := range helpEntries {
 		word := subWord(e.usage)

@@ -1,5 +1,7 @@
 // Package provider is the port to language models. Adapters live beside this
-// file: anthropic.go (Anthropic Messages API), mock.go (scripted, for tests).
+// file: anthropic.go (Anthropic Messages API), gemini.go (Gemini Developer API),
+// mock.go (scripted, for tests). router.go sends each call to the adapter of
+// the model's provider.
 //
 // TODO(phase-2): OpenAI-compatible, Ollama, Bedrock and Vertex adapters. See
 // docs/ROADMAP.md. They are intentionally not implemented in this MVP.

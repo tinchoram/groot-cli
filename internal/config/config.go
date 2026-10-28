@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -138,6 +139,11 @@ type LibrarySource struct {
 }
 
 // ProviderConfig selects the model backend.
+// ProviderNames are the values accepted for provider.name. anthropic is the
+// default; gemini is the Gemini Developer API. A model id with a recognised
+// prefix selects its provider regardless of this value.
+var ProviderNames = []string{"anthropic", "gemini"}
+
 type ProviderConfig struct {
 	Name  string `yaml:"name"`
 	Model string `yaml:"model"`
@@ -423,8 +429,8 @@ func (c Config) Validate() error {
 			return fmt.Errorf("audit.sinks[%d]: %w", i, err)
 		}
 	}
-	if c.Provider.Name != "anthropic" {
-		return fmt.Errorf("provider.name %q is not supported (MVP supports: anthropic)", c.Provider.Name)
+	if !slices.Contains(ProviderNames, c.Provider.Name) {
+		return fmt.Errorf("provider.name %q is not supported (supported: %s)", c.Provider.Name, strings.Join(ProviderNames, ", "))
 	}
 	if !api.ValidEffort(c.Provider.Effort) {
 		return fmt.Errorf("provider.effort %q is invalid (use low, medium, high, xhigh or max, or leave it empty)", c.Provider.Effort)
