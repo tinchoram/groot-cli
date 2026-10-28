@@ -101,3 +101,23 @@ func TestPasteEchoReachesBugContextAsPlaceholder(t *testing.T) {
 		t.Fatalf("bug context must hold the placeholder, not the paste: %q", ctx)
 	}
 }
+
+// Terminals send the newlines of a bracketed paste as carriage returns, the
+// same byte Enter produces. A paste must count and keep its lines either way.
+func TestPasteWithCarriageReturnsKeepsItsLines(t *testing.T) {
+	for _, sep := range []string{"\r", "\r\n", "\n"} {
+		m, _ := newTestModel(t, &fakeSession{model: "m"})
+		m = pasteText(m, strings.Join([]string{"a1", "b2", "c3", "d4"}, sep))
+		if m.input.Value() != "[Pasted text #1 +4 lines]" {
+			t.Fatalf("separator %q: input = %q", sep, m.input.Value())
+		}
+		if got := expandPastes(m.input.Value(), m.pastes); got != "a1\nb2\nc3\nd4" {
+			t.Fatalf("separator %q: expanded = %q", sep, got)
+		}
+	}
+	m, _ := newTestModel(t, &fakeSession{model: "m"})
+	m = pasteText(m, "one\rtwo")
+	if m.input.Value() != "one two" {
+		t.Fatalf("a short paste with a carriage return must become one line: %q", m.input.Value())
+	}
+}

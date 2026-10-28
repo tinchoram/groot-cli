@@ -388,8 +388,9 @@ func (m *Model) dragTo(x int) {
 	m.resize()
 }
 
-// handlePaste sends pasted text where the keyboard is. In the chat input,
-// newlines become spaces, because the input is a single line.
+// handlePaste sends pasted text where the keyboard is. In the chat input a
+// short paste has its newlines turned into spaces and a long one is collapsed
+// into a placeholder; the terminal column gets the text as the terminal sent it.
 func (m Model) handlePaste(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	text := string(msg.Runes)
 	switch {
@@ -397,10 +398,11 @@ func (m Model) handlePaste(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		_ = m.tm.Paste(text)
 	case m.focusSidebar:
 	default:
+		text = normalizeNewlines(text)
 		if isLongPaste(text) {
 			return m.insertPaste(text), nil
 		}
-		collapsed := strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ").Replace(text)
+		collapsed := strings.ReplaceAll(text, "\n", " ")
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(collapsed)})
 		return m, cmd

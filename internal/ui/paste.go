@@ -34,13 +34,20 @@ func isLongPaste(text string) bool {
 }
 
 func lineCount(text string) int {
-	return strings.Count(strings.ReplaceAll(text, "\r\n", "\n"), "\n") + 1
+	return strings.Count(normalizeNewlines(text), "\n") + 1
+}
+
+// normalizeNewlines turns the line ends of a paste into "\n". Terminals send
+// the newlines of a bracketed paste as carriage returns, the byte Enter
+// produces, and Windows text carries "\r\n"; Bubble Tea passes both through.
+func normalizeNewlines(text string) string {
+	return strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(text)
 }
 
 // insertPaste puts the placeholder of a long paste at the input cursor. Pastes
 // in one message are numbered #1, #2, … until the message is sent.
 func (m Model) insertPaste(text string) Model {
-	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = normalizeNewlines(text)
 	m.pasteSeq++
 	label := fmt.Sprintf("[Pasted text #%d +%d lines]", m.pasteSeq, lineCount(text))
 	m.pastes = append(append([]pastedText(nil), m.pastes...), pastedText{label: label, text: text})

@@ -123,6 +123,11 @@ built in one day of live testing, so they are grouped by what shipped.
 - `make cleanall` asks for confirmation before it deletes `~/.groot`. `make cleanall FORCE=1`
   skips the question.
 
+### Fixes
+- Pasting several lines into the chat input kept only one: terminals send the newlines of
+  a bracketed paste as carriage returns, which the input did not count. Pastes now keep
+  their lines, so an agent file pasted into groot arrives whole.
+
 ## 0.6.0 — 2026-10-25
 
 First public release of Groot CLI, cut from main on 2026-10-25. It brings memory
