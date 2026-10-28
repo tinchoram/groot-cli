@@ -12,6 +12,9 @@ built in one day of live testing, so they are grouped by what shipped.
   turn gets one follow-up turn when that turn ends. Each automatic turn counts against
   `work.max_auto_turns` per session, and at the limit one warning says the message waits.
 - `work.max_auto_turns` defaults to 50 (was 10).
+- The space-manager answers status as a phase table (`FASE n` lines with their `TASK nn`
+  lines), one phase on request, the backlog when no phase exists, and marks what other
+  agents report as confirmed, refuted or unverified before relaying it.
 - Work mode per space. `/work on|off` applies to every agent assigned to the space, and
   conversations opened later in it inherit the setting. `set_work_mode` takes
   `space_wide: true` for the same effect. The sidebar gear stays per agent.
