@@ -19,12 +19,12 @@ compaction:
   threshold: 60                  # summarize: history length that triggers a summary
 
 memory:
-  path: .groot/groot.db          # unused since 0.2.0: each space keeps its own
-                                 # <space>/.groot/groot.db
+  path: .groot/groot.db          # relative: each space's own database under its
+                                 # directory; absolute: one database shared by all spaces
 
 audit:
-  path: .groot/audit.jsonl       # unused since 0.2.0: each space keeps its own
-                                 # <space>/.groot/audit.jsonl
+  path: .groot/audit.jsonl       # relative: each space's own log under its directory;
+                                 # absolute: one log shared by all spaces
 
 gate:
   policy: interactive            # interactive: ask for writes and commands

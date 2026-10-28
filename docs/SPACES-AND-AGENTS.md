@@ -392,3 +392,30 @@ Other agents keep their files as they are. To add the managed tools that an agen
 lacks, run `/agent upgrade <name>` or `/agent upgrade --all`. Upgrades never
 remove a tool. The admin tool `upgrade_agent` does the same for groot to call.
 Groot itself is not upgraded by hand.
+
+## Project context
+
+If `AGENTS.md` sits in the working directory, groot adds it to the system prompt under
+"Project context", after the environment block. Use it for facts an agent cannot
+discover, such as the clusters in scope or the change process. Do not put secrets in it.
+A starting template, to fill in:
+
+```markdown
+# Project context
+
+## Environment
+
+- Clusters: <name> (<provider>, <region>)
+- Namespaces in scope: <ns-a>, <ns-b>
+- Observability: <metrics URL or tool>, <logs tool>
+
+## Conventions
+
+- Naming: <how resources are named>
+- Change process: <who approves, where changes are recorded>
+- Forbidden actions: <for example: no deletes in production namespaces>
+
+## Runbooks
+
+- <short title>: <path or link to the runbook>
+```

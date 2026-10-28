@@ -3,7 +3,7 @@ PKG     := ./cmd/groot
 VERSION ?= 0.6.0
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: all build test e2e lint vet fmt run clean cleanall release-check snapshot install-check demo
+.PHONY: all build test e2e lint vet fmt run clean cleanall notices release-check snapshot install-check demo
 
 all: build test
 
@@ -32,8 +32,33 @@ run:
 clean:
 	rm -rf bin
 
+# cleanall deletes ~/.groot: the global config, every space's database and audit
+# log, and the agents. It asks for confirmation (y or yes); FORCE=1 skips the
+# question for scripts: make cleanall FORCE=1
 cleanall:
-	rm -rf ~/.groot
+	@if [ "$(FORCE)" = "1" ]; then \
+		rm -rf ~/.groot && echo "removed ~/.groot"; \
+	else \
+		printf 'Delete ~/.groot (config, spaces, agents, databases, audit logs)? [y/N] '; \
+		read answer; \
+		case "$$answer" in \
+			y|yes) rm -rf ~/.groot && echo "removed ~/.groot" ;; \
+			*) echo "aborted: ~/.groot kept"; exit 1 ;; \
+		esac; \
+	fi
+
+# notices checks that THIRD_PARTY_NOTICES.md names every module of the groot binary.
+# It does not rewrite the file: the notices were built by hand (see its Method section),
+# and no tool reproduces them on the current Go toolchain. Add a row and an appendix
+# text for each module it reports.
+notices:
+	@command -v go >/dev/null 2>&1 || { echo "go not installed: skipping notices"; exit 0; }
+	@missing=0; \
+	for m in $$(go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' $(PKG) | sort -u); do \
+		grep -qF "| $$m |" THIRD_PARTY_NOTICES.md || { echo "missing from THIRD_PARTY_NOTICES.md: $$m"; missing=1; }; \
+	done; \
+	if [ "$$missing" = 1 ]; then exit 1; fi; \
+	echo "THIRD_PARTY_NOTICES.md names every module of the binary"
 
 # Release tooling needs goreleaser (brew install goreleaser). The other targets do not.
 # release-check validates .goreleaser.yaml and skips with a message when goreleaser is absent.

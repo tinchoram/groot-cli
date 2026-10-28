@@ -139,9 +139,9 @@ the cheapest safety gap, then features.
 | 9 | Disjoint edit surfaces for parallel writers | L | after parallel writers |
 | 10 | PromQL and LogQL tools | M | on demand |
 
-Repo hygiene is outside the list and goes in one commit: `.idea/` ignored,
-`dist/` removed, `AGENTS.md` filled, dead fields out of `groot.yaml.example`,
-a `make notices` target or CI check for `THIRD_PARTY_NOTICES.md`, and a
+Repo hygiene landed on 2026-10-28 in one commit: `.idea/` ignored, `dist/`
+removed, `AGENTS.md` filled, `groot.yaml.example` comments corrected (no field
+was dead), `make notices` plus an arch test for `THIRD_PARTY_NOTICES.md`, and a
 confirmation on `make cleanall`.
 
 ## 0.7.0: connectivity

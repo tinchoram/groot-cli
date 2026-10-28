@@ -113,6 +113,16 @@ built in one day of live testing, so they are grouped by what shipped.
   characters with the file path. This replaces the 32 KB bash and 64 KB kubectl
   limits; the saved files are redacted and capped at 50 per space. See `docs/SAFETY.md`.
 
+### Repository hygiene
+- `AGENTS.md` at the repository root describes this project for agents working in it.
+  The placeholder template moved to `docs/SPACES-AND-AGENTS.md`.
+- `groot.yaml.example` describes `memory.path` and `audit.path` correctly: both are live,
+  relative to each space or absolute and shared.
+- `make notices` checks that `THIRD_PARTY_NOTICES.md` names every module of the binary.
+  `go test ./internal/arch` fails when a direct dependency is missing from it.
+- `make cleanall` asks for confirmation before it deletes `~/.groot`. `make cleanall FORCE=1`
+  skips the question.
+
 ## 0.6.0 — 2026-10-25
 
 First public release of Groot CLI, cut from main on 2026-10-25. It brings memory
