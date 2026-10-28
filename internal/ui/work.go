@@ -11,10 +11,16 @@ import (
 func (m *Model) runWorkCommand(arg string) {
 	switch strings.TrimSpace(arg) {
 	case "on":
-		m.session.SetWorkMode(true)
+		if err := m.setWork(true); err != nil {
+			m.append(styleError.Render("error: " + err.Error()))
+			return
+		}
 		m.append(styleDim.Render(m.workOnText()))
 	case "off":
-		m.session.SetWorkMode(false)
+		if err := m.setWork(false); err != nil {
+			m.append(styleError.Render("error: " + err.Error()))
+			return
+		}
 		m.append(styleDim.Render(workspace.WorkOffLine))
 	case "":
 		state := "off"
@@ -25,6 +31,17 @@ func (m *Model) runWorkCommand(arg string) {
 	default:
 		m.append(styleError.Render("usage: /work on|off"))
 	}
+}
+
+// setWork turns work mode on or off for every agent of the active space, the
+// shown one included. Without an active space only the shown conversation changes.
+func (m *Model) setWork(on bool) error {
+	sp, ok := m.ws.ActiveSpace()
+	if !ok {
+		m.session.SetWorkMode(on)
+		return nil
+	}
+	return m.ws.SetSpaceWorkMode(sp.Name, on)
 }
 
 // workLabel is the header part shown while work mode is on.

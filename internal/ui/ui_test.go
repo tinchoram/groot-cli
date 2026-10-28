@@ -209,6 +209,7 @@ type fakeWorkspace struct {
 	bgJobs        []jobs.Job                    // the jobs of the active conversation
 	stopped       []int                         // ids passed to StopJob
 	acks          []inbox.Message               // pending acks of the active agent, handed out by TakeAcks
+	spaceWork     []string                      // SetSpaceWorkMode calls, "space:on"
 	workModes     map[string]bool
 	blockClose    bool
 	backlog       []feedback.Item
@@ -432,6 +433,16 @@ func (f *fakeWorkspace) StopJob(_ string, id int) (jobs.Job, error) {
 }
 
 func (f *fakeWorkspace) WorkModes() map[string]bool { return f.workModes }
+
+// SetSpaceWorkMode records the space-wide call and, as the workspace does, turns
+// the shown conversation on or off.
+func (f *fakeWorkspace) SetSpaceWorkMode(space string, on bool) error {
+	f.spaceWork = append(f.spaceWork, fmt.Sprintf("%s:%t", space, on))
+	if f.chat != nil {
+		f.chat.workOn = on
+	}
+	return nil
+}
 
 func (f *fakeWorkspace) SendFeedback(spaceName, agent, kind, text string, context []string) (int64, string, error) {
 	f.lastContext = context

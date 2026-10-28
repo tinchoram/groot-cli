@@ -253,7 +253,7 @@ func Default() Config {
 		Memory:     MemoryConfig{Path: ".groot/groot.db", PreambleTokens: 1500, PreambleSummaries: 3},
 		Audit:      AuditConfig{Path: ".groot/audit.jsonl"},
 		Gate:       GateConfig{Policy: "interactive"},
-		Work:       WorkConfig{MaxTurns: 50, MaxAutoTurns: 10, MaxUSD: 5.0, AlwaysAsk: DefaultAlwaysAsk()},
+		Work:       WorkConfig{MaxTurns: 50, MaxAutoTurns: 50, MaxUSD: 5.0, AlwaysAsk: DefaultAlwaysAsk()},
 		Bash:       BashConfig{Timeout: DefaultBashTimeout, MaxTimeout: DefaultBashMaxTimeout, Sandbox: defaultSandbox()},
 		Guard:      GuardConfig{Mode: "warn"},
 		Updates:    UpdatesConfig{Check: true},

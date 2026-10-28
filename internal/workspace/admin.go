@@ -34,6 +34,10 @@ func (a adminManager) SetWorkMode(space, agent string, on bool) error {
 	return a.w.SetWorkMode(space, agent, on)
 }
 
+func (a adminManager) SetSpaceWorkMode(space string, on bool) error {
+	return a.w.SetSpaceWorkMode(space, on)
+}
+
 func (a adminManager) UpgradeAgent(name string) ([]string, error) {
 	return a.w.UpgradeAgents(name)
 }

@@ -159,9 +159,11 @@ below); otherwise the mouse selects text.
 
 ## Work mode
 
-`/work on` lets the current agent work without asking for each step, and
-`/work off` takes that back. Groot can do the same with `set_work_mode`. While it
-is on:
+`/work on` lets the agents of the active space work without asking for each step,
+and `/work off` takes that back. It applies to every agent assigned to the space:
+conversations already open switch at once, and conversations opened later in the
+space inherit the setting. Groot can do the same with `set_work_mode`, for one
+agent or, with `space_wide: true`, for the whole space. While it is on:
 
 Work mode decides by tool:
 
@@ -179,12 +181,16 @@ Auto-approved calls are shown as `[auto] <tool> <preview>` in the transcript.
 - the ODD flow still applies: a medium or large task still needs its steps.
 - `work.max_turns` (default 50) limits the calls of one task, and `work.max_usd`
   (default 5.0) limits the session spend. At either limit work mode turns off and
-  a warning appears.
-- when the task reaches deliver, work mode turns off and a review appears: the
-  changes (`git diff --stat`, or the files written during the task), the evidence,
-  and the agent's deliver note. `/task accept` closes the task, and `/task reject
-  <reason>` sends it back to implement with the reason. The delivery review lists
-  the test runs of the cycle with their exit codes.
+  a warning appears that ends with `/work on turns it back on`.
+- when the task reaches deliver, work mode turns off for that agent only and a
+  review appears: the changes (`git diff --stat`, or the files written during the
+  task), the evidence, and the agent's deliver note. `/task accept` closes the task,
+  and `/task reject <reason>` sends it back to implement with the reason. The
+  delivery review lists the test runs of the cycle with their exit codes. The
+  space setting stays, so the next conversation opened in the space is still on.
+- a message between agents starts a turn in the recipient even outside work mode.
+  Those automatic turns count against `work.max_auto_turns` (default 50) per session.
+  See [Sessions](SESSIONS.md).
 
 Approvals are one line in the box above the input, for example
 `allow write_file: notes/a.md (+3 −1)? (y/n/a)`. Press `d` or type `/diff` to see the

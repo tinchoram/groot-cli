@@ -80,7 +80,11 @@ func (w *Workspace) jobEventArrived(key string, c *Conversation, ev jobs.Event) 
 		notice = fmt.Sprintf("⟶ triggered by job #%d", ev.JobID)
 	}
 	capped := fmt.Sprintf("work mode: the automatic turn limit (%d per session) was reached; job events wait for the next turn", w.opts.Config.Work.MaxAutoTurns)
-	w.startAutoTurn(key, c, notice, capped, ev.Kind != jobs.EventLine)
+	warn := capSilent
+	if ev.Kind != jobs.EventLine {
+		warn = capEach
+	}
+	w.startAutoTurn(key, c, notice, capped, warn)
 }
 
 // jobBlock takes the waiting job events out of the queue and renders them as

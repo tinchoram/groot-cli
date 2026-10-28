@@ -12,6 +12,9 @@ func TestWorkDefaultsAreBoundedAndListTheRiskyCommands(t *testing.T) {
 	if cfg.Work.MaxTurns != 50 || cfg.Work.MaxUSD != 5.0 {
 		t.Fatalf("work limits = %+v", cfg.Work)
 	}
+	if cfg.Work.MaxAutoTurns != 50 {
+		t.Fatalf("max_auto_turns default = %d, want 50", cfg.Work.MaxAutoTurns)
+	}
 	if len(cfg.Work.AlwaysAsk) != len(DefaultAlwaysAsk()) || len(cfg.Work.AlwaysAsk) == 0 {
 		t.Fatalf("always_ask defaults = %v", cfg.Work.AlwaysAsk)
 	}

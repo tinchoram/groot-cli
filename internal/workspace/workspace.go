@@ -187,7 +187,10 @@ type Workspace struct {
 	stores map[string]*spaceStores
 	inbox  *inbox.Store               // messages between agents and groot, under the home directory
 	work   map[string]*gate.WorkState // work mode per conversation key
-	grants map[string]*gate.Grants    // session approvals per conversation key
+	// spaceWork holds the spaces whose work mode is on for every agent, by space
+	// name. It is in memory only; open() makes new conversations inherit it.
+	spaceWork map[string]bool
+	grants    map[string]*gate.Grants // session approvals per conversation key
 	// modelCache is the provider's model list, reused for modelCacheTTL.
 	modelCache modelCache
 	feedback   *feedback.Store // the backlog of bugs and feature requests about groot
@@ -231,14 +234,15 @@ func New(opts Options) (*Workspace, error) {
 		return nil, err
 	}
 	w := &Workspace{
-		opts:     opts,
-		convs:    map[string]*Conversation{},
-		stores:   map[string]*spaceStores{},
-		inbox:    ib,
-		work:     map[string]*gate.WorkState{},
-		grants:   map[string]*gate.Grants{},
-		operator: opts.Config.User.Name,
-		feedback: fb,
+		opts:      opts,
+		convs:     map[string]*Conversation{},
+		stores:    map[string]*spaceStores{},
+		inbox:     ib,
+		work:      map[string]*gate.WorkState{},
+		spaceWork: map[string]bool{},
+		grants:    map[string]*gate.Grants{},
+		operator:  opts.Config.User.Name,
+		feedback:  fb,
 	}
 	w.sinks = audit.NewFanout(w.noteSinkWarning)
 	if err := buildSinks(opts.Config.Audit.Sinks, w.sinks); err != nil {
@@ -550,6 +554,11 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	if err != nil {
 		return nil, err
 	}
+	// A space with work mode on for every agent passes it on to the conversations
+	// opened later. An off space leaves a conversation's own state alone.
+	if w.spaceWork[sp.Name] {
+		work.Set(true)
+	}
 	ctl, err := w.newFlow(context.Background(), sp, agentName, st.mem.Tasks(), prov,
 		func(t flow.Task) {
 			work.ResetTurns()
@@ -561,6 +570,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		func(t flow.Task) {
 			if work.On() {
 				work.Set(false)
+				w.warnKey(key, WorkOffDeliveredLine)
 				box.set(reviewText(context.Background(), t, sp.Path, files.list()))
 			}
 		})
@@ -672,6 +682,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	if resumed != nil {
 		conv.carried = resumed.Dropped
 	}
+	conv.onIdle = func() { w.followUpUnread(key, conv) }
 	jm.SetObserver(&jobWatch{w: w, key: key, conv: conv, log: st.aud})
 	go w.drainJobs(key, conv)
 	if hasMCPName(def.Tools) {

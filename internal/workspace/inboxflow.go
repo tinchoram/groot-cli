@@ -118,31 +118,64 @@ func (c *Conversation) warn(msg string) {
 	}
 }
 
-// afterDelivery runs when a message reaches the conversation key. In work mode,
-// and when the conversation is idle, it starts a turn that reads the inbox. A
-// turn triggered this way counts against work.max_auto_turns for the session.
+// capNotice says how the limit of automatic turns is reported when it blocks a turn.
+type capNotice int
+
+const (
+	capSilent capNotice = iota // the blocked turn is not reported
+	capEach                    // every blocked turn is reported
+	capOnce                    // the first blocked turn of the session is reported
+)
+
+// afterDelivery runs when a message reaches the conversation key. An idle
+// conversation starts a turn that reads the inbox, in work mode or not. The turn
+// counts against work.max_auto_turns for the session. A busy one reads the inbox
+// when its running turn ends (see releaseTurn).
 func (w *Workspace) afterDelivery(key string, msg inbox.Message) {
 	w.mu.Lock()
 	conv := w.convs[key]
 	w.mu.Unlock()
-	if conv == nil || !conv.WorkMode() {
+	if conv == nil {
 		return
 	}
-	limit := w.opts.Config.Work.MaxAutoTurns
-	w.startAutoTurn(key, conv,
-		fmt.Sprintf("⟶ triggered by message #%d from %s/%s", msg.ID, msg.FromSpace, msg.FromAgent),
-		fmt.Sprintf("work mode: the automatic turn limit (%d per session) was reached; the message from %s/%s waits in the inbox", limit, msg.FromSpace, msg.FromAgent),
-		true)
+	w.startMessageTurn(key, conv, msg)
 }
 
-// startAutoTurn starts a turn of an idle conversation in work mode. The turn
-// counts against work.max_auto_turns for the session. At the limit it starts
-// nothing and, when warn is set, reports capped. A running turn is left alone:
-// it reads what is waiting when it starts.
-func (w *Workspace) startAutoTurn(key string, conv *Conversation, notice, capped string, warn bool) {
+// startMessageTurn starts a turn that reads the inbox, triggered by msg.
+func (w *Workspace) startMessageTurn(key string, conv *Conversation, msg inbox.Message) {
+	w.startAutoTurn(key, conv,
+		fmt.Sprintf("⟶ triggered by message #%d from %s/%s", msg.ID, msg.FromSpace, msg.FromAgent),
+		fmt.Sprintf("automatic turns: the limit (%d per session) was reached; the message from %s/%s waits in the inbox (/readinbox)", w.opts.Config.Work.MaxAutoTurns, msg.FromSpace, msg.FromAgent),
+		capOnce)
+}
+
+// followUpUnread runs when a turn ends. Messages that arrived while the turn ran
+// and still wait unread get one follow-up turn, so a reply that lands mid-turn
+// is not stuck. It starts nothing when the inbox is empty.
+func (w *Workspace) followUpUnread(key string, conv *Conversation) {
+	if conv.inbox == nil {
+		return
+	}
+	unread, err := conv.inbox.Unread(context.Background(), conv.space, conv.name)
+	if err != nil || len(unread) == 0 {
+		return
+	}
+	w.startMessageTurn(key, conv, unread[0])
+}
+
+// startAutoTurn starts a turn of an idle conversation. The turn counts against
+// work.max_auto_turns for the session. At the limit it starts nothing and reports
+// capped according to warn. A running turn is left alone: it reads what is
+// waiting when it starts, and releaseTurn starts a follow-up for the rest.
+func (w *Workspace) startAutoTurn(key string, conv *Conversation, notice, capped string, warn capNotice) {
 	if conv.autoTurns.Load() >= int64(w.opts.Config.Work.MaxAutoTurns) {
-		if warn {
+		switch warn {
+		case capEach:
 			w.warnKey(key, capped)
+		case capOnce:
+			if conv.capWarned.CompareAndSwap(false, true) {
+				w.warnKey(key, capped)
+			}
 		}
 		return
 	}
@@ -152,7 +185,7 @@ func (w *Workspace) startAutoTurn(key string, conv *Conversation, notice, capped
 	conv.autoTurns.Add(1)
 	w.notifyKey(key, notice)
 	go func() {
-		defer conv.busy.Store(false)
+		defer conv.releaseTurn()
 		text, err := conv.send(context.Background(), "")
 		if h := w.opts.Hooks.OnAnswer; h != nil {
 			h(key, text, err)

@@ -194,6 +194,9 @@ func (c *Conversation) Clear() func(context.Context) error {
 	c.lastGoal = ""
 	// The next turn carries the whole memory again, the summary of this session included.
 	c.memShown.Reset()
+	// The automatic turn count belongs to the session, so the new one starts at zero.
+	c.autoTurns.Store(0)
+	c.capWarned.Store(false)
 	// The jobs of the cleared session stop now; the manager stays for the next one.
 	running := c.runningJobIDs()
 	return func(ctx context.Context) error {

@@ -25,6 +25,16 @@ func TestWorkCommandTogglesAndReportsWorkMode(t *testing.T) {
 	}
 }
 
+func TestWorkCommandAppliesToTheWholeSpace(t *testing.T) {
+	chat := &fakeSession{model: "m"}
+	m, ws := newTestModel(t, chat)
+	m = sendLine(t, m, "/work on")
+	sendLine(t, m, "/work off")
+	if len(ws.spaceWork) != 2 || ws.spaceWork[0] != "default:true" || ws.spaceWork[1] != "default:false" {
+		t.Fatalf("space work calls = %v, want on then off for the active space", ws.spaceWork)
+	}
+}
+
 func TestSidebarShowsTheGearForAgentsInWorkMode(t *testing.T) {
 	m, ws := newTestModel(t, &fakeSession{model: "m"})
 	if err := ws.AssignAgent("reviewer"); err != nil {

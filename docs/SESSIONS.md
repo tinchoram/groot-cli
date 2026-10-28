@@ -63,18 +63,24 @@ capped at 16 KB and subjects at 200 characters.
   acknowledgement: a short confirmation that needs no answer, such as
   `FEAT-016 recorded`. The body is limited to 200 characters. The recipient sees
   it once as a one-line dim note (`ack from <agent>: ...`) when its conversation
-  is shown. An ack never enters a turn, never starts one in work mode, and is not
-  counted in the sidebar badges. `/inbox` lists it with an `ack` tag.
+  is shown. An ack never enters a turn, never starts one, and is not counted in the
+  sidebar badges. `/inbox` lists it with an `ack` tag.
 - `read_inbox` returns the agent's unread messages and marks them read. Acks are
   not included.
 - Unread messages are delivered into the next turn: up to five, oldest first, as
   `[inbox] from <space>/<agent> · <time>` blocks with their subject and body (8 KB
   at most). Delivered messages are marked read. The rest stay unread, and the turn
   is told how many.
-- In work mode, a message that arrives while the agent is idle starts a turn that
-  reads it (`⟶ triggered by message #id` appears in the transcript). At most
-  `work.max_auto_turns` (default 10) such turns run per session; after that the
-  message waits in the inbox. Without work mode nothing runs, and the badge shows.
+- A message that arrives while the agent is idle starts a turn that reads it, in
+  work mode or not, so you do not need `/readinbox` for it. The transcript shows
+  `⟶ triggered by message #id`. Each such turn counts against
+  `work.max_auto_turns` (default 50) per session. At the limit the message waits in
+  the inbox, and one warning says so. `/clear` starts a new session and resets the
+  count.
+- A message that arrives while the agent is busy waits for the running turn. When
+  that turn ends, one follow-up turn reads what is still unread, so a reply that
+  lands mid-turn is not stuck. The sidebar badge shows the waiting messages in the
+  meantime.
 - The sidebar shows `✉ N` after each agent with unread messages, and after a
   space the total unread of its agents. The space mark sits after the `●` and `?`
   marks.

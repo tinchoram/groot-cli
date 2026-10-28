@@ -30,11 +30,21 @@ type fakeManager struct {
 	specs      []AgentSpec
 	assigned   []string
 	failCreate error
+	// workCalls records the work mode calls: "agent:<space>:<agent>:<on>" or "space:<space>:<on>".
+	workCalls []string
 }
 
 type SpaceSpecSeen struct{ Name, Path string }
 
-func (f *fakeManager) SetWorkMode(space, agent string, on bool) error { return nil }
+func (f *fakeManager) SetWorkMode(space, agent string, on bool) error {
+	f.workCalls = append(f.workCalls, fmt.Sprintf("agent:%s:%s:%t", space, agent, on))
+	return nil
+}
+
+func (f *fakeManager) SetSpaceWorkMode(space string, on bool) error {
+	f.workCalls = append(f.workCalls, fmt.Sprintf("space:%s:%t", space, on))
+	return nil
+}
 
 func (f *fakeManager) UpgradeAgent(name string) ([]string, error) {
 	return []string{name + ": up to date"}, nil

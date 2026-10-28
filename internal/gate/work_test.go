@@ -138,7 +138,7 @@ func TestWorkTurnLimitTurnsItOffWithAWarning(t *testing.T) {
 	if g.Decide(ctx, w); s.On() {
 		t.Fatal("work mode must turn off at the turn limit")
 	}
-	if len(*warnings) != 1 || !strings.Contains((*warnings)[0], "limit reached (turns)") {
+	if len(*warnings) != 1 || !strings.Contains((*warnings)[0], "limit reached (turns)") || !strings.HasSuffix((*warnings)[0], "/work on turns it back on") {
 		t.Fatalf("warnings = %v", *warnings)
 	}
 	if user.calls != 1 {

@@ -6,6 +6,19 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## Unreleased
 
+### Agents
+- A message delivered to an idle agent starts a turn that reads it, in work mode or
+  not, so the recipient answers without `/readinbox`. A message that arrives during a
+  turn gets one follow-up turn when that turn ends. Each automatic turn counts against
+  `work.max_auto_turns` per session, and at the limit one warning says the message waits.
+- `work.max_auto_turns` defaults to 50 (was 10).
+- Work mode per space. `/work on|off` applies to every agent assigned to the space, and
+  conversations opened later in it inherit the setting. `set_work_mode` takes
+  `space_wide: true` for the same effect. The sidebar gear stays per agent.
+- Work mode that turns itself off names the reason and ends with `/work on turns it
+  back on`: the turn limit, the budget, and a task delivered for review. Delivery turns
+  off only the delivering agent.
+
 ### Background jobs
 - `bash_background` starts a command and returns at once. `monitor` turns its output
   lines, or only the lines that match a regular expression, into events. `job_list`,

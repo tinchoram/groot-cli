@@ -147,15 +147,25 @@ func TestJobEventBlockFollowsTheInboxAndPrecedesThePrompt(t *testing.T) {
 	send(t, f, "start")
 	waitEvents(t, f, 1)
 	addAgentToDefault(t, f, "writer")
+	// A delivered message starts a turn outside work mode too: that turn carries
+	// the inbox and the waiting job events, inbox first.
+	answered := make(chan struct{}, 1)
+	f.ws.opts.Hooks.OnAnswer = func(string, string, error) { answered <- struct{}{} }
 	if _, _, err := f.ws.messengerFor("default", "writer").Send(context.Background(), "runner", "note", "body"); err != nil {
 		t.Fatal(err)
 	}
+	select {
+	case <-answered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the delivered message did not start a turn")
+	}
 
-	prompt := turnText(f, send(t, f, "go"))
-	inbox := strings.Index(prompt, "[inbox] from default/writer")
-	events := strings.Index(prompt, "Background job events")
-	if inbox < 0 || events < 0 || !(inbox < events && events < strings.LastIndex(prompt, "go")) {
-		t.Fatalf("want inbox, then job events, then the prompt:\n%s", prompt)
+	msgs := f.mock.Calls[len(f.mock.Calls)-1].Messages
+	last := msgs[len(msgs)-1].Content[0].Text
+	inbox := strings.Index(last, "[inbox] from default/writer")
+	events := strings.Index(last, "Background job events")
+	if inbox < 0 || events < 0 || inbox > events {
+		t.Fatalf("want inbox, then job events:\n%s", last)
 	}
 }
 

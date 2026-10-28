@@ -285,6 +285,7 @@ func (w *Workspace) DeleteSpaceWithConfirm(name string, confirm, purge bool) (st
 	if err := w.endConversations(inSpace(name)); err != nil {
 		return "", err
 	}
+	w.renameSpaceWork(name, "")
 	if err := w.opts.Spaces.Remove(name); err != nil {
 		return "", err
 	}
@@ -357,6 +358,9 @@ func (w *Workspace) EditSpace(name, newName, path string) (string, error) {
 	}
 	if err := w.endConversations(inSpace(name)); err != nil {
 		return "", err
+	}
+	if renaming {
+		w.renameSpaceWork(name, newName)
 	}
 	back, err := w.rereadSpaces()
 	if err != nil {

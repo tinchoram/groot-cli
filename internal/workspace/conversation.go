@@ -76,6 +76,10 @@ type Conversation struct {
 	review     *reviewBox
 	busy       atomic.Bool  // a turn is running: UI-driven or triggered by a message
 	autoTurns  atomic.Int64 // turns triggered by messages in this session
+	capWarned  atomic.Bool  // the limit notice of messages was shown in this session
+	// onIdle runs when a turn ends and the busy flag is free: it starts a
+	// follow-up turn for messages that arrived meanwhile (see releaseTurn).
+	onIdle func()
 	// sysMu guards baseSystem: /clear refreshes it while a turn may be reading it.
 	sysMu      sync.Mutex
 	baseSystem string
@@ -217,8 +221,17 @@ func (c *Conversation) Send(ctx context.Context, prompt string) (string, error) 
 	if !c.busy.CompareAndSwap(false, true) {
 		return "", errAgentBusy
 	}
-	defer c.busy.Store(false)
+	defer c.releaseTurn()
 	return c.send(ctx, prompt)
+}
+
+// releaseTurn ends the turn and frees the busy flag. A message that arrived
+// while the turn ran was not read by it, so onIdle may start a follow-up turn.
+func (c *Conversation) releaseTurn() {
+	c.busy.Store(false)
+	if c.onIdle != nil {
+		c.onIdle()
+	}
 }
 
 // send runs one turn. The caller holds the busy flag.

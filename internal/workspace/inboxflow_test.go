@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -126,21 +127,91 @@ func TestMessageTriggersATurnInWorkMode(t *testing.T) {
 	}
 }
 
-func TestMessageDoesNotTriggerATurnOutsideWorkMode(t *testing.T) {
-	f := newFixture(t, text("never"))
+func TestMessageStartsATurnOutsideWorkMode(t *testing.T) {
+	f := newFixture(t, text("reply"))
 	h := wireTriggers(f)
 	_ = f.ws.SelectAgent("reader")
 	_ = f.ws.Chat()
 
 	deliverFromWriter(t, f, "spec", "build the thing")
 
+	if got := awaitString(t, h.notices, "trigger notice"); !strings.Contains(got, "triggered by message") {
+		t.Fatalf("notice = %q", got)
+	}
+	if got := awaitString(t, h.answers, "answer of the triggered turn"); got != "reply" {
+		t.Fatalf("answer = %q", got)
+	}
+	if prompt := f.mock.Calls[0].Messages[0].Content[0].Text; !strings.Contains(prompt, "build the thing") {
+		t.Fatalf("the turn reads the message:\n%s", prompt)
+	}
+}
+
+func TestReplyReachesTheSenderWithoutUserAction(t *testing.T) {
+	f := newFixture(t,
+		toolStep("tu_1", "send_message", map[string]string{"to": "writer", "subject": "done", "body": "built it"}),
+		text("sent"),
+	)
+	saveAgent(t, f, "reader", "builds things", []string{"read_inbox", "send_message"})
+	if err := f.ws.reload(); err != nil {
+		t.Fatal(err)
+	}
+	h := wireTriggers(f)
+	_ = f.ws.SelectAgent("reader")
+	_ = f.ws.Chat()
+
+	deliverFromWriter(t, f, "spec", "build the thing")
+	awaitString(t, h.answers, "answer of the triggered turn")
+
+	if n, _ := f.ws.inbox.CountUnread(context.Background(), "default", "writer"); n != 1 {
+		t.Fatalf("writer unread = %d, want the reply of the triggered turn", n)
+	}
+}
+
+func TestMessageDuringATurnStartsOneFollowUpWhenItEnds(t *testing.T) {
+	f := newFixture(t, text("first"), text("follow-up"))
+	h := wireTriggers(f)
+	started, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	// The first text of the running turn holds the turn until the test releases it.
+	f.ws.opts.Hooks.OnText = func(string, string) {
+		once.Do(func() {
+			close(started)
+			<-release
+		})
+	}
+	_ = f.ws.SelectAgent("reader")
+	conv := f.ws.Chat()
+	done := make(chan error, 1)
+	go func() {
+		_, err := conv.Send(context.Background(), "go")
+		done <- err
+	}()
 	select {
-	case <-h.answers:
-		t.Fatal("without work mode nothing runs: the message waits for the next turn")
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the running turn did not start")
+	}
+
+	deliverFromWriter(t, f, "late", "arrived mid-turn")
+	select {
+	case got := <-h.notices:
+		t.Fatalf("a busy agent started a turn: %q", got)
 	case <-time.After(150 * time.Millisecond):
 	}
-	if n, _ := f.ws.inbox.CountUnread(context.Background(), "default", "reader"); n != 1 {
-		t.Fatalf("the message stays unread for the badge, unread = %d", n)
+
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if got := awaitString(t, h.answers, "follow-up answer"); got != "follow-up" {
+		t.Fatalf("follow-up answer = %q", got)
+	}
+	if n := len(f.mock.Calls); n != 2 {
+		t.Fatalf("model calls = %d, want the running turn and one follow-up", n)
+	}
+	last := f.mock.Calls[1].Messages[len(f.mock.Calls[1].Messages)-1].Content[0].Text
+	if !strings.Contains(last, "arrived mid-turn") {
+		t.Fatalf("the follow-up reads the message:\n%s", last)
 	}
 }
 
@@ -150,18 +221,63 @@ func TestAutomaticTurnsAreCappedPerSession(t *testing.T) {
 	h := wireTriggers(f)
 	_ = f.ws.SelectAgent("reader")
 	_ = f.ws.Chat()
-	if err := f.ws.SetWorkMode("default", "reader", true); err != nil {
-		t.Fatal(err)
-	}
 
 	deliverFromWriter(t, f, "one", "first")
 	awaitString(t, h.answers, "first triggered answer")
 
 	deliverFromWriter(t, f, "two", "second")
-	if got := awaitWarning(t, h.warnings, "automatic turn limit (1 per session)"); !strings.Contains(got, "automatic turn limit (1 per session)") {
-		t.Fatalf("warning = %q", got)
+	want := "automatic turns: the limit (1 per session) was reached; the message from default/writer waits in the inbox (/readinbox)"
+	if got := awaitWarning(t, h.warnings, "automatic turns: the limit"); got != want {
+		t.Fatalf("warning = %q, want %q", got, want)
 	}
 	if n := len(f.mock.Calls); n != 1 {
 		t.Fatalf("the capped message made a model call: %d calls", n)
+	}
+}
+
+func TestLimitWarningShowsOncePerSession(t *testing.T) {
+	f := newFixture(t, text("first auto reply"))
+	f.ws.opts.Config.Work.MaxAutoTurns = 1
+	h := wireTriggers(f)
+	_ = f.ws.SelectAgent("reader")
+	_ = f.ws.Chat()
+
+	deliverFromWriter(t, f, "one", "first")
+	awaitString(t, h.answers, "first triggered answer")
+	deliverFromWriter(t, f, "two", "second")
+	deliverFromWriter(t, f, "three", "third")
+
+	warned := 0
+	deadline := time.After(300 * time.Millisecond)
+	for done := false; !done; {
+		select {
+		case got := <-h.warnings:
+			if strings.Contains(got, "automatic turns: the limit") {
+				warned++
+			}
+		case <-deadline:
+			done = true
+		}
+	}
+	if warned != 1 {
+		t.Fatalf("limit warnings = %d, want one per session", warned)
+	}
+}
+
+func TestAutomaticTurnCounterResetsWithTheSession(t *testing.T) {
+	f := newFixture(t, text("first auto reply"), text("after clear"))
+	f.ws.opts.Config.Work.MaxAutoTurns = 1
+	h := wireTriggers(f)
+	_ = f.ws.SelectAgent("reader")
+	_ = f.ws.Chat()
+
+	deliverFromWriter(t, f, "one", "first")
+	awaitString(t, h.answers, "first triggered answer")
+
+	f.ws.convFor("default/reader").Clear()
+
+	deliverFromWriter(t, f, "two", "second")
+	if got := awaitString(t, h.answers, "answer in the new session"); got != "after clear" {
+		t.Fatalf("answer in the new session = %q", got)
 	}
 }

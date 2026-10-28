@@ -9,6 +9,7 @@ import (
 
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/provider"
+	"github.com/tinchoram/groot-cli/internal/space"
 )
 
 // workStateFor returns the work mode of a conversation, created with the limits
@@ -67,6 +68,10 @@ func WorkOnLine(root string, turns int, usd float64) string {
 // WorkOffLine is the transcript line that announces work mode is off.
 const WorkOffLine = "work mode off"
 
+// WorkOffDeliveredLine is the warning that work mode turned itself off because
+// the task was delivered for review. It names the reason and how to turn it back on.
+const WorkOffDeliveredLine = "work mode off · task delivered for review · /work on turns it back on"
+
 // WorkModes lists the conversations in work mode, by "space/agent".
 func (w *Workspace) WorkModes() map[string]bool {
 	w.mu.Lock()
@@ -93,16 +98,69 @@ func (w *Workspace) SetWorkMode(spaceName, agent string, on bool) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	key := spaceName + "/" + agent
-	if _, ok := w.convs[key]; !ok {
-		c, err := w.open(sp, agent)
-		if err != nil {
-			return err
-		}
-		w.convs[key] = c
+	if err := w.openLocked(sp, agent); err != nil {
+		return err
 	}
 	w.work[key].Set(on)
 	w.announce(key, sp.Path, on)
 	return nil
+}
+
+// SetSpaceWorkMode turns work mode on or off for every agent assigned to a
+// space, and sets what the conversations opened later in it inherit. On opens
+// the agents that are not open yet. Off changes only the conversations that
+// exist. Each conversation keeps its own state from then on. The shown
+// conversation reports the change itself, so nothing is announced here.
+func (w *Workspace) SetSpaceWorkMode(spaceName string, on bool) error {
+	sp, ok := w.opts.Spaces.Get(spaceName)
+	if !ok {
+		return fmt.Errorf("no space named %q", spaceName)
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if on {
+		w.spaceWork[spaceName] = true
+	} else {
+		delete(w.spaceWork, spaceName)
+	}
+	for _, agent := range sp.Agents {
+		if on {
+			if err := w.openLocked(sp, agent); err != nil {
+				return err
+			}
+		}
+		if s, ok := w.work[spaceName+"/"+agent]; ok {
+			s.Set(on)
+		}
+	}
+	return nil
+}
+
+// openLocked opens the conversation of an agent in a space when it is not open
+// yet. The caller holds mu.
+func (w *Workspace) openLocked(sp space.Space, agent string) error {
+	key := sp.Name + "/" + agent
+	if _, ok := w.convs[key]; ok {
+		return nil
+	}
+	c, err := w.open(sp, agent)
+	if err != nil {
+		return err
+	}
+	w.convs[key] = c
+	return nil
+}
+
+// renameSpaceWork moves the space-wide work mode of a renamed space to its new
+// name. An empty to drops it, for a deleted space.
+func (w *Workspace) renameSpaceWork(from, to string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	on := w.spaceWork[from]
+	delete(w.spaceWork, from)
+	if on && to != "" {
+		w.spaceWork[to] = true
+	}
 }
 
 // WorkMode reports whether work mode is on for this conversation.

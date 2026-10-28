@@ -26,6 +26,7 @@ directory, Groot adds it to the system prompt under "Project context".
 | `audit.path` | `.groot/audit.jsonl` | Audit log. Same rules as `memory.path` |
 | `audit.sinks` | empty | Export sinks: `file`, `http` or `syslog`. See Audit |
 | `gate.policy` | `interactive` | `interactive`, `readonly` or `auto` |
+| `work.max_auto_turns` | `50` | Turns per session that a message (in any mode) or a job event (in work mode) may start on its own. At the limit they wait for your next turn. `/clear` resets the count |
 | `kubectl.namespaces` | empty (any) | Namespace allowlist |
 | `bash.sandbox.mode` | `auto` | `auto` (the best backend, else unrestricted with a warning), `strict` (refuse without one) or `off` |
 | `bash.sandbox.network` | `true` | Commands may use the network. A space overrides it with `/space network on\|off`. See [Network](SAFETY.md#network) |

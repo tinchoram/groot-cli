@@ -69,6 +69,7 @@ type Workspace interface {
 	SendFeedback(spaceName, agent, kind, text string, lines []string) (int64, string, error)
 	Backlog(status string) ([]feedback.Item, error)
 	WorkModes() map[string]bool
+	SetSpaceWorkMode(space string, on bool) error
 	WorkLimits() (int, float64)
 	GrantSession(key, tool string) error
 	SessionGrants(key string) []string

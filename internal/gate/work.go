@@ -141,10 +141,10 @@ func (s *WorkState) overLimit() bool {
 	s.mu.Unlock()
 	switch {
 	case max > 0 && turns >= max:
-		s.warnOff("work mode off · limit reached (turns)")
+		s.warnOff("work mode off · limit reached (turns) · /work on turns it back on")
 		return true
 	case s.cfg.MaxUSD > 0 && s.cfg.Cost != nil && s.cfg.Cost() >= s.cfg.MaxUSD:
-		s.warnOff("work mode off · limit reached (budget)")
+		s.warnOff("work mode off · limit reached (budget) · /work on turns it back on")
 		return true
 	}
 	return false

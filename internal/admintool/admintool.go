@@ -84,6 +84,8 @@ type Manager interface {
 	CreateAgent(spec AgentSpec) error
 	UpgradeAgent(name string) ([]string, error)
 	SetWorkMode(space, agent string, on bool) error
+	// SetSpaceWorkMode turns work mode on or off for every agent of a space.
+	SetSpaceWorkMode(space string, on bool) error
 	// ListModels returns the models the provider offers.
 	ListModels(ctx context.Context) ([]provider.ModelInfo, error)
 	// SetAgentModel saves the model of an agent. It returns a warning when the
