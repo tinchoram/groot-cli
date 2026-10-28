@@ -101,6 +101,7 @@ func (w *Workspace) endConversations(match func(key string) bool) error {
 	w.mu.Unlock()
 	var errs []error
 	for _, c := range convs {
+		c.stopJobs()
 		errs = append(errs, c.endLocal(context.Background()))
 	}
 	return errors.Join(errs...)

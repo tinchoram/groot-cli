@@ -132,7 +132,7 @@ the cheapest safety gap, then features.
 | 2 | Doc drift fixes, unsandboxed paths noted in SAFETY | S | done 2026-10-26 |
 | 3 | Destructive-command guard under the sandbox | S | done 2026-10-26 |
 | 4 | Task phase inferred from tool activity | S | done 2026-10-26 |
-| 5 | `bash_background` and `monitor` | M | planned: [tasks/background-jobs.md](tasks/background-jobs.md) |
+| 5 | `bash_background` and `monitor` | M | done 2026-10-27 |
 | 6 | Context backstop | M | open |
 | 7 | Provider adapters (0.7.0 below) | L | on request |
 | 8 | ACP client, skills | L | owner decision |

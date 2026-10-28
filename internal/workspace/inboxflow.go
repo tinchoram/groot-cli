@@ -68,17 +68,17 @@ func fitBody(m inbox.Message, limit int) inbox.Message {
 	return m
 }
 
-// injectInbox puts the unread messages of the conversation in front of the
-// prompt, oldest first, and marks the messages it delivers as read. A turn gets
-// at most inboxInjectMax messages and inboxInjectBytes of text; the rest stays
-// unread and the turn is told so.
-func (c *Conversation) injectInbox(ctx context.Context, prompt string) string {
+// inboxParts returns the notices of the unread messages of the conversation,
+// oldest first, and marks the messages it delivers as read. A turn gets at most
+// inboxInjectMax messages and inboxInjectBytes of text; the rest stays unread
+// and the turn is told so. The caller places the notices before the prompt.
+func (c *Conversation) inboxParts(ctx context.Context) []string {
 	if c.inbox == nil {
-		return prompt
+		return nil
 	}
 	unread, err := c.inbox.Unread(ctx, c.space, c.name)
 	if err != nil || len(unread) == 0 {
-		return prompt
+		return nil
 	}
 	var blocks []string
 	var ids []int64
@@ -108,10 +108,7 @@ func (c *Conversation) injectInbox(ctx context.Context, prompt string) string {
 	if rest := len(unread) - len(blocks); rest > 0 {
 		parts = append(parts, fmt.Sprintf("[inbox] %d more unread messages stay in the inbox; read them with read_inbox when they matter.", rest))
 	}
-	if prompt != "" {
-		parts = append(parts, prompt)
-	}
-	return strings.Join(parts, "\n\n")
+	return parts
 }
 
 // warn reports a problem of the conversation through its agent's warning hook.
@@ -131,16 +128,29 @@ func (w *Workspace) afterDelivery(key string, msg inbox.Message) {
 	if conv == nil || !conv.WorkMode() {
 		return
 	}
-	limit := int64(w.opts.Config.Work.MaxAutoTurns)
-	if conv.autoTurns.Load() >= limit {
-		w.warnKey(key, fmt.Sprintf("work mode: the automatic turn limit (%d per session) was reached; the message from %s/%s waits in the inbox", limit, msg.FromSpace, msg.FromAgent))
+	limit := w.opts.Config.Work.MaxAutoTurns
+	w.startAutoTurn(key, conv,
+		fmt.Sprintf("⟶ triggered by message #%d from %s/%s", msg.ID, msg.FromSpace, msg.FromAgent),
+		fmt.Sprintf("work mode: the automatic turn limit (%d per session) was reached; the message from %s/%s waits in the inbox", limit, msg.FromSpace, msg.FromAgent),
+		true)
+}
+
+// startAutoTurn starts a turn of an idle conversation in work mode. The turn
+// counts against work.max_auto_turns for the session. At the limit it starts
+// nothing and, when warn is set, reports capped. A running turn is left alone:
+// it reads what is waiting when it starts.
+func (w *Workspace) startAutoTurn(key string, conv *Conversation, notice, capped string, warn bool) {
+	if conv.autoTurns.Load() >= int64(w.opts.Config.Work.MaxAutoTurns) {
+		if warn {
+			w.warnKey(key, capped)
+		}
 		return
 	}
 	if !conv.busy.CompareAndSwap(false, true) {
-		return // a turn is running; it will read the inbox when it starts
+		return
 	}
 	conv.autoTurns.Add(1)
-	w.notifyKey(key, fmt.Sprintf("⟶ triggered by message #%d from %s/%s", msg.ID, msg.FromSpace, msg.FromAgent))
+	w.notifyKey(key, notice)
 	go func() {
 		defer conv.busy.Store(false)
 		text, err := conv.send(context.Background(), "")

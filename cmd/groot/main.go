@@ -204,6 +204,7 @@ func runApp(cfg config.Config, cfgPath, groot, apiKey string) error {
 			OnNotice:   bridge.Notice,
 			OnAnswer:   bridge.Done,
 			OnInbox:    bridge.Inbox,
+			OnJobs:     bridge.Jobs,
 			OnAuto:     bridge.Auto,
 		},
 		NewProvider: func(model string) provider.Provider {

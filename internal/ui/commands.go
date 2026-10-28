@@ -15,7 +15,7 @@ type Command struct {
 
 var knownCommands = map[string]bool{
 	"help": true, "model": true, "compact": true, "tokens": true, "clear": true, "exit": true,
-	"space": true, "agent": true, "inbox": true, "task": true, "tasks": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true, "audit": true, "memory": true, "readinbox": true, "mcp": true, "me": true,
+	"space": true, "agent": true, "inbox": true, "task": true, "tasks": true, "diff": true, "work": true, "allow": true, "models": true, "budget": true, "context": true, "cost": true, "bug": true, "feat": true, "backlog": true, "audit": true, "memory": true, "readinbox": true, "mcp": true, "me": true, "jobs": true,
 }
 
 // ParseCommand reports whether line is a slash command and splits it into name and argument.
@@ -85,6 +85,8 @@ var helpEntries = []helpEntry{
 	{"/task fail <reason>", "fail the task, with the reason"},
 	{"/tasks [space]", "open tasks of every space, or of one space"},
 	{"/tasks all", "also the done and failed tasks of the last 7 days"},
+	{"/jobs", "background jobs of this agent: state, exit code, start and command"},
+	{"/jobs stop <id>", "stop one background job of this agent"},
 	{"/mcp", "MCP servers of this space: state, and the tools each agent holds"},
 	{"/mcp connect <name>", "connect an MCP server now and report the tools it admits"},
 	{"/audit [n]", "last audit records of the active space (20 by default)"},

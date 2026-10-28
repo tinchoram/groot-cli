@@ -6,6 +6,20 @@ built in one day of live testing, so they are grouped by what shipped.
 
 ## Unreleased
 
+### Background jobs
+- `bash_background` starts a command and returns at once. `monitor` turns its output
+  lines, or only the lines that match a regular expression, into events. `job_list`,
+  `job_output` and `job_stop` show and stop the jobs. Each job keeps the last 64 KiB of
+  output, at most 4 run per conversation, and a monitor sends at most 50 line events.
+- Events come back in the next turn of the conversation that started the job, as one
+  "Background job events" block. In work mode an event starts a turn by itself and
+  counts against `work.max_auto_turns`. Outside work mode the agent shows a badge
+  until its next turn.
+- Jobs run under the bash sandbox and the destructive-command guard. They stop when
+  their conversation closes or is cleared. `/jobs` lists the jobs of the active agent
+  and `/jobs stop <id>` stops one. Job starts, stops and exits are in the audit log
+  (`job_start`, `job_stop`, `job_exit`). See `docs/JOBS.md`.
+
 ### Safety
 - Destructive-command guard, a second layer under the bash sandbox. A bash command
   that deletes or destroys data (`rm -rf`, `git push --force`, `git reset --hard`, a

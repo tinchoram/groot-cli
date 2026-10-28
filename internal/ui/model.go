@@ -21,6 +21,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/clipboard"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
+	"github.com/tinchoram/groot-cli/internal/jobs"
 	"github.com/tinchoram/groot-cli/internal/provider"
 	"github.com/tinchoram/groot-cli/internal/term"
 	"github.com/tinchoram/groot-cli/internal/workspace"
@@ -55,6 +56,11 @@ type Workspace interface {
 	InstallLibraryAgent(name, space string, overwrite bool) error
 	Agent(name string) (workspace.AgentInfo, error)
 	UnreadCounts(ctx context.Context) (map[string]int, error)
+	// JobCounts reads the waiting job events and running jobs of every open
+	// conversation. Jobs and StopJob serve /jobs for one conversation.
+	JobCounts() map[string]workspace.JobCount
+	Jobs(key string) []jobs.Job
+	StopJob(key string, id int) (jobs.Job, error)
 	Inbox(ctx context.Context, limit int) ([]inbox.Message, error)
 	// TakeAcks returns the acks of the active agent not shown yet, marking them shown.
 	TakeAcks(ctx context.Context) ([]inbox.Message, error)
@@ -239,6 +245,7 @@ type Model struct {
 	closing       bool               // the session is closing: summaries are running
 	closeCancel   context.CancelFunc // skips the summaries still running
 	unread        map[string]int
+	jobCounts     map[string]workspace.JobCount   // background job counts per conversation key
 	spend         workspace.SpendView             // spend and budgets behind the sidebar badges
 	contexts      map[string]workspace.ContextRow // context of each agent of the active space, by name
 	openTasks     map[string]int                  // open tasks per space, for the sidebar ⚑ badges
@@ -875,6 +882,8 @@ func (m Model) runCommand(cmd Command) (tea.Model, tea.Cmd) {
 		m.runTaskCommand(cmd.Arg)
 	case "tasks":
 		m.runTasksCommand(cmd.Arg)
+	case "jobs":
+		m.runJobsCommand(cmd.Arg)
 	case "mcp":
 		if c := m.runMCPCommand(cmd.Arg); c != nil {
 			return m, c

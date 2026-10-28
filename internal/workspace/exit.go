@@ -103,6 +103,7 @@ func (w *Workspace) shutdown(ctx context.Context, graceful bool) error {
 		wg.Add(1)
 		go func(c *Conversation) {
 			defer wg.Done()
+			c.stopJobs() // the jobs end first, so their exits reach the audit log
 			if !graceful {
 				note(c.endLocal(context.Background()))
 				return

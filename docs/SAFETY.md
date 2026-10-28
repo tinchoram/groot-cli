@@ -164,6 +164,11 @@ Limits to plan for:
 To check it, run `echo test > /tmp/x` (it works) and `echo test > ~/x` (it fails;
 on macOS the error is `Operation not permitted`).
 
+Background jobs (`bash_background` and `monitor`) run under the same profile, with
+the same paths and network setting, and the destructive-command guard applies to
+them too. Starting one is always a risk-`exec` call, even for a read-only command,
+because the command keeps running after the call returns. See [Background jobs](JOBS.md).
+
 ### What the sandbox does not cover
 
 The sandbox wraps only the bash tool. Three other paths run outside it:

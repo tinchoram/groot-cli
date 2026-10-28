@@ -16,6 +16,7 @@
 
 - **Safety**: every tool call the agent makes passes a permission gate, and bash runs in an OS sandbox. The terminal column is your own shell and is neither gated nor audited. See [Safety](docs/SAFETY.md).
 - **Spaces and agents**: work in a directory with its own agents, tools and audit log. See [Spaces and agents](docs/SPACES-AND-AGENTS.md).
+- **Background jobs**: start a long command, keep working, and get its exit or matching output back in a later turn, without polling. See [Background jobs](docs/JOBS.md).
 - **Memory**: agents keep scoped long-term memory in SQLite. See [Memory](docs/MEMORY.md).
 - **ODD flow**: each task is sized, then moves through implement, verify and deliver. See [ODD flow](docs/FLOW.md).
 - **Integrations**: fetch web pages and call MCP servers behind an allowlist. See [Integrations](docs/INTEGRATIONS.md).
@@ -62,6 +63,7 @@ More in [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md).
 | First run, screen layout, keys, mouse and work mode | [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) |
 | groot.yaml fields, context window and spend budgets | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) |
 | Permission gate, bash sandbox, audit log and untrusted content | [`docs/SAFETY.md`](docs/SAFETY.md) |
+| Background jobs: `bash_background`, `monitor`, events, limits and audit | [`docs/JOBS.md`](docs/JOBS.md) |
 | Spaces, agents, agent files, tools, identity and the library | [`docs/SPACES-AND-AGENTS.md`](docs/SPACES-AND-AGENTS.md) |
 | ODD flow: task sizes, phases, evidence and delegation | [`docs/FLOW.md`](docs/FLOW.md) |
 | Session history, background conversations and agent messaging | [`docs/SESSIONS.md`](docs/SESSIONS.md) |

@@ -35,6 +35,7 @@ func (m *Model) refreshUnread() {
 	} else {
 		m.unread = counts
 	}
+	m.jobCounts = m.ws.JobCounts()
 	m.showAcks()
 }
 

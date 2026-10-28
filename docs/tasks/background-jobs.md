@@ -76,3 +76,4 @@ L1. Validated backlog item 5 of 2026-10-26: "`bash_background` and `monitor`.
 L2. 2026-10-27: feature document written. S6 to S12 are the decisions the plan
   left open: buffer size, delivery semantics, the monitor filter and event cap,
   the concurrency limit, audit records, classification and the stop sequence.
+L3. implemented 2026-10-27.

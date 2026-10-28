@@ -116,6 +116,8 @@ from.
 /cost                            session cost, spend and budgets (see Budgets)
 /context [all|window <model> <tokens>]  context fill per agent (see Context)
 /tasks [space] [all]             open tasks across spaces; all adds done and failed of the last 7 days (see ODD flow)
+/jobs                            background jobs of this agent: state, exit code, start and command (see Background jobs)
+/jobs stop <id>                  stop one background job of this agent
 /mcp                             MCP servers of this space: state, and the tools each agent holds (see MCP servers)
 /mcp connect <name>              connect one MCP server now and report the tools it admits
 /audit [n|all|stats] [filters]   the audit records of the active space, or of all spaces (see Audit)

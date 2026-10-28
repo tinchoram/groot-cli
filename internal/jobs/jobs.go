@@ -81,6 +81,27 @@ type Job struct {
 	Pattern    string
 	EventsSent int
 	Capped     bool
+	// Tool is the tool that started the job and Sandbox the backend that confined it.
+	Tool    string
+	Sandbox string
+}
+
+// Who stopped a job, as the observer and the audit log name it.
+const (
+	StopByTool  = "tool"  // the agent called job_stop
+	StopByUser  = "user"  // the operator used /jobs stop
+	StopByClear = "clear" // the conversation was cleared
+)
+
+// Observer hears the lifecycle of the jobs of a manager. Its methods run on the
+// goroutine of the job or the caller, outside the manager's lock, and must be quick.
+type Observer interface {
+	// Started is called once a job runs.
+	Started(j Job)
+	// Stopped is called when a running job is stopped on request, with who asked.
+	Stopped(j Job, by string)
+	// Exited is called when a job ends, before its exit event is sent.
+	Exited(j Job)
 }
 
 // StartSpec describes a job. Build returns the command to run; it receives a
@@ -91,6 +112,9 @@ type StartSpec struct {
 	Monitor bool
 	Pattern *regexp.Regexp // nil matches every line
 	Build   func(ctx context.Context) (*exec.Cmd, error)
+	// Tool and Sandbox are recorded on the job for the observer.
+	Tool    string
+	Sandbox string
 }
 
 // Manager runs the jobs of one conversation. Events go to the channel given to
@@ -114,7 +138,13 @@ type Manager struct {
 	nextID int
 	jobs   map[int]*job
 	closed bool
+	// obs is set once, before the first Start, by SetObserver.
+	obs Observer
 }
+
+// SetObserver sets the observer of the lifecycle of the jobs. Call it before
+// the first Start; a nil observer reports nothing.
+func (m *Manager) SetObserver(o Observer) { m.obs = o }
 
 // job is the internal state of one process. Fields marked mu are guarded by
 // Manager.mu; the rest belong to the goroutine that runs the process.
@@ -125,6 +155,8 @@ type job struct {
 	monitor bool
 	pattern *regexp.Regexp
 	started time.Time
+	tool    string
+	sandbox string
 	cmd     *exec.Cmd
 	cancel  context.CancelFunc
 	timer   *time.Timer
@@ -229,6 +261,8 @@ func (m *Manager) Start(ctx context.Context, spec StartSpec) (Job, error) {
 		done:     make(chan struct{}),
 		state:    Running,
 		exitCode: -1,
+		tool:     spec.Tool,
+		sandbox:  spec.Sandbox,
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = time.Second
@@ -247,6 +281,9 @@ func (m *Manager) Start(ctx context.Context, spec StartSpec) (Job, error) {
 	snap := snapshotLocked(j)
 	m.mu.Unlock()
 
+	if m.obs != nil {
+		m.obs.Started(snap)
+	}
 	go m.wait(j)
 	return snap, nil
 }
@@ -274,8 +311,12 @@ func (m *Manager) wait(j *job) {
 		j.state = Stopped
 	}
 	ev := Event{JobID: j.id, Kind: EventExit, ExitCode: code, Duration: j.ended.Sub(j.started), Command: j.command}
+	snap := snapshotLocked(j)
 	m.mu.Unlock()
 
+	if m.obs != nil {
+		m.obs.Exited(snap)
+	}
 	m.queue <- ev
 	close(j.done)
 }
@@ -333,14 +374,25 @@ func (m *Manager) line(j *job, text string) {
 // Stop ends a running job: SIGTERM to its process group, then SIGKILL after
 // 5 seconds. It returns when the job has ended. Stopping an ended job is not an error.
 func (m *Manager) Stop(id int) (Job, error) {
+	return m.StopBy(id, StopByTool)
+}
+
+// StopBy is Stop with the name of who asked, which the observer records. The
+// observer hears of it only when the job was running and ends stopped.
+func (m *Manager) StopBy(id int, by string) (Job, error) {
 	m.mu.Lock()
 	j, ok := m.jobs[id]
+	wasRunning := ok && j.state == Running && !j.stopReq
 	m.mu.Unlock()
 	if !ok {
 		return Job{}, fmt.Errorf("no job #%d", id)
 	}
 	m.terminate(j)
-	return m.snapshot(j), nil
+	snap := m.snapshot(j)
+	if wasRunning && snap.State == Stopped && m.obs != nil {
+		m.obs.Stopped(snap, by)
+	}
+	return snap, nil
 }
 
 // terminate runs the stop sequence once and waits for the job to end.
@@ -476,6 +528,7 @@ func snapshotLocked(j *job) Job {
 		ID: j.id, Command: j.command, Started: j.started, State: j.state,
 		ExitCode: j.exitCode, Ended: j.ended, Monitor: j.monitor, Pattern: pattern,
 		EventsSent: j.eventsSent, Capped: j.capped,
+		Tool: j.tool, Sandbox: j.sandbox,
 	}
 }
 

@@ -40,6 +40,11 @@ func (b *Bridge) Inbox() {
 	b.events <- badgeMsg{}
 }
 
+// Jobs reports that the background jobs of a conversation changed: the badges are re-read.
+func (b *Bridge) Jobs(string) {
+	b.events <- badgeMsg{}
+}
+
 // Notice shows a plain line in the transcript of a conversation.
 func (b *Bridge) Notice(key, text string) {
 	b.events <- warnMsg{key: key, text: text}

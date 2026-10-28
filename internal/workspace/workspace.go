@@ -105,7 +105,10 @@ type Hooks struct {
 	// OnAnswer receives the answer of a turn the workspace started itself.
 	OnAnswer func(key, text string, err error)
 	// OnInbox reports that a message was delivered, so the inbox badges can be re-read.
-	OnInbox   func()
+	OnInbox func()
+	// OnJobs reports that the background jobs of a conversation changed: a job
+	// started, stopped or ended, or an event started waiting. The UI re-reads them.
+	OnJobs    func(key string)
 	OnConfirm func(key string, req gate.Request) bool
 }
 
@@ -537,7 +540,9 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	key := sp.Name + "/" + agentName
 	files := &fileLog{}
 	box := &reviewBox{}
-	jm := jobs.NewManager(jobs.DefaultLimit, nil)
+	// The job events go to the drain of this conversation, started once it exists.
+	jobEvents := make(chan jobs.Event, jobQueue)
+	jm := jobs.NewManager(jobs.DefaultLimit, jobEvents)
 	work, err := w.workStateFor(key, sp.Path, prov)
 	if err != nil {
 		return nil, err
@@ -658,10 +663,14 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		toolNames:    slices.Clone(def.Tools),
 		clock:        w.opts.Now,
 		budgets:      func(ctx context.Context) ([]Budget, error) { return w.budgetsFor(ctx, st.mem, sp.Name, agentName) },
-		budgetNotice: keyedWarn(w.opts.Hooks, key)}
+		budgetNotice: keyedWarn(w.opts.Hooks, key),
+		jobEvents:    jobEvents,
+		jobStop:      make(chan struct{})}
 	if resumed != nil {
 		conv.carried = resumed.Dropped
 	}
+	jm.SetObserver(&jobWatch{w: w, key: key, conv: conv, log: st.aud})
+	go w.drainJobs(key, conv)
 	if hasMCPName(def.Tools) {
 		go w.attachMCP(conv, key, st.mcp, def.Tools, build)
 	}

@@ -3,7 +3,9 @@ package workspace
 import (
 	"context"
 	"errors"
+
 	"fmt"
+	"github.com/tinchoram/groot-cli/internal/jobs"
 	"time"
 
 	"github.com/tinchoram/groot-cli/internal/agent"
@@ -192,7 +194,10 @@ func (c *Conversation) Clear() func(context.Context) error {
 	c.lastGoal = ""
 	// The next turn carries the whole memory again, the summary of this session included.
 	c.memShown.Reset()
+	// The jobs of the cleared session stop now; the manager stays for the next one.
+	running := c.runningJobIDs()
 	return func(ctx context.Context) error {
+		c.stopJobIDs(running, jobs.StopByClear)
 		var errs []error
 		if id != "" {
 			if n > 0 {

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -106,6 +107,9 @@ func (m Model) statusLine() string {
 	parts := []string{m.session.Model()}
 	if usage := statusUsage(m.session.Usage(), m.session.CostUSD(), m.showCost); usage != "" {
 		parts = append(parts, usage)
+	}
+	if n := m.runningJobs(); n > 0 {
+		parts = append(parts, fmt.Sprintf("jobs: %d running", n))
 	}
 	return lead + styleDim.Render(strings.Join(parts, " · "))
 }

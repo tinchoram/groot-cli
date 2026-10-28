@@ -28,16 +28,25 @@ const jobRules = "Its events arrive in a later turn: read output with job_output
 const jobLineClip = 200
 
 // jobTimeout is the limit of a background job. Without timeout_seconds it is
-// jobs.DefaultTimeout; with it, the bash ceiling applies.
+// jobs.DefaultTimeout. With it, the ceiling is the larger of the bash ceiling
+// and jobs.DefaultTimeout, so a job can run as long as its default allows.
 func (b *Bash) jobTimeout(secs *int) (time.Duration, string, error) {
 	if secs == nil {
 		return jobs.DefaultTimeout, "", nil
 	}
-	return b.callTimeout(secs)
+	if *secs <= 0 {
+		return 0, "", errors.New("invalid input: timeout_seconds must be a positive integer")
+	}
+	ceiling := max(b.maxTimeout(), jobs.DefaultTimeout)
+	maxSecs := int(ceiling / time.Second)
+	if *secs > maxSecs {
+		return ceiling, fmt.Sprintf("[bash: timeout_seconds %d clamped to %d]\n", *secs, maxSecs), nil
+	}
+	return time.Duration(*secs) * time.Second, "", nil
 }
 
 // startJob runs command as a job of m, in the sandbox that bash would use.
-func startJob(ctx context.Context, b *Bash, m *jobs.Manager, command string, secs *int, monitor bool, pattern *regexp.Regexp) (jobs.Job, string, error) {
+func startJob(ctx context.Context, b *Bash, m *jobs.Manager, toolName, command string, secs *int, monitor bool, pattern *regexp.Regexp) (jobs.Job, string, error) {
 	timeout, notice, err := b.jobTimeout(secs)
 	if err != nil {
 		return jobs.Job{}, "", err
@@ -48,6 +57,8 @@ func startJob(ctx context.Context, b *Bash, m *jobs.Manager, command string, sec
 		Monitor: monitor,
 		Pattern: pattern,
 		Build:   b.buildCommand(command),
+		Tool:    toolName,
+		Sandbox: b.SandboxName(),
 	})
 	return job, notice, err
 }
@@ -122,7 +133,7 @@ func (t *BashBackground) execute(ctx context.Context, input string) (string, boo
 	if err != nil {
 		return err.Error(), true
 	}
-	job, notice, err := startJob(ctx, t.bash, t.m, in.Command, in.TimeoutSeconds, false, nil)
+	job, notice, err := startJob(ctx, t.bash, t.m, "bash_background", in.Command, in.TimeoutSeconds, false, nil)
 	if err != nil {
 		return err.Error(), true
 	}
@@ -186,7 +197,7 @@ func (t *Monitor) execute(ctx context.Context, input string) (string, bool) {
 			return "invalid pattern: " + err.Error(), true
 		}
 	}
-	job, notice, err := startJob(ctx, t.bash, t.m, in.Command, in.TimeoutSeconds, true, re)
+	job, notice, err := startJob(ctx, t.bash, t.m, "monitor", in.Command, in.TimeoutSeconds, true, re)
 	if err != nil {
 		return err.Error(), true
 	}

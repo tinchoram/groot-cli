@@ -298,15 +298,28 @@ func TestJobTimeoutDefaultsAndCeiling(t *testing.T) {
 	if err != nil || got != jobs.DefaultTimeout || notice != "" {
 		t.Fatalf("default = %s, %q, %v; want 30m", got, notice, err)
 	}
+	// The ceiling of a job is the larger of the bash ceiling and the job default,
+	// so a 10 minute bash ceiling still lets a job run for its default 30 minutes.
 	secs := 900
 	got, notice, err = b.jobTimeout(&secs)
-	if err != nil || got != 10*time.Minute || !strings.Contains(notice, "clamped to 600") {
-		t.Fatalf("900s = %s, %q, %v; want the 600s ceiling with a notice", got, notice, err)
+	if err != nil || got != 15*time.Minute || notice != "" {
+		t.Fatalf("900s = %s, %q, %v; want 15m without a notice", got, notice, err)
+	}
+	secs = 2000
+	got, notice, err = b.jobTimeout(&secs)
+	if err != nil || got != jobs.DefaultTimeout || !strings.Contains(notice, "clamped to 1800") {
+		t.Fatalf("2000s = %s, %q, %v; want the 1800s ceiling with a notice", got, notice, err)
 	}
 	secs = 120
 	got, _, _ = b.jobTimeout(&secs)
 	if got != 2*time.Minute {
 		t.Fatalf("120s = %s", got)
+	}
+	b.MaxTimeout = 2 * time.Hour
+	secs = 3600
+	got, notice, _ = b.jobTimeout(&secs)
+	if got != time.Hour || notice != "" {
+		t.Fatalf("3600s with a 2h bash ceiling = %s, %q; want 1h without a notice", got, notice)
 	}
 }
 

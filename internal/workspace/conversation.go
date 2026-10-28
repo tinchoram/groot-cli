@@ -63,10 +63,19 @@ type Conversation struct {
 	work  *gate.WorkState
 	files *fileLog
 	// jobs are the background jobs of this conversation: they die with it.
-	jobs      *jobs.Manager
-	review    *reviewBox
-	busy      atomic.Bool  // a turn is running: UI-driven or triggered by a message
-	autoTurns atomic.Int64 // turns triggered by messages in this session
+	jobs *jobs.Manager
+	// jobEvents carries the events of the jobs to drainJobs, which ends at jobStop.
+	// jobsClosing is set while the jobs are stopped for good, so no turn starts.
+	jobEvents   chan jobs.Event
+	jobStop     chan struct{}
+	jobsClosing atomic.Bool
+	jobStopOnce sync.Once
+	// jobMu guards jobPending: the rendered job events of the next turn.
+	jobMu      sync.Mutex
+	jobPending []string
+	review     *reviewBox
+	busy       atomic.Bool  // a turn is running: UI-driven or triggered by a message
+	autoTurns  atomic.Int64 // turns triggered by messages in this session
 	// sysMu guards baseSystem: /clear refreshes it while a turn may be reading it.
 	sysMu      sync.Mutex
 	baseSystem string
@@ -222,10 +231,18 @@ func (c *Conversation) send(ctx context.Context, prompt string) (string, error) 
 	if strings.TrimSpace(prompt) != "" {
 		c.lastGoal = prompt
 	}
-	prompt = c.injectInbox(ctx, prompt)
-	if prompt == "" {
+	// The notices sit between the memory block and the prompt: inbox first, then job events.
+	parts := c.inboxParts(ctx)
+	if block := c.jobBlock(); block != "" {
+		parts = append(parts, block)
+	}
+	if prompt != "" {
+		parts = append(parts, prompt)
+	}
+	if len(parts) == 0 {
 		return "", nil
 	}
+	prompt = strings.Join(parts, "\n\n")
 	before := c.Agent.SessionCost()
 	if len(c.carried) > 0 {
 		c.carryOver(ctx)

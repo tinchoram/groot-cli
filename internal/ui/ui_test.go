@@ -16,6 +16,7 @@ import (
 	"github.com/tinchoram/groot-cli/internal/flow"
 	"github.com/tinchoram/groot-cli/internal/gate"
 	"github.com/tinchoram/groot-cli/internal/inbox"
+	"github.com/tinchoram/groot-cli/internal/jobs"
 	"github.com/tinchoram/groot-cli/internal/memory"
 	"github.com/tinchoram/groot-cli/internal/provider"
 	"github.com/tinchoram/groot-cli/internal/tool"
@@ -204,7 +205,10 @@ type fakeWorkspace struct {
 	chat          *fakeSession
 	closed        bool
 	unread        map[string]int
-	acks          []inbox.Message // pending acks of the active agent, handed out by TakeAcks
+	jobCounts     map[string]workspace.JobCount // background job counts per conversation key
+	bgJobs        []jobs.Job                    // the jobs of the active conversation
+	stopped       []int                         // ids passed to StopJob
+	acks          []inbox.Message               // pending acks of the active agent, handed out by TakeAcks
 	workModes     map[string]bool
 	blockClose    bool
 	backlog       []feedback.Item
@@ -413,6 +417,15 @@ func (f *fakeWorkspace) CloseFast() error {
 }
 
 func (f *fakeWorkspace) UnreadCounts(context.Context) (map[string]int, error) { return f.unread, nil }
+
+func (f *fakeWorkspace) JobCounts() map[string]workspace.JobCount { return f.jobCounts }
+
+func (f *fakeWorkspace) Jobs(string) []jobs.Job { return f.bgJobs }
+
+func (f *fakeWorkspace) StopJob(_ string, id int) (jobs.Job, error) {
+	f.stopped = append(f.stopped, id)
+	return jobs.Job{ID: id, State: jobs.Stopped, ExitCode: -1}, nil
+}
 
 func (f *fakeWorkspace) WorkModes() map[string]bool { return f.workModes }
 
