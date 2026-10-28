@@ -334,8 +334,19 @@ func TestListIsOrderedByID(t *testing.T) {
 		}
 		ids = append(ids, j.ID)
 	}
-	for _, id := range ids {
-		untilExit(t, events, id)
+	// The jobs end in any order, so wait for all three exits in one pass:
+	// untilExit would drop the exit of a job it is not waiting for.
+	pending := map[int]bool{ids[0]: true, ids[1]: true, ids[2]: true}
+	timeout := time.After(10 * time.Second)
+	for len(pending) > 0 {
+		select {
+		case ev := <-events:
+			if ev.Kind == EventExit {
+				delete(pending, ev.JobID)
+			}
+		case <-timeout:
+			t.Fatalf("no exit event for jobs %v", pending)
+		}
 	}
 	list := m.List()
 	if len(list) != 3 || list[0].ID != 1 || list[1].ID != 2 || list[2].ID != 3 {
