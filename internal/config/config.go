@@ -35,8 +35,8 @@ Working rules:
 
 Tools:
 - Every write and every command passes the user's gate. Do not work around a refusal.
-- bash runs in a sandbox when the platform provides one. Network access is off unless the
-  space enables it; when a command needs the network and fails for that reason, say so.
+- bash runs in a sandbox when the platform provides one. Network access is on unless the
+  space turns it off; when a command fails for lack of network while it is off, say so.
 - For file work use the dedicated tools: read_file to read, glob and list_dir to find,
   write_file to write. Use bash only for what they cannot do.
 - For work that needs tracking, use the task_* tools.
@@ -254,7 +254,7 @@ func Default() Config {
 		Audit:      AuditConfig{Path: ".groot/audit.jsonl"},
 		Gate:       GateConfig{Policy: "interactive"},
 		Work:       WorkConfig{MaxTurns: 50, MaxAutoTurns: 10, MaxUSD: 5.0, AlwaysAsk: DefaultAlwaysAsk()},
-		Bash:       BashConfig{Timeout: DefaultBashTimeout, MaxTimeout: DefaultBashMaxTimeout, Sandbox: SandboxConfig{Mode: "auto"}},
+		Bash:       BashConfig{Timeout: DefaultBashTimeout, MaxTimeout: DefaultBashMaxTimeout, Sandbox: defaultSandbox()},
 		Guard:      GuardConfig{Mode: "warn"},
 		Updates:    UpdatesConfig{Check: true},
 		Flow:       FlowConfig{Mode: "strict", Delegation: "auto", Manager: "space-manager"},
@@ -347,6 +347,7 @@ func loadLayers(layers []layer) (Config, error) {
 	}
 	// An unset ${VAR:-} expands to "", which must not become an allowlist entry.
 	cfg.Kubectl.Namespaces = dropEmpty(cfg.Kubectl.Namespaces)
+	cfg.Bash.Sandbox.CacheDirs = expandCacheDirs(cfg.Bash.Sandbox.CacheDirs)
 	for name, s := range cfg.MCP.Servers {
 		if s.Timeout == 0 {
 			s.Timeout = DefaultMCPTimeout

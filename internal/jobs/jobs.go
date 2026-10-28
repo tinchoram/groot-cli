@@ -84,6 +84,8 @@ type Job struct {
 	// Tool is the tool that started the job and Sandbox the backend that confined it.
 	Tool    string
 	Sandbox string
+	// NetworkOff is set when the job ran with the network denied by its sandbox.
+	NetworkOff bool
 }
 
 // Who stopped a job, as the observer and the audit log name it.
@@ -115,6 +117,8 @@ type StartSpec struct {
 	// Tool and Sandbox are recorded on the job for the observer.
 	Tool    string
 	Sandbox string
+	// NetworkOff is recorded on the job: the sandbox denies its network.
+	NetworkOff bool
 }
 
 // Manager runs the jobs of one conversation. Events go to the channel given to
@@ -149,18 +153,19 @@ func (m *Manager) SetObserver(o Observer) { m.obs = o }
 // job is the internal state of one process. Fields marked mu are guarded by
 // Manager.mu; the rest belong to the goroutine that runs the process.
 type job struct {
-	mgr     *Manager
-	id      int
-	command string
-	monitor bool
-	pattern *regexp.Regexp
-	started time.Time
-	tool    string
-	sandbox string
-	cmd     *exec.Cmd
-	cancel  context.CancelFunc
-	timer   *time.Timer
-	done    chan struct{}
+	mgr        *Manager
+	id         int
+	command    string
+	monitor    bool
+	pattern    *regexp.Regexp
+	started    time.Time
+	tool       string
+	sandbox    string
+	networkOff bool
+	cmd        *exec.Cmd
+	cancel     context.CancelFunc
+	timer      *time.Timer
+	done       chan struct{}
 
 	pending []byte // partial line; only the writer goroutine touches it
 
@@ -251,18 +256,19 @@ func (m *Manager) Start(ctx context.Context, spec StartSpec) (Job, error) {
 	}
 	m.nextID++
 	j := &job{
-		mgr:      m,
-		id:       m.nextID,
-		command:  spec.Command,
-		monitor:  spec.Monitor,
-		pattern:  spec.Pattern,
-		started:  time.Now(),
-		cancel:   cancel,
-		done:     make(chan struct{}),
-		state:    Running,
-		exitCode: -1,
-		tool:     spec.Tool,
-		sandbox:  spec.Sandbox,
+		mgr:        m,
+		id:         m.nextID,
+		command:    spec.Command,
+		monitor:    spec.Monitor,
+		pattern:    spec.Pattern,
+		started:    time.Now(),
+		cancel:     cancel,
+		done:       make(chan struct{}),
+		state:      Running,
+		exitCode:   -1,
+		tool:       spec.Tool,
+		sandbox:    spec.Sandbox,
+		networkOff: spec.NetworkOff,
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = time.Second
@@ -528,7 +534,7 @@ func snapshotLocked(j *job) Job {
 		ID: j.id, Command: j.command, Started: j.started, State: j.state,
 		ExitCode: j.exitCode, Ended: j.ended, Monitor: j.monitor, Pattern: pattern,
 		EventsSent: j.eventsSent, Capped: j.capped,
-		Tool: j.tool, Sandbox: j.sandbox,
+		Tool: j.tool, Sandbox: j.sandbox, NetworkOff: j.networkOff,
 	}
 }
 

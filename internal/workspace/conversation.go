@@ -359,15 +359,18 @@ func tail(s string, n int) string {
 	return string(r[len(r)-n:])
 }
 
-// bashTool returns the bash tool of a space with the bash settings of the config.
+// bashTool returns the bash tool of an agent in a space: the bash settings of
+// the config, the network of the space, and the credential sets of the agent.
 // The background job tools use the same tool, so they share its sandbox.
-func (w *Workspace) bashTool(root string) *tool.Bash {
+func (w *Workspace) bashTool(root, agentName string) *tool.Bash {
 	b := tool.NewBash(root)
 	b.Timeout = w.opts.Config.Bash.Timeout
 	b.MaxTimeout = w.opts.Config.Bash.MaxTimeout
 	b.Runner = w.opts.Sandbox
-	b.Network = w.opts.Config.Bash.Sandbox.Network
+	b.Network = w.networkAt(root)
 	b.ExtraWritable = w.opts.Config.Bash.Sandbox.ExtraWritable
+	b.CacheDirs = w.opts.Config.Bash.Sandbox.CacheDirs
+	b.Credentials = w.credentialsOf(agentName)
 	return b
 }
 
@@ -464,7 +467,7 @@ func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messen
 		}
 		return trackedTool{Tool: tool.NewWriteFile(root), log: files}, nil
 	case "bash":
-		b := w.bashTool(root)
+		b := w.bashTool(root, agentName)
 		if ctl == nil {
 			return b, nil
 		}
@@ -473,7 +476,7 @@ func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messen
 		if jm == nil {
 			return nil, errors.New("background jobs are not available")
 		}
-		return newJobTool(name, w.bashTool(root), jm), nil
+		return newJobTool(name, w.bashTool(root, agentName), jm), nil
 	case "kubectl":
 		k := tool.NewKubectl("kubectl", w.opts.Config.Kubectl.Namespaces)
 		k.OutDir = root

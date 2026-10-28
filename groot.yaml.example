@@ -36,6 +36,16 @@ kubectl:
   # must name one of these namespaces and cannot use -A.
   namespaces: ["${GROOT_NAMESPACE:-}"]
 
+bash:
+  sandbox:
+    mode: auto                   # auto | strict | off
+    network: true                # on by default; a space can turn it off with /space network off
+    # extra_writable: [/opt/cache]     # absolute paths the commands may write
+    # cache_dirs: [~/.cache, ~/.npm]   # tool caches the commands may write; "~" is expanded.
+    #                                  # Unset: $XDG_CACHE_HOME or ~/.cache, ~/.npm, ~/Library/Caches
+    #                                  # (macOS), $GOCACHE and the Go module cache ($GOMODCACHE,
+    #                                  # else $GOPATH/pkg/mod, else ~/go/pkg/mod). A list here replaces the defaults.
+
 # Optional. Replaces the built-in SRE system prompt.
 # system_prompt: |
 #   You are Groot, a careful SRE assistant for the payments platform.

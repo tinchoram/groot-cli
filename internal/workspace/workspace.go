@@ -170,8 +170,10 @@ type AgentInfo struct {
 	Prompt string
 	// GlobalMemory is whether the agent reads global memory (groot always does).
 	GlobalMemory bool
-	Assigned     bool // assigned to the active space
-	Active       bool // currently selected in the active space
+	// Credentials are the credential sets the agent's commands may read.
+	Credentials []string
+	Assigned    bool // assigned to the active space
+	Active      bool // currently selected in the active space
 }
 
 // Workspace is the runtime. Methods are safe for concurrent use.
@@ -382,6 +384,7 @@ func (w *Workspace) info(d catalog.AgentDef, assigned bool) AgentInfo {
 		Tools:        slices.Clone(d.Tools),
 		Prompt:       d.Prompt,
 		GlobalMemory: readsGlobal(d.Name, d),
+		Credentials:  slices.Clone(d.Credentials),
 		Assigned:     assigned,
 		Active:       assigned && d.Name == w.active,
 	}

@@ -258,6 +258,10 @@ type fakeWorkspace struct {
 	// flow is what SpaceFlow reports; flowErr makes it fail.
 	flow    workspace.FlowView
 	flowErr error
+	// network is the setting SpaceNetwork reports and SetSpaceNetwork changes;
+	// networkSet records the changes as "space:on" or "space:off".
+	network    workspace.Setting
+	networkSet []string
 	// operator is the operator's name without @; SetOperatorName stores it, or
 	// fails with opErr.
 	operator string

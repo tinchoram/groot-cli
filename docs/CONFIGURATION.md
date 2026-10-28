@@ -27,6 +27,10 @@ directory, Groot adds it to the system prompt under "Project context".
 | `audit.sinks` | empty | Export sinks: `file`, `http` or `syslog`. See Audit |
 | `gate.policy` | `interactive` | `interactive`, `readonly` or `auto` |
 | `kubectl.namespaces` | empty (any) | Namespace allowlist |
+| `bash.sandbox.mode` | `auto` | `auto` (the best backend, else unrestricted with a warning), `strict` (refuse without one) or `off` |
+| `bash.sandbox.network` | `true` | Commands may use the network. A space overrides it with `/space network on\|off`. See [Network](SAFETY.md#network) |
+| `bash.sandbox.cache_dirs` | host caches | Writable tool caches: `$XDG_CACHE_HOME` or `~/.cache`, `~/.npm`, `~/Library/Caches` (macOS), `$GOCACHE` when set, and the Go module cache (`$GOMODCACHE`, else `$GOPATH/pkg/mod`, else `~/go/pkg/mod`). A leading `~` is expanded at load; a list replaces the defaults; paths must be absolute |
+| `bash.sandbox.extra_writable` | empty | More absolute directories the commands may write |
 | `system_prompt` | built in | Replaces the base prompt only: the default groot prompt (identity, working rules, tool rules) when unset. The agent prompt, the rules of the space, the environment block, the People block and `AGENTS.md` are still added after it |
 
 Never put API keys in `groot.yaml`. Keys come from `groot auth login`, from

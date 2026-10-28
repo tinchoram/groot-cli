@@ -119,6 +119,15 @@ func (r recordingTool) SandboxName() string {
 	return ""
 }
 
+// CredentialSets forwards the credential sets of the wrapped tool, so the gate
+// and the audit still see them.
+func (r recordingTool) CredentialSets() []string {
+	if c, ok := r.Tool.(tool.Credentialed); ok {
+		return c.CredentialSets()
+	}
+	return nil
+}
+
 // Task reports the open task of this conversation, if there is one.
 func (c *Conversation) Task() (flow.Task, bool) {
 	if c.ctl == nil {

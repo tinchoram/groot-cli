@@ -183,6 +183,7 @@ var adminChanges = map[string]bool{
 	"set_space_route": true, "set_space_model": true, "set_space_delegation": true, "set_space_budget": true, "set_agent_budget": true, "set_context_window": true,
 	"grant_tool": true, "revoke_tool": true, "grant_global_memory": true, "revoke_global_memory": true, "set_default_model": true,
 	"delete_space": true, "edit_space": true, "delete_agent": true, "edit_agent": true, "move_agent": true, "copy_agent": true,
+	"grant_credentials": true, "revoke_credentials": true,
 }
 
 // insideSpace reports whether path, relative to space or absolute, is inside it.

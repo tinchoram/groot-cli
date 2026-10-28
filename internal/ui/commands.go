@@ -50,6 +50,7 @@ var helpEntries = []helpEntry{
 	{"/space assign <agent>", "add a catalog agent to the active space"},
 	{"/space unassign <agent>", "remove an agent from the active space"},
 	{"/space routes [name]", "show the mode and routes of a space, and where each value comes from"},
+	{"/space network [on|off]", "show or set whether the commands of the active space may use the network"},
 	{"/space rename <old> <new>", "rename a space; the selection and unread messages follow"},
 	{"/space delete <name>", "delete a space from spaces.yaml; its directory and data stay"},
 	{"/agent", "the catalog of agents"},

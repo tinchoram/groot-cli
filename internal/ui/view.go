@@ -129,7 +129,11 @@ func (m Model) agentBadge() string {
 func (m Model) inputArea() string {
 	w := max(m.chatWidth()-2, 20)
 	if m.pending != nil {
-		prompt := styleConfirmMark.Render(" ? ") + m.pending.prompt + styleDim.Render(" "+approvalChoices(m.pending.req))
+		prompt := styleConfirmMark.Render(" ? ") + m.pending.prompt
+		if line := credentialsLine(m.pending.req); line != "" {
+			prompt += styleDim.Render("  " + line)
+		}
+		prompt += styleDim.Render(" " + approvalChoices(m.pending.req))
 		if line := destructiveLine(m.pending.req); line != "" {
 			prompt = styleError.Render(" "+line) + "\n" + prompt
 		}

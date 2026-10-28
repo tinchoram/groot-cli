@@ -368,15 +368,16 @@ func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
 		a.OnToolCall(use.Name, detail)
 	}
 
-	_, external := t.(tool.External)
+	external := externalOf(t)
 	destructive, destructiveReason := destructiveOf(t, input)
+	creds := credentialsOf(t)
 	req := gate.Request{
 		Tool: use.Name, Input: input, Risk: risk, Detail: detail, Tainted: tainted, External: external,
-		Destructive: destructive, DestructiveReason: destructiveReason,
+		Destructive: destructive, DestructiveReason: destructiveReason, Credentials: creds,
 	}
 	decision := a.gate().Decide(ctx, req)
 	if decision == gate.Deny {
-		a.audit(use.Name, risk, decision, input, true, 0, "", nil)
+		a.audit(use.Name, risk, decision, input, true, 0, "", nil, creds)
 		return api.Block{Type: api.BlockToolResult, ToolUseID: use.ID, Content: a.denial(req), IsError: true}
 	}
 	if a.OnToolRisk != nil {
@@ -387,7 +388,7 @@ func (a *Agent) runTool(ctx context.Context, use api.Block) api.Block {
 	out, isErr := t.Execute(ctx, input)
 	out, kinds, withheld := a.guardOutput(t, use.Name, use.Name+" "+preview, out)
 	isErr = isErr || withheld
-	a.audit(use.Name, risk, decision, input, isErr, time.Since(start), sandboxOf(t), kinds)
+	a.audit(use.Name, risk, decision, input, isErr, time.Since(start), sandboxOf(t), kinds, creds)
 	return api.Block{Type: api.BlockToolResult, ToolUseID: use.ID, Content: out, IsError: isErr}
 }
 
@@ -403,6 +404,23 @@ func destructiveOf(t tool.Tool, input string) (bool, string) {
 		return false, ""
 	}
 	return true, string(kind) + ": " + reason
+}
+
+// externalOf reports whether a tool runs outside groot. A wrapper may carry the
+// method with a false answer, so the answer is read, not the method's presence.
+func externalOf(t tool.Tool) bool {
+	e, ok := t.(tool.External)
+	return ok && e.External()
+}
+
+// credentialsOf returns the credential sets a tool runs its commands under, or nil.
+func credentialsOf(t tool.Tool) []string {
+	if c, ok := t.(tool.Credentialed); ok {
+		if sets := c.CredentialSets(); len(sets) > 0 {
+			return slices.Clone(sets)
+		}
+	}
+	return nil
 }
 
 // sandboxOf returns the sandbox backend of a tool that runs processes, or "".
@@ -444,7 +462,7 @@ func (a *Agent) guardOutput(t tool.Tool, name, source, out string) (string, []st
 	return wrap(clean) + "\n" + guard.Summary(found), kinds, false
 }
 
-func (a *Agent) audit(name string, risk tool.Risk, decision gate.Decision, input string, isErr bool, d time.Duration, sandbox string, kinds []string) {
+func (a *Agent) audit(name string, risk tool.Risk, decision gate.Decision, input string, isErr bool, d time.Duration, sandbox string, kinds, creds []string) {
 	if a.Audit == nil {
 		return
 	}
@@ -461,6 +479,7 @@ func (a *Agent) audit(name string, risk tool.Risk, decision gate.Decision, input
 		DurationMS:   d.Milliseconds(),
 		Sandbox:      sandbox,
 		Guard:        kinds,
+		Credentials:  creds,
 	})
 	a.warn(err)
 }

@@ -37,8 +37,8 @@ func TestCompletionShowsAtMostSixCommands(t *testing.T) {
 
 func TestCompletionSubCommands(t *testing.T) {
 	m, _ := newTestModel(t, &fakeSession{model: "m"})
-	if got := completionInserts(typeText(m, "/space n")); len(got) != 1 || got[0] != "/space new" {
-		t.Fatalf("candidates for /space n = %v, want [/space new]", got)
+	if got := completionInserts(typeText(m, "/space n")); len(got) != 2 || !contains(got, "/space new") || !contains(got, "/space network") {
+		t.Fatalf("candidates for /space n = %v, want [/space new /space network]", got)
 	}
 	m, _ = newTestModel(t, &fakeSession{model: "m"})
 	got := completionInserts(typeText(m, "/space "))

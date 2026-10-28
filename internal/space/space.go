@@ -28,6 +28,9 @@ type Space struct {
 	// BudgetUSD caps the cumulative spend of all agents in this space. Zero
 	// means no budget.
 	BudgetUSD float64 `yaml:"budget_usd,omitempty"`
+	// Network overrides bash.sandbox.network for this space. Nil means the
+	// global value applies; true or false wins over it.
+	Network *bool `yaml:"network,omitempty"`
 }
 
 // SpaceFlow overrides the ODD flow settings of a space.
@@ -204,6 +207,22 @@ func (s *Store) SetModel(spaceName, model string) error {
 	return s.save()
 }
 
+// SetNetwork sets the network override of a space. Nil clears it, so the global
+// bash.sandbox.network applies again.
+func (s *Store) SetNetwork(spaceName string, on *bool) error {
+	i := s.index(spaceName)
+	if i < 0 {
+		return fmt.Errorf("no space named %q", spaceName)
+	}
+	if on == nil {
+		s.data.Spaces[i].Network = nil
+	} else {
+		v := *on
+		s.data.Spaces[i].Network = &v
+	}
+	return s.save()
+}
+
 // SetBudget sets the spend budget of a space. Zero clears it.
 func (s *Store) SetBudget(spaceName string, usd float64) error {
 	i := s.index(spaceName)
@@ -267,6 +286,10 @@ func (s *Store) save() error {
 
 func clone(sp Space) Space {
 	sp.Agents = slices.Clone(sp.Agents)
+	if sp.Network != nil {
+		v := *sp.Network
+		sp.Network = &v
+	}
 	return sp
 }
 

@@ -43,6 +43,9 @@ type Request struct {
 	// command, for example "git: git push --force".
 	Destructive       bool
 	DestructiveReason string
+	// Credentials are the credential sets the call runs under, such as aws, so
+	// the user sees what the command may read. Empty when the call has none.
+	Credentials []string
 }
 
 // CanGrant reports whether the user may approve this call for the rest of the

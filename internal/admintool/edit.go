@@ -89,6 +89,8 @@ type editSpaceInput struct {
 	Name    string `json:"name"`
 	NewName string `json:"new_name"`
 	Path    string `json:"path"`
+	// Network is the space's network setting; nil keeps it.
+	Network *bool `json:"network"`
 }
 
 type editSpace struct {
@@ -101,7 +103,7 @@ type editSpace struct {
 func NewEditSpace(m Manager, home string) tool.Tool {
 	return editSpace{base{"edit_space",
 		"Rename a space, point it at another directory, or both. The root space cannot be renamed. A rename keeps the selection and the unread messages, and a new path does not move the .groot data under the old path.",
-		`{"type":"object","properties":{"name":{"type":"string","description":"Space to edit"},"new_name":{"type":"string","description":"New lowercase slug; optional"},"path":{"type":"string","description":"Existing directory, absolute or starting with ~; optional"}},"required":["name"],"additionalProperties":false}`,
+		`{"type":"object","properties":{"name":{"type":"string","description":"Space to edit"},"new_name":{"type":"string","description":"New lowercase slug; optional"},"path":{"type":"string","description":"Existing directory, absolute or starting with ~; optional"},"network":{"type":"boolean","description":"Turn the space's network on or off; optional, omit to keep it"}},"required":["name"],"additionalProperties":false}`,
 		tool.RiskWrite}, m, home}
 }
 
@@ -117,6 +119,9 @@ func (t editSpace) Preview(input string) string {
 	if in.Path != "" {
 		parts = append(parts, fmt.Sprintf("set the path of space %s to %s", in.Name, in.Path))
 	}
+	if in.Network != nil {
+		parts = append(parts, fmt.Sprintf("set the network of space %s to %s", in.Name, onOff(*in.Network)))
+	}
 	if len(parts) == 0 {
 		return fmt.Sprintf("edit space %s: nothing to change", in.Name)
 	}
@@ -131,7 +136,7 @@ func (t editSpace) Execute(_ context.Context, input string) (string, bool) {
 	if strings.TrimSpace(in.Name) == "" {
 		return "name is required", true
 	}
-	if in.NewName == "" && in.Path == "" {
+	if in.NewName == "" && in.Path == "" && in.Network == nil {
 		return "give new_name or path: nothing to change", true
 	}
 	path := ""
@@ -142,7 +147,36 @@ func (t editSpace) Execute(_ context.Context, input string) (string, bool) {
 		}
 		path = p
 	}
-	return result(t.m.EditSpace(in.Name, in.NewName, path))
+	if in.NewName == "" && in.Path == "" {
+		return t.setNetwork(in.Name, *in.Network)
+	}
+	out, isErr := result(t.m.EditSpace(in.Name, in.NewName, path))
+	if isErr || in.Network == nil {
+		return out, isErr
+	}
+	// A network change applies to the space under its new name.
+	target := in.Name
+	if in.NewName != "" {
+		target = in.NewName
+	}
+	net, netErr := t.setNetwork(target, *in.Network)
+	return out + "\n" + net, netErr
+}
+
+// setNetwork turns the network of a space on or off through the manager.
+func (t editSpace) setNetwork(name string, on bool) (string, bool) {
+	if err := t.m.SetSpaceNetwork(name, on); err != nil {
+		return err.Error(), true
+	}
+	return fmt.Sprintf("network of %s is now %s", name, onOff(on)), false
+}
+
+// onOff names a network setting as the user sees it.
+func onOff(on bool) string {
+	if on {
+		return "on"
+	}
+	return "off"
 }
 
 // ---- delete_agent ----

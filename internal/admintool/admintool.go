@@ -114,6 +114,11 @@ type Manager interface {
 	// EditAgentTools adds and removes tools of an agent. The managed agents keep
 	// their required tools.
 	EditAgentTools(name string, add, remove []string) error
+	// EditAgentCredentials grants and revokes credential sets of an agent. A set
+	// must be a known one; the change is saved in the agent's file.
+	EditAgentCredentials(name string, add, remove []string) error
+	// SetSpaceNetwork turns the network of a space on or off.
+	SetSpaceNetwork(space string, on bool) error
 	// SetAgentGlobalMemory lets an agent read global memory, or takes it away.
 	// groot always reads it, so turning it off for groot is refused.
 	SetAgentGlobalMemory(name string, on bool) error
@@ -179,6 +184,8 @@ func All(m Manager, home string) []tool.Tool {
 		NewSetContextWindow(m),
 		NewGrantTool(m),
 		NewRevokeTool(m),
+		NewGrantCredentials(m),
+		NewRevokeCredentials(m),
 		NewGrantGlobalMemoryTool(m),
 		NewRevokeGlobalMemoryTool(m),
 		NewSetDefaultModel(m),

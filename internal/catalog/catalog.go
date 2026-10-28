@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/tinchoram/groot-cli/internal/api"
+	"github.com/tinchoram/groot-cli/internal/sandbox"
 )
 
 // AgentDef is one agent definition.
@@ -38,6 +39,10 @@ type AgentDef struct {
 	// Effort is how much the model works on each call: low, medium, high, xhigh
 	// or max. Empty uses the provider's effort. It overrides the provider's value.
 	Effort string
+	// Credentials are the credential sets (sandbox.CredentialSets) the agent's
+	// commands may read. They are granted only here, in the file, or by the
+	// admin tools grant_credentials and revoke_credentials.
+	Credentials []string
 	// GlobalMemory lets the agent read the global memory of the root database.
 	// groot always reads it; other agents read it only when this is set.
 	GlobalMemory bool
@@ -51,6 +56,7 @@ var KnownTools = []string{
 	"list_spaces", "create_space", "assign_agent", "unassign_agent", "list_agents", "create_agent",
 	"import_agent", "list_library", "install_agent", "send_message", "read_inbox", "current_time", "task_classify", "task_open", "task_advance", "task_verify", "task_status", "upgrade_agent", "set_work_mode", "feedback_report", "feedback_list", "feedback_update", "read_changelog", "fetch_url", "list_models", "set_agent_model", "set_space_route", "set_space_model", "set_space_delegation", "set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query", "set_context_window", "grant_tool", "revoke_tool", "set_default_model", "grant_global_memory", "revoke_global_memory",
 	"delete_space", "edit_space", "delete_agent", "edit_agent", "move_agent", "copy_agent",
+	"grant_credentials", "revoke_credentials",
 }
 
 // mcpToolName matches an MCP tool an agent may list: <server>__<tool> or
@@ -116,7 +122,23 @@ func Validate(d AgentDef) error {
 	if !api.ValidEffort(d.Effort) {
 		return fmt.Errorf("agent %q: effort %q is invalid (use low, medium, high, xhigh or max, or leave it empty)", d.Name, d.Effort)
 	}
+	if _, err := sandbox.CredentialDirs(d.Credentials); err != nil {
+		return fmt.Errorf("agent %q: credentials: %w", d.Name, err)
+	}
 	return nil
+}
+
+// credentialSets returns the set names of a credentials list without blanks or
+// repeats, in the order written.
+func credentialSets(names []string) []string {
+	var out []string
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n != "" && !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // frontmatter is the YAML block at the top of an agent file. Unknown keys are ignored.
@@ -131,6 +153,7 @@ type frontmatter struct {
 	Collection   string    `yaml:"collection"`
 	GlobalMemory bool      `yaml:"global_memory"`
 	Effort       string    `yaml:"effort"`
+	Credentials  []string  `yaml:"credentials"`
 }
 
 // splitFrontmatter separates the frontmatter block from the body. It accepts
@@ -172,6 +195,10 @@ func ParseAgentFile(data []byte) (AgentDef, error) {
 	if !api.ValidEffort(effort) {
 		return AgentDef{}, fmt.Errorf("effort %q is invalid (use low, medium, high, xhigh or max, or leave it out)", fm.Effort)
 	}
+	creds := credentialSets(fm.Credentials)
+	if _, err := sandbox.CredentialDirs(creds); err != nil {
+		return AgentDef{}, fmt.Errorf("credentials: %w", err)
+	}
 	return AgentDef{
 		Name:         strings.TrimSpace(fm.Name),
 		Description:  fm.Description,
@@ -182,6 +209,7 @@ func ParseAgentFile(data []byte) (AgentDef, error) {
 		Author:       strings.TrimSpace(fm.Author),
 		Collection:   strings.TrimSpace(fm.Collection),
 		Effort:       effort,
+		Credentials:  creds,
 		GlobalMemory: fm.GlobalMemory,
 		Prompt:       strings.TrimSpace(body),
 	}, nil
@@ -249,6 +277,7 @@ type renderFrontmatter struct {
 	Author       string   `yaml:"author,omitempty"`
 	Collection   string   `yaml:"collection,omitempty"`
 	Effort       string   `yaml:"effort,omitempty"`
+	Credentials  []string `yaml:"credentials,omitempty"`
 	GlobalMemory bool     `yaml:"global_memory,omitempty"`
 }
 
@@ -264,6 +293,7 @@ func RenderAgentFile(d AgentDef) ([]byte, error) {
 		Author:       d.Author,
 		Collection:   d.Collection,
 		Effort:       d.Effort,
+		Credentials:  credentialSets(d.Credentials),
 		GlobalMemory: d.GlobalMemory,
 	})
 	if err != nil {

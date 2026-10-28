@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"slices"
 )
 
 // bwrap runs commands under bubblewrap: the whole filesystem is read-only,
@@ -53,9 +54,13 @@ func bwrapArgs(spec Spec, h host) []string {
 	if groot := h.resolve(filepath.Join(spec.Dir, ".groot")); h.exists(groot) {
 		args = append(args, "--ro-bind", groot, groot)
 	}
-	for _, p := range secretPaths(h) {
+	for _, e := range secretEntries(h) {
+		p := e.path
 		switch {
 		case !h.exists(p):
+		case slices.Contains(spec.ReadableSecrets, e.rel):
+			// A granted set is visible, read-only: the root is already read-only.
+			args = append(args, "--ro-bind", p, p)
 		case h.isDir(p):
 			args = append(args, "--tmpfs", p)
 		default:

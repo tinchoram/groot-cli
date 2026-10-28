@@ -96,6 +96,8 @@ func TestToolsAreNamedAndRiskClassed(t *testing.T) {
 		"grant_global_memory":  tool.RiskWrite,
 		"revoke_global_memory": tool.RiskWrite,
 		"revoke_tool":          tool.RiskWrite,
+		"grant_credentials":    tool.RiskWrite,
+		"revoke_credentials":   tool.RiskWrite,
 		"set_default_model":    tool.RiskWrite,
 		"set_space_route":      tool.RiskWrite,
 		"set_space_delegation": tool.RiskWrite,

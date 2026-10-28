@@ -195,6 +195,9 @@ func FormatAudit(recs []audit.Record, f AuditFormat) string {
 		agent := orDash(r.Agent)
 		flags := orDash(AuditFlags(r))
 		preview := previewCut(r.InputPreview, f.Width)
+		if len(r.Credentials) > 0 {
+			preview += " [credentials: " + strings.Join(r.Credentials, ", ") + "]"
+		}
 		when := r.Time.Local().Format("15:04:05")
 		dur := fmt.Sprintf("%dms", r.DurationMS)
 		if f.Space {

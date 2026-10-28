@@ -112,8 +112,9 @@ func runCmd(ctx context.Context, timeout time.Duration, build func(context.Conte
 }
 
 // Bash runs a shell command with `sh -c`, inside Runner when one is set.
-// Network and ExtraWritable are the bash.sandbox settings that the runner
-// applies to every command. A nil Runner runs commands unwrapped.
+// Network, ExtraWritable and CacheDirs are the bash.sandbox settings that the
+// runner applies to every command; Credentials are the credential sets the
+// agent was granted, read-only. A nil Runner runs commands unwrapped.
 type Bash struct {
 	Dir           string
 	Timeout       time.Duration
@@ -121,6 +122,24 @@ type Bash struct {
 	Runner        shellsandbox.Runner
 	Network       bool
 	ExtraWritable []string
+	CacheDirs     []string
+	Credentials   []string
+}
+
+// Credentialed is implemented by a tool that runs commands under the credential
+// sets of its agent. The agent names those sets in the approval and the audit.
+type Credentialed interface {
+	CredentialSets() []string
+}
+
+// CredentialSets returns the credential sets the commands of b may read.
+func (b *Bash) CredentialSets() []string { return b.Credentials }
+
+// networkEnforced reports whether the runner denies the network to the commands
+// when Network is off. Only a real backend does, so the network hint is never
+// given without one.
+func (b *Bash) networkEnforced() bool {
+	return b.Runner != nil && b.Runner.Name() != shellsandbox.BackendNone && b.Runner.Name() != shellsandbox.BackendOff
 }
 
 // noSandboxNotice is prefixed to the output of a command that ran without a sandbox.
@@ -217,18 +236,27 @@ func (b *Bash) callTimeout(secs *int) (time.Duration, string, error) {
 }
 
 // sandboxSpec describes one `sh -c` command for the Runner: the working
-// directory, the network and the extra writable paths of the bash settings.
-// Foreground and background commands both use it, so they get the same sandbox.
+// directory, the network, the writable paths (the extra paths and the tool
+// caches) and the granted credential sets of the bash settings. Foreground and
+// background commands both use it, so they get the same sandbox. A credential
+// set that is not known grants nothing.
 func (b *Bash) sandboxSpec(command string) shellsandbox.Spec {
 	dir := b.Dir
 	if dir == "" {
 		dir, _ = os.Getwd()
 	}
+	readable, err := shellsandbox.CredentialDirs(b.Credentials)
+	if err != nil {
+		readable = nil
+	}
+	writable := append([]string{dir}, b.ExtraWritable...)
+	writable = append(writable, b.CacheDirs...)
 	return shellsandbox.Spec{
-		Dir:           dir,
-		Command:       []string{"sh", "-c", command},
-		AllowNetwork:  b.Network,
-		WritablePaths: append([]string{dir}, b.ExtraWritable...),
+		Dir:             dir,
+		Command:         []string{"sh", "-c", command},
+		AllowNetwork:    b.Network,
+		WritablePaths:   writable,
+		ReadableSecrets: readable,
 	}
 }
 
@@ -255,10 +283,24 @@ func (b *Bash) run(ctx context.Context, command string, timeout, maxTimeout time
 	}
 	res := runCmd(ctx, timeout, b.buildCommand(command))
 	out, isErr := describeBash(res, timeout, maxTimeout)
+	if isErr && b.networkBlocked(out) {
+		out += "\n" + networkHint
+	}
 	if b.Runner.Name() == shellsandbox.BackendNone && res.startErr == nil {
 		out = noSandboxNotice + "\n" + out
 	}
 	return out, isErr
+}
+
+// networkDenied reports whether the commands run with no network: the space has
+// it off and a real sandbox enforces that.
+func (b *Bash) networkDenied() bool {
+	return !b.Network && b.networkEnforced()
+}
+
+// networkBlocked reports whether a failed command failed because the network is denied.
+func (b *Bash) networkBlocked(out string) bool {
+	return b.networkDenied() && networkFailure(out)
 }
 
 // describeBash is describeResult with a timeout message that names the limit

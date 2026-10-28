@@ -25,8 +25,27 @@ built in one day of live testing, so they are grouped by what shipped.
   that deletes or destroys data (`rm -rf`, `git push --force`, `git reset --hard`, a
   DROP through `psql`, `kubectl delete`, `terraform destroy`, and similar) is marked
   destructive. It always asks, work mode never approves it, a session grant does not
-  cover it, and the approval names it. The check is pattern-based, not a sandbox. See
-  `docs/SAFETY.md`.
+  cover it, and the approval names it. The check is pattern-based, not a sandbox. It
+  applies to `bash` in open conversations too: the flow wrapper had hidden it during
+  development. See `docs/SAFETY.md`.
+
+### Sandbox
+- The network is on by default (`bash.sandbox.network: true`). Each space can turn it
+  off with `/space network off` (saved in `spaces.yaml`; `/space network` shows the
+  setting and its origin), and the administrator agent does it with `edit_space`.
+  Before, the network was off and bash failed without saying why.
+- Tool caches are writable by default: `$XDG_CACHE_HOME` or `~/.cache`, `~/.npm`,
+  `~/Library/Caches` on macOS, `$GOCACHE` when set, and the Go module cache (`$GOMODCACHE`,
+  else `$GOPATH/pkg/mod`, else `~/go/pkg/mod`). The new `bash.sandbox.cache_dirs`
+  replaces the list. The secret directories stay denied.
+- A failed command that could not reach the network, with the network off, ends with a
+  line that names `/space network on`. Background jobs show it in `job_output`.
+- Credentials per agent. The agent file takes `credentials: [aws, kube, ...]`, a set of
+  home credential directories (`aws`, `kube`, `ssh`, `gcloud`, `azure`, `docker`, `gh`,
+  `gnupg`, `netrc`). The agent's commands read them read-only; `~/.groot` is never granted.
+  `grant_credentials` and `revoke_credentials` are admin changes that always ask. The
+  approval line names the sets of a call, `/audit` shows them, and `/agent show` lists
+  them. See `docs/SAFETY.md`.
 
 ### Flow
 - Observed phase. The status line and `/task` show the phase that tool activity implies

@@ -32,10 +32,11 @@ The same operations are shortcuts in the UI.
   that deletes `<space dir>/.groot`, the memory database and the audit log, and
   nothing else. A purge refuses the home directory and a directory another space
   uses. `root` cannot be deleted. Deleting the active space switches to `root`.
-- `edit_space {name, new_name?, path?}`, `/space rename <old> <new>`: renames a
-  space or points it at another directory. `root` cannot be renamed. A rename
-  keeps the selection and the unread messages; a new path does not move the
-  `.groot` data under the old path.
+- `edit_space {name, new_name?, path?, network?}`, `/space rename <old> <new>`:
+  renames a space or points it at another directory. `root` cannot be renamed. A
+  rename keeps the selection and the unread messages; a new path does not move the
+  `.groot` data under the old path. `network` turns the space's network on or off
+  (see [Network](SAFETY.md#network)).
 - `delete_agent {name, confirm?}`, `/agent delete <name>`: removes the agent from
   the catalog and from every space. The first call, without `confirm: true`,
   changes nothing and reports the spaces it is assigned to with the open tasks
@@ -108,6 +109,7 @@ from.
 /space assign <agent>            add a catalog agent to the active space
 /space unassign <agent>          remove an agent from the active space
 /space routes [name]             show the mode, default model and routes of a space, with where each value comes from
+/space network [on|off]          show or set whether the active space's commands may use the network (see Safety)
 /space rename <old> <new>        rename a space; the selection and unread messages follow
 /space delete <name>             delete a space from spaces.yaml; its directory and data stay
 /agent rename <old> <new>        rename an agent everywhere it is assigned
@@ -143,6 +145,7 @@ description: "Groot: your guide. Creates spaces and agents"
 model: sonnet                  # optional: a full id, or opus | sonnet | haiku | inherit
 effort: high                   # optional: low | medium | high | xhigh | max; overrides provider.effort
 tools: [list_spaces, recall]   # optional: a list or a comma-separated string
+credentials: []                # optional: credential sets its bash commands may read (see Credentials)
 max_turns: 40                  # optional
 ---
 You are Groot, the administrator of this CLI.
@@ -179,6 +182,23 @@ granted on purpose:
   removing one is refused. Groot can gain tools but never lose its admin tools.
 
 Changes are saved in the agent's file and apply right away, including open conversations, which keep their session.
+
+### Credentials
+
+An agent reads the credential directories of your home (`~/.aws`, `~/.kube`, and
+the others) only when it is granted a set. The grant is read-only and is listed in
+the agent file as `credentials: [aws, kube]`, or given with
+`grant_credentials {agent, set}` and `revoke_credentials {agent, set}`. The sets
+are `aws`, `kube`, `ssh`, `gcloud`, `azure`, `docker`, `gh`, `gnupg` and `netrc`.
+`/agent show [name]` lists them. The rules, and where the grant is visible, are in
+[Credentials per agent](SAFETY.md#credentials-per-agent).
+
+### Network
+
+A space's commands use the network unless the space turns it off. `/space network off`
+does that for the active space, `/space network on` turns it back on, and
+`/space network` shows the setting and where it comes from. Groot's admin agent
+changes it with `edit_space {name, network}`. See [Network](SAFETY.md#network).
 
 MCP tools are granted the same way, by their model-facing name `<server>__<tool>`,
 or `<server>__*` for every allowlisted tool of a server. The server must be

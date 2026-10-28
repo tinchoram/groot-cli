@@ -3,9 +3,12 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/tinchoram/groot-cli/internal/sandbox"
 )
 
 func loadYAML(t *testing.T, body string) (Config, error) {
@@ -22,11 +25,57 @@ func TestSandboxDefaults(t *testing.T) {
 	if cfg.Bash.Sandbox.Mode != "auto" {
 		t.Fatalf("default mode = %q, want auto", cfg.Bash.Sandbox.Mode)
 	}
-	if cfg.Bash.Sandbox.Network {
-		t.Fatal("network must be off by default")
+	if !cfg.Bash.Sandbox.Network {
+		t.Fatal("network must be on by default")
 	}
 	if len(cfg.Bash.Sandbox.ExtraWritable) != 0 {
 		t.Fatalf("extra_writable must be empty by default, got %v", cfg.Bash.Sandbox.ExtraWritable)
+	}
+}
+
+func TestSandboxCacheDirsDefaultToTheHostCaches(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("GOCACHE", "")
+	t.Setenv("GOMODCACHE", "")
+	t.Setenv("GOPATH", "")
+	want := sandbox.DefaultCacheDirs(runtime.GOOS, home, func(string) string { return "" })
+	if got := Default().Bash.Sandbox.CacheDirs; !slices.Equal(got, want) {
+		t.Fatalf("cache_dirs = %q, want %q", got, want)
+	}
+	if !slices.Contains(want, filepath.Join(home, ".npm")) {
+		t.Fatalf("the defaults must include ~/.npm, got %q", want)
+	}
+}
+
+func TestSandboxCacheDirsOverrideReplacesTheDefaults(t *testing.T) {
+	cfg, err := loadYAML(t, "bash:\n  sandbox:\n    cache_dirs: [/opt/cache]\n")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !slices.Equal(cfg.Bash.Sandbox.CacheDirs, []string{"/opt/cache"}) {
+		t.Fatalf("cache_dirs = %q, want the override alone", cfg.Bash.Sandbox.CacheDirs)
+	}
+}
+
+func TestSandboxCacheDirsExpandTheHomeDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cfg, err := loadYAML(t, "bash:\n  sandbox:\n    cache_dirs: [\"~/.gradle/caches\", \"~\"]\n")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{filepath.Join(home, ".gradle", "caches"), home}
+	if !slices.Equal(cfg.Bash.Sandbox.CacheDirs, want) {
+		t.Fatalf("cache_dirs = %q, want %q", cfg.Bash.Sandbox.CacheDirs, want)
+	}
+}
+
+func TestSandboxCacheDirsMustBeAbsolute(t *testing.T) {
+	_, err := loadYAML(t, "bash:\n  sandbox:\n    cache_dirs: [relative/cache]\n")
+	if err == nil || !strings.Contains(err.Error(), "bash.sandbox.cache_dirs") {
+		t.Fatalf("error = %v, want it to name bash.sandbox.cache_dirs", err)
 	}
 }
 
@@ -38,7 +87,7 @@ func TestSandboxScalarFormSetsTheMode(t *testing.T) {
 	if cfg.Bash.Sandbox.Mode != "strict" {
 		t.Fatalf("mode = %q, want strict", cfg.Bash.Sandbox.Mode)
 	}
-	if cfg.Bash.Sandbox.Network {
+	if !cfg.Bash.Sandbox.Network {
 		t.Fatal("the scalar form must keep the other defaults")
 	}
 }

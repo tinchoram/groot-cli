@@ -116,16 +116,22 @@ approved it or read-only classification allowed it.
 | Linux | `bwrap` (bubblewrap) | `apt install bubblewrap`. Needs unprivileged user namespaces. |
 | other | none | Commands run directly, with a warning. |
 
+What a sandboxed command can do by default:
+
+- write inside the space directory, the temp directories (`$TMPDIR`, `/tmp`),
+  the tool caches (`bash.sandbox.cache_dirs`) and `bash.sandbox.extra_writable`;
+- reach the network. Each space can turn it off (see [Network](#network)).
+
 What a sandboxed command cannot do:
 
-- write outside the space directory, the temp directories (`$TMPDIR`, `/tmp`)
-  and `bash.sandbox.extra_writable`;
+- write outside those directories;
 - write to `<space>/.groot`, where the memory database and the audit log live;
 - read or write these credential paths under the home directory, with or without
   network: `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.groot`, `~/.kube`, `~/.netrc`,
-  `~/.docker`, `~/.config/gh`, `~/.config/gcloud` and `~/.azure`. The list is
-  `sandbox.SecretDirs` in `internal/sandbox/sandbox.go`;
-- open network connections, unless `bash.sandbox.network` is `true`.
+  `~/.docker`, `~/.config/gh`, `~/.config/gcloud` and `~/.azure`. An agent can be
+  granted some of them, read-only (see [Credentials per agent](#credentials-per-agent)).
+  `~/.groot` is never granted. The list is `sandbox.SecretDirs` in
+  `internal/sandbox/sandbox.go`.
 
 Everything else stays readable, including the macOS keychains and environment
 variables.
@@ -136,9 +142,71 @@ bash:
   max_timeout: 10m        # ceiling for a call's timeout_seconds; at least timeout, at most 1h
   sandbox:
     mode: auto            # auto | strict | off; the scalar form `sandbox: strict` also works
-    network: false        # let bash reach the network (kubectl, aws, curl, git push)
+    network: true         # default; false cuts bash off the network unless a space allows it
     extra_writable: []    # absolute paths only; "~" is not expanded
+    cache_dirs:           # writable tool caches; "~" is expanded at load; a list replaces the defaults
+      - ~/.cache          # $XDG_CACHE_HOME when set
+      - ~/.npm
+      - ~/Library/Caches  # macOS only
 ```
+
+The default `cache_dirs` are `$XDG_CACHE_HOME` (or `~/.cache`), `~/.npm`,
+`~/Library/Caches` on macOS, `$GOCACHE` when it is set, and the Go module cache
+(`$GOMODCACHE`, else the `pkg/mod` of `$GOPATH`, else `~/go/pkg/mod`). A command may
+write there, so `go build`, `go test`, `npm install` and `pip` caches work without
+configuration.
+The secret directories stay denied even when a cache root contains them.
+
+### Network
+
+The network is on by default. A space can turn it off:
+
+- `/space network off` turns it off for the active space; `/space network on`
+  turns it back on; `/space network` shows the setting and where it comes from
+  (`network: off (space)` or `network: on (global default)`). The setting is saved
+  in `spaces.yaml`, and the open conversations of the space get it at once.
+- The administrator agent sets it with `edit_space` and the `network` boolean.
+- With the network off, a bash command that fails for a network reason (name
+  resolution, an unreachable network, a sandbox-denied connection) ends with
+  `[sandbox: network is off for this space; the user can turn it on with /space network on]`.
+  The line is never added when the network is on, or without a sandbox that
+  enforces the setting. A background job shows it in `job_output`.
+
+### Credentials per agent
+
+An agent can be granted read access to one of the credential directories above,
+for the commands it runs. The grant is a set name, listed in the agent file:
+
+```yaml
+---
+name: cluster-ops
+tools: [bash, read_file]
+credentials: [aws, kube]
+---
+```
+
+The sets are `aws` (`~/.aws`), `kube` (`~/.kube`), `ssh` (`~/.ssh`), `gcloud`
+(`~/.config/gcloud`), `azure` (`~/.azure`), `docker` (`~/.docker`), `gh`
+(`~/.config/gh`), `gnupg` (`~/.gnupg`) and `netrc` (`~/.netrc`). An unknown name
+is refused when the file is read. `/agent show` lists the sets of an agent.
+
+Rules:
+
+- **Read-only.** A granted directory can be read, never written, by that agent's
+  commands. Everything else in the list stays denied.
+- **Who grants.** Only the user or the administrator agent through
+  `grant_credentials` and `revoke_credentials`. Both are admin changes: the user
+  confirms every grant, work mode never approves them, and a session grant cannot
+  cover them. The model cannot grant a set to itself.
+- **Visible where used.** The approval line of a bash call shows
+  `credentials: aws` when the call runs under sets, and every audit record of such
+  a call carries them (`/audit` shows `[credentials: aws]`).
+- **Scope.** The sets apply to the agent's `bash`, `bash_background` and `monitor`
+  calls. They do not apply to `kubectl`, `fetch_url` or the file tools, and they
+  never reach `~/.groot`.
+
+Work mode and session grants treat a call with sets like any other call: the sets
+are not a reason to ask by themselves.
 
 - `auto` (default) uses the best backend. Without one, commands run unrestricted:
   each bash result starts with `[sandbox: none]`, the transcript shows a notice
@@ -148,15 +216,17 @@ bash:
 
 Limits to plan for:
 
-- With `network: false`, anything that talks to a server fails from bash:
-  `kubectl`, `aws`, `curl`, `git push`, `go mod download`. Set `network: true`,
-  or run those commands outside groot.
-- `go build` and `go test` need a writable build cache. Add it, for example
-  `extra_writable: [/Users/you/Library/Caches/go-build]` on macOS (run
-  `go env GOCACHE` to find it).
+- With the network off (`bash.sandbox.network: false` or `/space network off`),
+  anything that talks to a server fails from bash: `kubectl`, `aws`, `curl`,
+  `git push`, `go mod download`. Turn it on for the space, or run those commands
+  outside groot.
+- A cache outside the default `cache_dirs` is not writable. Add it to
+  `cache_dirs` or `extra_writable`, for example a custom `GOCACHE` (set it in the
+  environment, or run `go env GOCACHE` to find the default).
 - The sandbox is not a VM. A command can still run any program it finds and read
   credential files outside the list above. Because `~/.kube` is denied, a bash
-  `kubectl` cannot read your kubeconfig; use the kubectl tool for cluster reads.
+  `kubectl` cannot read your kubeconfig unless the agent is granted `kube`; use the
+  kubectl tool for cluster reads.
 - The terminal column is not sandboxed (see [Terminal column](GETTING-STARTED.md#terminal-column)).
 - Apple may remove `sandbox-exec` in a later macOS. Then `auto` falls back to `none`
   and `strict` refuses.

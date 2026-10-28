@@ -32,6 +32,15 @@ func approvalPrompt(req gate.Request) string {
 	return prompt + "?"
 }
 
+// credentialsLine names the credential sets a call runs under, such as
+// "credentials: aws, kube". It is empty for a call that has none.
+func credentialsLine(req gate.Request) string {
+	if len(req.Credentials) == 0 {
+		return ""
+	}
+	return "credentials: " + strings.Join(req.Credentials, ", ")
+}
+
 // destructiveLine is the warning above a destructive approval: the kind and the
 // command, for example "destructive (git): git push --force". It is empty for
 // other calls.

@@ -34,13 +34,16 @@ type Runner interface {
 // Spec describes one command. Dir is the working directory and always a
 // writable root. WritablePaths lists more roots that may be written; the
 // backends add the temp directories themselves. AllowNetwork lifts the network
-// denial. Reads are open everywhere except SecretDirs.
+// denial. Reads are open everywhere except SecretDirs. ReadableSecrets lists
+// home-relative entries of SecretDirs that the command may read but not write;
+// any other secret stays denied.
 type Spec struct {
-	Dir           string
-	Command       []string
-	Env           []string
-	AllowNetwork  bool
-	WritablePaths []string
+	Dir             string
+	Command         []string
+	Env             []string
+	AllowNetwork    bool
+	WritablePaths   []string
+	ReadableSecrets []string
 }
 
 // Warning explains why no real sandbox is active. Empty means there is nothing to say.
@@ -62,6 +65,93 @@ const sandboxExecPath = "/usr/bin/sandbox-exec"
 var SecretDirs = []string{
 	".ssh", ".aws", ".gnupg", ".groot", ".kube", ".netrc",
 	".docker", ".config/gh", ".config/gcloud", ".azure",
+}
+
+// CredentialSets name the groups of SecretDirs an agent may be granted. A
+// granted set is readable, never writable, inside that agent's commands. The
+// set names are what agent files and the admin tools use. .groot is in no set.
+var CredentialSets = map[string][]string{
+	"aws":    {".aws"},
+	"kube":   {".kube"},
+	"ssh":    {".ssh"},
+	"gcloud": {".config/gcloud"},
+	"azure":  {".azure"},
+	"docker": {".docker"},
+	"gh":     {".config/gh"},
+	"gnupg":  {".gnupg"},
+	"netrc":  {".netrc"},
+}
+
+// CredentialNames returns the names of the credential sets, sorted.
+func CredentialNames() []string {
+	names := make([]string, 0, len(CredentialSets))
+	for name := range CredentialSets {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+// CredentialDirs returns the home-relative secret entries of the named sets,
+// sorted and without duplicates. A name that is no set is an error that lists
+// the known ones.
+func CredentialDirs(sets []string) ([]string, error) {
+	var dirs []string
+	for _, name := range sets {
+		entries, ok := CredentialSets[name]
+		if !ok {
+			return nil, fmt.Errorf("unknown credential set %q (known: %s)", name, strings.Join(CredentialNames(), ", "))
+		}
+		dirs = append(dirs, entries...)
+	}
+	slices.Sort(dirs)
+	return slices.Compact(dirs), nil
+}
+
+// DefaultCacheDirs returns the tool cache roots of a platform that commands may
+// write: $XDG_CACHE_HOME or ~/.cache, ~/.npm, ~/Library/Caches on darwin,
+// $GOCACHE, and the Go module cache: $GOMODCACHE, else the pkg/mod directory of
+// the first $GOPATH entry, else ~/go/pkg/mod. Relative values from the
+// environment are ignored. getenv is os.Getenv in production.
+func DefaultCacheDirs(goos, home string, getenv func(string) string) []string {
+	var out []string
+	if xdg := getenv("XDG_CACHE_HOME"); filepath.IsAbs(xdg) {
+		out = append(out, filepath.Clean(xdg))
+	} else if home != "" {
+		out = append(out, filepath.Join(home, ".cache"))
+	}
+	if home != "" {
+		out = append(out, filepath.Join(home, ".npm"))
+	}
+	if goos == "darwin" && home != "" {
+		out = append(out, filepath.Join(home, "Library", "Caches"))
+	}
+	if gocache := getenv("GOCACHE"); filepath.IsAbs(gocache) {
+		out = append(out, filepath.Clean(gocache))
+	}
+	if mod := moduleCacheDir(home, getenv); mod != "" {
+		out = append(out, mod)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// moduleCacheDir is the Go module cache: $GOMODCACHE when absolute, else the
+// pkg/mod of the first absolute $GOPATH entry, else ~/go/pkg/mod. It is "" when
+// none applies (no home directory and no usable environment value).
+func moduleCacheDir(home string, getenv func(string) string) string {
+	if mod := getenv("GOMODCACHE"); filepath.IsAbs(mod) {
+		return filepath.Clean(mod)
+	}
+	if first, _, _ := strings.Cut(getenv("GOPATH"), string(filepath.ListSeparator)); filepath.IsAbs(first) {
+		return filepath.Join(filepath.Clean(first), "pkg", "mod")
+	}
+	if home != "" {
+		return filepath.Join(home, "go", "pkg", "mod")
+	}
+	return ""
 }
 
 // host is what detection depends on. Tests inject a fake one.
@@ -301,14 +391,20 @@ func writableRoots(spec Spec, h host) []string {
 	return out
 }
 
-// secretPaths returns the resolved SecretDirs under the home directory.
-func secretPaths(h host) []string {
+// secretEntry is one SecretDirs entry: its home-relative name and its resolved path.
+type secretEntry struct {
+	rel  string
+	path string
+}
+
+// secretEntries returns the resolved SecretDirs under the home directory.
+func secretEntries(h host) []secretEntry {
 	if h.home == "" {
 		return nil
 	}
-	out := make([]string, 0, len(SecretDirs))
+	out := make([]secretEntry, 0, len(SecretDirs))
 	for _, d := range SecretDirs {
-		out = append(out, h.resolve(filepath.Join(h.home, d)))
+		out = append(out, secretEntry{rel: d, path: h.resolve(filepath.Join(h.home, d))})
 	}
 	return out
 }

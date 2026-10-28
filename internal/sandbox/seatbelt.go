@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -55,8 +56,21 @@ func profileDarwin(spec Spec, h host) string {
 	line("(allow file-read*)")
 	line(`(allow file-write* (literal "/dev/null") (literal "/dev/tty") (literal "/dev/stdout") (literal "/dev/stderr"))`)
 	line("(allow file-write* " + subpaths(writableRoots(spec, h)) + ")")
-	if secrets := secretPaths(h); len(secrets) > 0 {
-		line("(deny file-read* file-write* " + subpaths(secrets) + ")")
+	// A secret the spec grants stays readable; the write deny comes after the
+	// writable allow, so it holds even under a writable parent.
+	var denied, readOnly []string
+	for _, e := range secretEntries(h) {
+		if slices.Contains(spec.ReadableSecrets, e.rel) {
+			readOnly = append(readOnly, e.path)
+		} else {
+			denied = append(denied, e.path)
+		}
+	}
+	if len(denied) > 0 {
+		line("(deny file-read* file-write* " + subpaths(denied) + ")")
+	}
+	if len(readOnly) > 0 {
+		line("(deny file-write* " + subpaths(readOnly) + ")")
 	}
 	// The space's .groot holds the memory database and the audit log: read-only.
 	line("(deny file-write* " + subpaths([]string{h.resolve(filepath.Join(spec.Dir, ".groot"))}) + ")")

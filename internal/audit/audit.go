@@ -34,6 +34,9 @@ type Record struct {
 	// Guard lists the kinds of suspicious text the untrusted-content guard
 	// found in the result, such as "override" or "command". Empty when none.
 	Guard []string `json:"guard,omitempty"`
+	// Credentials are the credential sets the call ran under, such as aws.
+	// Empty for a call that had none.
+	Credentials []string `json:"credentials,omitempty"`
 }
 
 // Log is an append-only JSONL file. A nil *Log discards records.

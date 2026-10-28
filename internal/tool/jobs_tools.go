@@ -52,13 +52,14 @@ func startJob(ctx context.Context, b *Bash, m *jobs.Manager, toolName, command s
 		return jobs.Job{}, "", err
 	}
 	job, err := m.Start(ctx, jobs.StartSpec{
-		Command: command,
-		Timeout: timeout,
-		Monitor: monitor,
-		Pattern: pattern,
-		Build:   b.buildCommand(command),
-		Tool:    toolName,
-		Sandbox: b.SandboxName(),
+		Command:    command,
+		Timeout:    timeout,
+		Monitor:    monitor,
+		Pattern:    pattern,
+		Build:      b.buildCommand(command),
+		Tool:       toolName,
+		Sandbox:    b.SandboxName(),
+		NetworkOff: b.networkDenied(),
 	})
 	return job, notice, err
 }
@@ -111,6 +112,9 @@ func (*BashBackground) Definition() api.ToolDef {
 func (*BashBackground) Risk() Risk            { return RiskExec }
 func (*BashBackground) RiskFor(string) Risk   { return RiskExec }
 func (t *BashBackground) SandboxName() string { return t.bash.SandboxName() }
+
+// CredentialSets are the credential sets of the bash settings the job runs with.
+func (t *BashBackground) CredentialSets() []string { return t.bash.CredentialSets() }
 func (t *BashBackground) DestructiveFor(input string) (DestructiveKind, string, bool) {
 	return t.bash.DestructiveFor(input)
 }
@@ -165,6 +169,9 @@ func (*Monitor) Definition() api.ToolDef {
 func (*Monitor) Risk() Risk            { return RiskExec }
 func (*Monitor) RiskFor(string) Risk   { return RiskExec }
 func (t *Monitor) SandboxName() string { return t.bash.SandboxName() }
+
+// CredentialSets are the credential sets of the bash settings the job runs with.
+func (t *Monitor) CredentialSets() []string { return t.bash.CredentialSets() }
 func (t *Monitor) DestructiveFor(input string) (DestructiveKind, string, bool) {
 	return t.bash.DestructiveFor(input)
 }
@@ -308,7 +315,12 @@ func (t *JobOutput) Execute(_ context.Context, input string) (string, bool) {
 		text = "(no output)"
 	}
 	header := fmt.Sprintf("job #%d %s%s: %s\n", job.ID, job.State, exitSuffix(job), oneLine(job.Command))
-	return Redact(header) + finishOutput(t.dir, "job_output", text), false
+	body := Redact(header) + finishOutput(t.dir, "job_output", text)
+	// A job that failed for lack of network says so, as a bash result does.
+	if job.State != jobs.Running && job.ExitCode != 0 && job.NetworkOff && networkFailure(text) {
+		body += "\n" + networkHint
+	}
+	return body, false
 }
 
 // JobStop ends a running job: SIGTERM, then SIGKILL after 5 seconds.

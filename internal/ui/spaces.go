@@ -160,7 +160,7 @@ func (m *Model) syncConversation() {
 // runSpaceCommand handles /space and its subcommands.
 func (m *Model) runSpaceCommand(arg string) {
 	fields := strings.Fields(arg)
-	usage := "usage: /space list | new <name> [path] | use <name> | assign <agent> | unassign <agent> | rename <old> <new> | delete <name> | routes [name]"
+	usage := "usage: /space list | new <name> [path] | use <name> | assign <agent> | unassign <agent> | rename <old> <new> | delete <name> | routes [name] | network [on|off]"
 	if len(fields) == 0 {
 		m.append(styleError.Render(usage))
 		return
@@ -187,6 +187,8 @@ func (m *Model) runSpaceCommand(arg string) {
 			return
 		}
 		m.append(spaceRoutesBlock(view))
+	case "network":
+		m.runNetworkCommand(rest)
 	case "new":
 		if len(rest) < 1 {
 			m.append(styleError.Render("usage: /space new <name> [path]"))
@@ -487,6 +489,42 @@ func spaceListBlock(spaces []workspace.SpaceInfo) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
+// runNetworkCommand shows the network of the active space, or sets it when the
+// argument is on or off. The setting is saved in spaces.yaml.
+func (m *Model) runNetworkCommand(args []string) {
+	active, ok := m.ws.ActiveSpace()
+	if !ok {
+		m.append(styleError.Render("no space selected: use /space use <name>"))
+		return
+	}
+	if len(args) > 1 || (len(args) == 1 && args[0] != "on" && args[0] != "off") {
+		m.append(styleError.Render("usage: /space network [on|off]"))
+		return
+	}
+	if len(args) == 1 {
+		if err := m.ws.SetSpaceNetwork(active.Name, args[0] == "on"); err != nil {
+			m.append(styleError.Render("error: " + err.Error()))
+			return
+		}
+	}
+	setting, err := m.ws.SpaceNetwork(active.Name)
+	if err != nil {
+		m.append(styleError.Render("error: " + err.Error()))
+		return
+	}
+	m.append(styleDim.Render(networkLine(setting)))
+}
+
+// networkLine names the network setting and where it comes from: the space or
+// the global default.
+func networkLine(s workspace.Setting) string {
+	origin := "global default"
+	if s.From == workspace.SourceSpace {
+		origin = "space"
+	}
+	return fmt.Sprintf("network: %s (%s)", s.Value, origin)
+}
+
 // spaceRoutesBlock renders the merged flow of a space. Each value shows the
 // layer it came from: space, global or default.
 func spaceRoutesBlock(v workspace.FlowView) string {
@@ -584,6 +622,9 @@ func agentDetailBlock(a workspace.AgentInfo) string {
 	fmt.Fprintf(&sb, "  %-8s %s\n", "model", a.Model)
 	fmt.Fprintf(&sb, "  %-8s %s\n", "effort", effortOf(a.Effort))
 	fmt.Fprintf(&sb, "  %-8s %s\n", "tools", strings.Join(a.Tools, ", "))
+	if len(a.Credentials) > 0 {
+		fmt.Fprintf(&sb, "  credentials: %s\n", strings.Join(a.Credentials, ", "))
+	}
 	fmt.Fprintf(&sb, "  %-8s %s", "prompt", styleDim.Render(firstLine))
 	return sb.String()
 }

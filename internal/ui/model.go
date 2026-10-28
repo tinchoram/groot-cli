@@ -82,6 +82,10 @@ type Workspace interface {
 	DefaultModel() string
 	SetDefaultModel(ctx context.Context, model string, force bool) (string, error)
 	SpaceFlow(name string) (workspace.FlowView, error)
+	// SpaceNetwork reports whether a space's commands may use the network, and
+	// where that comes from; SetSpaceNetwork saves a space override.
+	SpaceNetwork(name string) (workspace.Setting, error)
+	SetSpaceNetwork(name string, on bool) error
 	ConfigFile() string
 	AgentTools(name string) ([]string, error)
 	EditAgentTools(name string, add, remove []string) error

@@ -37,7 +37,7 @@ var silentTools = []string{
 	"set_space_budget", "set_agent_budget", "get_context", "get_cost", "list_tasks", "audit_query",
 	"set_context_window", "grant_tool", "revoke_tool", "set_default_model", "grant_global_memory",
 	"revoke_global_memory", "delete_space", "edit_space", "delete_agent", "edit_agent",
-	"move_agent", "copy_agent",
+	"move_agent", "copy_agent", "grant_credentials", "revoke_credentials",
 }
 
 // TestInferPhaseCoversEveryBuiltinTool fails when a builtin tool has no decision
