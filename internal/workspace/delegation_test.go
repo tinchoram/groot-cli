@@ -183,6 +183,11 @@ func TestDelegationLoopEndToEnd(t *testing.T) {
 		toolStep("tu_7", "task_advance", map[string]string{"phase": "deliver", "evidence": "two files, tests pass"}),
 		text("delivered"),
 	)
+	// The acceptance and the report would each wake the origin for an automatic
+	// turn. The script ends with the delivery, so those turns would run in the
+	// background against an exhausted mock while the test reads its calls. The
+	// loop under test is the tool exchange; automatic turns have their own tests.
+	f.ws.opts.Config.Work.MaxAutoTurns = 0
 	origin := f.ws.Chat()
 	if _, err := origin.Send(ctx, "build it"); err != nil {
 		t.Fatal(err)
