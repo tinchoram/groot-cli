@@ -22,6 +22,8 @@ func deliverFromWriter(t *testing.T, f *fixture, subject, body string) {
 func TestTurnReceivesTheUnreadMessagesAndMarksThemRead(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t, text("ok"))
+	// The deliveries would open the reader and start its turns: the test reads the inbox only.
+	f.ws.opts.Config.Work.MaxAutoTurns = 0
 	for i := 0; i < 7; i++ {
 		deliverFromWriter(t, f, "note", "body")
 	}
@@ -45,6 +47,7 @@ func TestTurnReceivesTheUnreadMessagesAndMarksThemRead(t *testing.T) {
 func TestTurnCapsTheInjectedTextAtEightKilobytes(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t, text("ok"))
+	f.ws.opts.Config.Work.MaxAutoTurns = 0
 	big := strings.Repeat("x", 4000)
 	for i := 0; i < 3; i++ {
 		deliverFromWriter(t, f, "big", big)

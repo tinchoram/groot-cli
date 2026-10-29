@@ -104,6 +104,9 @@ func (c *Conversation) inboxParts(ctx context.Context) []string {
 	if err := c.inbox.MarkRead(ctx, ids); err != nil {
 		c.warn(fmt.Sprintf("inbox: messages not marked read: %v", err))
 	}
+	if c.asks != nil {
+		c.askRead = append(c.askRead, c.asks.take(ids)...)
+	}
 	parts := append([]string(nil), blocks...)
 	if rest := len(unread) - len(blocks); rest > 0 {
 		parts = append(parts, fmt.Sprintf("[inbox] %d more unread messages stay in the inbox; read them with read_inbox when they matter.", rest))
@@ -127,18 +130,38 @@ const (
 	capOnce                    // the first blocked turn of the session is reported
 )
 
-// afterDelivery runs when a message reaches the conversation key. An idle
-// conversation starts a turn that reads the inbox, in work mode or not. The turn
-// counts against work.max_auto_turns for the session. A busy one reads the inbox
-// when its running turn ends (see releaseTurn).
-func (w *Workspace) afterDelivery(key string, msg inbox.Message) {
+// afterDelivery runs when a message reaches the agent of a space. An agent with
+// no open conversation is opened first, so the message can start a turn. An idle
+// conversation then starts a turn that reads the inbox, in work mode or not. The
+// turn counts against work.max_auto_turns for the session. A busy one reads the
+// inbox when its running turn ends (see releaseTurn).
+func (w *Workspace) afterDelivery(space, agent string, msg inbox.Message) {
+	key := space + "/" + agent
 	w.mu.Lock()
-	conv := w.convs[key]
+	conv, err := w.convLocked(space, agent)
 	w.mu.Unlock()
-	if conv == nil {
+	if err != nil {
+		w.warnKey(key, fmt.Sprintf("message from %s/%s waits in the inbox: %v", msg.FromSpace, msg.FromAgent, err))
 		return
 	}
 	w.startMessageTurn(key, conv, msg)
+}
+
+// convLocked returns the conversation of an agent of a space, opening it when it
+// is not open yet. The caller holds mu.
+func (w *Workspace) convLocked(space, agent string) (*Conversation, error) {
+	key := space + "/" + agent
+	if c, ok := w.convs[key]; ok {
+		return c, nil
+	}
+	sp, ok := w.opts.Spaces.Get(space)
+	if !ok {
+		return nil, fmt.Errorf("no space named %q", space)
+	}
+	if err := w.openLocked(sp, agent); err != nil {
+		return nil, err
+	}
+	return w.convs[key], nil
 }
 
 // startMessageTurn starts a turn that reads the inbox, triggered by msg.

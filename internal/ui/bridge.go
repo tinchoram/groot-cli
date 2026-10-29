@@ -60,6 +60,13 @@ func (b *Bridge) Done(key, text string, err error) {
 	b.events <- answerMsg{key: key, text: text, err: err}
 }
 
+// Ask delivers the answer to an operator ask. origin is the conversation the
+// ask was sent from and key the agent that answered. It is not keyed by key:
+// the screen shows it, not the answering conversation.
+func (b *Bridge) Ask(origin, key, text string, err error) {
+	b.events <- askMsg{origin: origin, key: key, text: text, err: err}
+}
+
 // Warn shows a non-fatal warning.
 func (b *Bridge) Warn(key, text string) {
 	b.events <- warnMsg{key: key, text: text}

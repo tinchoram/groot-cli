@@ -261,6 +261,9 @@ type fakeWorkspace struct {
 	taskQueries []string
 	inbox       []inbox.Message
 	handSent    []string
+	// asked records the operator asks as "origin|to|text"; askErr fails them.
+	asked  []string
+	askErr error
 	// flow is what SpaceFlow reports; flowErr makes it fail.
 	flow    workspace.FlowView
 	flowErr error
@@ -475,6 +478,15 @@ func (f *fakeWorkspace) TakeAcks(context.Context) ([]inbox.Message, error) {
 	out := f.acks
 	f.acks = nil
 	return out, nil
+}
+
+// Ask records the question; the answer comes back through the bridge in real use.
+func (f *fakeWorkspace) Ask(origin, to, text string) error {
+	if f.askErr != nil {
+		return f.askErr
+	}
+	f.asked = append(f.asked, origin+"|"+to+"|"+text)
+	return nil
 }
 
 func (f *fakeWorkspace) SendByHand(_ context.Context, to, subject, body string) (string, error) {

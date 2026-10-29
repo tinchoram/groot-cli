@@ -104,6 +104,10 @@ type Hooks struct {
 	OnNotice func(key, text string)
 	// OnAnswer receives the answer of a turn the workspace started itself.
 	OnAnswer func(key, text string, err error)
+	// OnAsk receives the answer to an operator ask: origin is the conversation the
+	// ask was sent from, key the agent that answered. It fires before OnAnswer
+	// for the same turn.
+	OnAsk func(origin, key, text string, err error)
 	// OnInbox reports that a message was delivered, so the inbox badges can be re-read.
 	OnInbox func()
 	// OnJobs reports that the background jobs of a conversation changed: a job
@@ -186,6 +190,7 @@ type Workspace struct {
 	convs  map[string]*Conversation
 	stores map[string]*spaceStores
 	inbox  *inbox.Store               // messages between agents and groot, under the home directory
+	asks   *askBook                   // the screen each operator ask was sent from, until it is read
 	work   map[string]*gate.WorkState // work mode per conversation key
 	// spaceWork holds the spaces whose work mode is on for every agent, by space
 	// name. It is in memory only; open() makes new conversations inherit it.
@@ -238,6 +243,7 @@ func New(opts Options) (*Workspace, error) {
 		convs:     map[string]*Conversation{},
 		stores:    map[string]*spaceStores{},
 		inbox:     ib,
+		asks:      newAskBook(),
 		work:      map[string]*gate.WorkState{},
 		spaceWork: map[string]bool{},
 		grants:    map[string]*gate.Grants{},
@@ -683,6 +689,12 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 		conv.carried = resumed.Dropped
 	}
 	conv.onIdle = func() { w.followUpUnread(key, conv) }
+	conv.asks = w.asks
+	conv.onAsk = func(origin, answered, text string, err error) {
+		if h := w.opts.Hooks.OnAsk; h != nil {
+			h(origin, answered, text, err)
+		}
+	}
 	jm.SetObserver(&jobWatch{w: w, key: key, conv: conv, log: st.aud})
 	go w.drainJobs(key, conv)
 	if hasMCPName(def.Tools) {

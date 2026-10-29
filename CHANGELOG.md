@@ -20,6 +20,13 @@ built in one day of live testing, so they are grouped by what shipped.
 - `groot doctor` reports the Gemini key and whether the model list is reachable.
 
 ### Agents
+- Asks from anywhere: `@agent question` sends the question to that agent and the screen
+  stays where it is. The answer comes back as a block on the screen you asked from, and
+  stays in the agent's transcript. A message to an agent with no open conversation now
+  opens it and starts its turn, counted against `work.max_auto_turns`; a busy agent reads
+  the question when its turn ends. `@agent` alone still switches.
+- Notices: an answer that ends on another screen shows one line, `<space>/<agent>: <first
+  line>`, when you asked that agent or it mentions you. The `@` marker is unchanged.
 - A message delivered to an idle agent starts a turn that reads it, in work mode or
   not, so the recipient answers without `/readinbox`. A message that arrives during a
   turn gets one follow-up turn when that turn ends. Each automatic turn counts against

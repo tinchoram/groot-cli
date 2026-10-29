@@ -80,6 +80,11 @@ type Conversation struct {
 	// onIdle runs when a turn ends and the busy flag is free: it starts a
 	// follow-up turn for messages that arrived meanwhile (see releaseTurn).
 	onIdle func()
+	// asks is the book of operator asks, by inbox id. askRead holds the origins
+	// of the asks the running turn read; onAsk delivers that turn's answer to them.
+	asks    *askBook
+	askRead []string
+	onAsk   func(origin, key, text string, err error)
 	// sysMu guards baseSystem: /clear refreshes it while a turn may be reading it.
 	sysMu      sync.Mutex
 	baseSystem string
@@ -234,8 +239,24 @@ func (c *Conversation) releaseTurn() {
 	}
 }
 
-// send runs one turn. The caller holds the busy flag.
+// send runs one turn. The caller holds the busy flag. The answer goes to the
+// origin of every operator ask this turn read, through onAsk, and stays in the
+// agent's own history.
 func (c *Conversation) send(ctx context.Context, prompt string) (string, error) {
+	c.askRead = nil
+	text, err := c.sendTurn(ctx, prompt)
+	origins := c.askRead
+	c.askRead = nil
+	for _, origin := range origins {
+		if c.onAsk != nil {
+			c.onAsk(origin, c.space+"/"+c.name, text, err)
+		}
+	}
+	return text, err
+}
+
+// sendTurn runs the model turn itself. The caller holds the busy flag.
+func (c *Conversation) sendTurn(ctx context.Context, prompt string) (string, error) {
 	if err := c.checkBudget(ctx, c.lastTurnUSD); err != nil {
 		return "", err
 	}

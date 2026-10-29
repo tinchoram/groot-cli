@@ -72,6 +72,8 @@ func classifyAndOpen(goal string) []provider.Step {
 func TestTaskOpenHandsOverAndSendsTheHandoverAndTracking(t *testing.T) {
 	ctx := context.Background()
 	f := teamFixture(t, classifyAndOpen("split billing")...)
+	// The handover opens the delegate; these tests read the origin only.
+	f.ws.opts.Config.Work.MaxAutoTurns = 0
 	conv := f.ws.Chat()
 	if _, err := conv.Send(ctx, "build it"); err != nil {
 		t.Fatal(err)
@@ -124,6 +126,8 @@ func TestHintAndOffKeepTheOldBehaviourWithoutMessages(t *testing.T) {
 func TestDeliveredReportMovesTheOriginToVerify(t *testing.T) {
 	ctx := context.Background()
 	f := teamFixture(t, classifyAndOpen("split billing")...)
+	// The handover opens the delegate; these tests read the origin only.
+	f.ws.opts.Config.Work.MaxAutoTurns = 0
 	conv := f.ws.Chat()
 	if _, err := conv.Send(ctx, "build it"); err != nil {
 		t.Fatal(err)
@@ -151,6 +155,8 @@ func TestDeliveredReportMovesTheOriginToVerify(t *testing.T) {
 func TestReturnedReportSendsTheTaskBackToImplement(t *testing.T) {
 	ctx := context.Background()
 	f := teamFixture(t, classifyAndOpen("split billing")...)
+	// The handover opens the delegate; these tests read the origin only.
+	f.ws.opts.Config.Work.MaxAutoTurns = 0
 	conv := f.ws.Chat()
 	if _, err := conv.Send(ctx, "build it"); err != nil {
 		t.Fatal(err)

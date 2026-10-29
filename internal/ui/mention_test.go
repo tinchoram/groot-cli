@@ -271,18 +271,18 @@ func TestSlashCommandStillRunsWhenTextHasAt(t *testing.T) {
 	}
 }
 
-func TestLeadingMentionRoutesToAgentInAnotherSpace(t *testing.T) {
+func TestLeadingMentionAsksAgentInAnotherSpaceWithoutSwitching(t *testing.T) {
 	m, ws, chat := newMentionModel(t)
 	m = sendLine(t, m, "@explore/search-specialist find the retry loop")
 
-	if ws.active != "explore" || ws.agent != "search-specialist" {
-		t.Fatalf("selection = %s/%s, want explore/search-specialist", ws.active, ws.agent)
+	if ws.active != "default" || ws.agent != "devjunior" {
+		t.Fatalf("selection = %s/%s, the ask must not switch", ws.active, ws.agent)
 	}
-	if len(chat.sends) != 1 || chat.sends[0] != "find the retry loop" {
-		t.Fatalf("sends = %q: the leading mention must be stripped and the rest sent", chat.sends)
+	if len(ws.asked) != 1 || ws.asked[0] != "default/devjunior|explore/search-specialist|find the retry loop" {
+		t.Fatalf("asked = %q: the leading mention must be stripped and the rest asked", ws.asked)
 	}
-	if m.key != "explore/search-specialist" {
-		t.Fatalf("the conversation on screen = %q", m.key)
+	if len(chat.sends) != 0 {
+		t.Fatalf("the ask must not reach the screen's agent: %v", chat.sends)
 	}
 }
 
@@ -300,10 +300,10 @@ func TestBareLeadingMentionOnlySwitches(t *testing.T) {
 func TestLeadingMentionPrefersCurrentSpaceForHomonyms(t *testing.T) {
 	m, ws, chat := newMentionModel(t)
 	m = sendLine(t, m, "@reviewer look at the diff")
-	if ws.active != "default" || ws.agent != "reviewer" {
-		t.Fatalf("selection = %s/%s, want the reviewer of the current space", ws.active, ws.agent)
+	if len(ws.asked) != 1 || ws.asked[0] != "default/devjunior|default/reviewer|look at the diff" {
+		t.Fatalf("asked = %q, want the reviewer of the current space", ws.asked)
 	}
-	if len(chat.sends) != 1 {
+	if len(chat.sends) != 0 {
 		t.Fatalf("sends = %v", chat.sends)
 	}
 }

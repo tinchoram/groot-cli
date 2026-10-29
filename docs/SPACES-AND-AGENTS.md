@@ -250,16 +250,24 @@ Agents address you and each other with `@`. Three names matter: yours, `@groot`
   An agent held by several spaces is always shown qualified. Typing filters by
   prefix, ignoring case. Up and down choose, `tab` or `enter` inserts the address
   and a space, `esc` closes the list. The list does not open in a `/` command.
-- **Routing.** A message that starts with `@name` or `@space/name` goes to that
-  agent: groot switches to its space when needed, opens its conversation and sends
-  the rest. A bare `@name` only switches. An unknown name sends nothing and prints
+- **Routing.** A message that starts with `@name` or `@space/name` is a question to
+  that agent. The screen does not move: the text is sent to the agent as a message
+  from you, and the agent answers on its own turn, wherever you are. A question to an
+  agent that is working waits and is read when its turn ends; the screen says so. An
+  agent with no open conversation is opened for the question. A bare `@name` only
+  switches to the agent. An unknown name sends nothing and prints
   `no agent @x; agents: …`. A name held by several spaces needs the space when the
   current space does not hold it.
 - **Mentions in text.** Other mentions stay in the text. The agent also gets a
   line with the agents it names, in full, so it can `send_message` to them:
   `[mentions: explore/search-specialist]`.
 - **What you see.** `@<your name>` and `@groot` are highlighted in agent replies.
-  When another conversation's reply mentions you, its agent in the sidebar and
+  The answer to a question you asked shows as a block headed `<space>/<agent>:` on
+  the screen you asked from. If you have moved to another screen, it shows as one
+  line, `<space>/<agent>: <first line>`, cut to the width of the chat; the full
+  answer stays in that agent's conversation. The same line appears when an agent
+  that mentions you finishes a turn off screen. When another conversation's reply
+  mentions you, its agent in the sidebar and
   the `@n` in the status line show an `@` marker. Opening the conversation or
   writing to it clears the marker.
 - **What agents know.** Every prompt has a People section. It names you, tells the

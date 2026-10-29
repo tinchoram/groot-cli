@@ -296,6 +296,7 @@ func runApp(cfg config.Config, cfgPath, groot string, keys providerKeys) error {
 			OnConfirm:  bridge.Confirm,
 			OnNotice:   bridge.Notice,
 			OnAnswer:   bridge.Done,
+			OnAsk:      bridge.Ask,
 			OnInbox:    bridge.Inbox,
 			OnJobs:     bridge.Jobs,
 			OnAuto:     bridge.Auto,

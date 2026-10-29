@@ -68,6 +68,9 @@ type Workspace interface {
 	// TakeAcks returns the acks of the active agent not shown yet, marking them shown.
 	TakeAcks(ctx context.Context) ([]inbox.Message, error)
 	SendByHand(ctx context.Context, to, subject, body string) (string, error)
+	// Ask sends the operator's question to the agent "space/agent" without
+	// moving the screen from origin. The answer returns through the ask hook.
+	Ask(origin, to, text string) error
 	UpgradeAgents(name string) ([]string, error)
 	SendFeedback(spaceName, agent, kind, text string, lines []string) (int64, string, error)
 	Backlog(status string) ([]feedback.Item, error)
@@ -180,6 +183,13 @@ type (
 		text string
 		err  error
 	}
+	// askMsg is the answer to an operator ask. origin is the conversation the
+	// ask was sent from, key the one that answers. It is not keyed by key, so it
+	// is handled on the screen rather than in the answering conversation's state.
+	askMsg struct {
+		origin, key, text string
+		err               error
+	}
 	noteMsg struct {
 		text string
 		err  error
@@ -277,6 +287,11 @@ type Model struct {
 	// needsYou marks the conversations whose agent mentioned the operator, until
 	// the operator views them or sends them a message.
 	needsYou map[string]bool
+	// asked marks the agents the operator asked in this session, by "space/agent".
+	// announced marks the agents whose answer to an ask was already shown, so the
+	// turn's end does not repeat it.
+	asked     map[string]bool
+	announced map[string]bool
 	// onboard is set while the first-start prompt asks for the operator's name.
 	onboard bool
 
@@ -358,6 +373,8 @@ func NewModel(o Options) Model {
 		shineCol:    -shineEdgePad,
 		updates:     o.UpdateNotices,
 		needsYou:    map[string]bool{},
+		asked:       map[string]bool{},
+		announced:   map[string]bool{},
 	}
 	m.onboard = o.Workspace.OperatorName() == ""
 	if m.onboard {
@@ -407,6 +424,11 @@ func (m Model) Init() tea.Cmd {
 
 // Update applies one message.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The end of a turn on another screen gets its one line before the turn is
+	// routed to its conversation: the line belongs to the screen.
+	if am, ok := msg.(answerMsg); ok {
+		m.noteAnswer(am)
+	}
 	// An event of a conversation that is off screen is applied to that
 	// conversation's state: it is swapped in, handled as if it were on screen,
 	// and swapped back out.
@@ -491,6 +513,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.flushPartial()
 		m.pending = &confirmState{key: msg.key, prompt: approvalPrompt(msg.req), req: msg.req, reply: msg.reply}
 		m.resize()
+		return m, nil
+
+	case askMsg:
+		m.answerAsk(msg)
 		return m, nil
 
 	case answerMsg:
@@ -723,41 +749,42 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 		return m.saveOperator(text, true), nil
 	}
 	typed := full
-	// A message that starts with @agent or @space/agent goes to that agent. The
-	// token is the same in text and full, so the rest is cut from both.
-	routed := false
+	// "@agent text" asks that agent and leaves the screen where it is; it does not
+	// wait for the turn on screen. "@agent" alone switches to the agent. The token
+	// is the same in text and full, so the rest is cut from full.
 	if token, _, ok := m.leadingAddress(full); ok {
-		if !m.routeTo(token) {
+		rest := strings.TrimSpace(full[1+len(token):])
+		if rest == "" {
+			m.routeTo(token)
 			m.hist.Push(typed)
 			return m, nil
 		}
-		routed = true
-		text = strings.TrimSpace(text[1+len(token):])
-		full = strings.TrimSpace(full[1+len(token):])
-		if full == "" {
-			m.hist.Push(typed)
-			return m, nil
-		}
+		m.recordPrompt(typed)
+		m.askTo(token, rest)
+		return m, nil
 	}
 	if m.busy {
 		m.append(styleDim.Render("agent is working; wait or switch"))
 		return m, nil
 	}
+	m.recordPrompt(typed)
+	if cmd, ok := ParseCommand(full); ok {
+		return m.runCommand(cmd)
+	}
+	if note := m.mentionNote(full); note != "" {
+		full += "\n" + note
+	}
+	return m.sendPrompt(text, full, echoLines)
+}
+
+// recordPrompt keeps a sent line in the prompt history and saves the history file.
+func (m *Model) recordPrompt(typed string) {
 	m.hist.Push(typed)
 	if m.historyPath != "" {
 		if err := SaveHistory(m.historyPath, m.hist.Entries()); err != nil {
 			m.append(styleDim.Render("warning: could not save prompt history: " + err.Error()))
 		}
 	}
-	if !routed {
-		if cmd, ok := ParseCommand(full); ok {
-			return m.runCommand(cmd)
-		}
-	}
-	if note := m.mentionNote(full); note != "" {
-		full += "\n" + note
-	}
-	return m.sendPrompt(text, full, echoLines)
 }
 
 // sendPrompt echoes a prompt as a user turn and starts the turn on the active
