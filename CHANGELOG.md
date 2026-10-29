@@ -140,6 +140,8 @@ built in one day of live testing, so they are grouped by what shipped.
 - Pasting several lines into the chat input kept only one: terminals send the newlines of
   a bracketed paste as carriage returns, which the input did not count. Pastes now keep
   their lines, so an agent file pasted into groot arrives whole.
+- A short paste (up to three lines) had its line breaks turned into spaces; it now goes
+  into the input as pasted, so a two-line command or a small block keeps its shape.
 
 ## 0.6.0 — 2026-10-25
 

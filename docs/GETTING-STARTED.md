@@ -105,7 +105,7 @@ Native terminal selection is therefore replaced by selection inside groot.
   Windows Terminal accept, and also runs `pbcopy` (macOS) or `wl-copy` /
   `xclip` (Linux). Helper errors are ignored.
 - **Paste**: in the chat input, a short paste (up to three lines and 200
-  characters) is inserted as it is, with newlines turned into spaces. A longer
+  characters) is inserted as it is, line breaks included. A longer
   paste shows as `[Pasted text #N +L lines]` in tan. The full text is kept and put
   back when you send, so the model gets all of it, and the transcript shows the
   placeholder with the first line of the paste in dim. Backspace right after a

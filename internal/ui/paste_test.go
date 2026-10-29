@@ -115,9 +115,16 @@ func TestPasteWithCarriageReturnsKeepsItsLines(t *testing.T) {
 			t.Fatalf("separator %q: expanded = %q", sep, got)
 		}
 	}
-	m, _ := newTestModel(t, &fakeSession{model: "m"})
-	m = pasteText(m, "one\rtwo")
-	if m.input.Value() != "one two" {
-		t.Fatalf("a short paste with a carriage return must become one line: %q", m.input.Value())
+}
+
+// A short paste keeps its line breaks in the input, whatever byte the terminal
+// used for them, so a two-line command or a small YAML block arrives intact.
+func TestShortPasteKeepsItsLineBreaks(t *testing.T) {
+	for _, sep := range []string{"\r", "\r\n", "\n"} {
+		m, _ := newTestModel(t, &fakeSession{model: "m"})
+		m = pasteText(m, "one"+sep+"two")
+		if m.input.Value() != "one\ntwo" || len(m.pastes) != 0 {
+			t.Fatalf("separator %q: input = %q, pastes = %d", sep, m.input.Value(), len(m.pastes))
+		}
 	}
 }

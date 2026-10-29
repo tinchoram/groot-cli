@@ -222,14 +222,6 @@ func TestTerminalSelectionCopies(t *testing.T) {
 	}
 }
 
-func TestPasteIntoInputCollapsesNewlines(t *testing.T) {
-	f := newMouseFixture(t, nil)
-	f.send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("first\nsecond\r\nthird"), Paste: true})
-	if got := f.m.input.Value(); got != "first second third" {
-		t.Fatalf("input after paste = %q", got)
-	}
-}
-
 func TestPasteIntoTerminalGoesToShell(t *testing.T) {
 	shell := term.NewFake()
 	f := newMouseFixture(t, shell)
