@@ -287,6 +287,15 @@ func (c *Controller) Open(ctx context.Context, goal, scope, doneWhen string) (Ta
 	if c.active != nil {
 		return Task{}, Opening{}, fmt.Errorf("task #%d is still open (%s): finish it with task_advance or fail it with /task fail", c.active.ID, c.active.Phase)
 	}
+	// The store knows an open task the controller does not hold: a delivered
+	// assignment that waits for its owner.
+	open, ok, err := c.opts.Store.Active(ctx, c.opts.Space, c.opts.Agent)
+	if err != nil {
+		return Task{}, Opening{}, fmt.Errorf("check open task: %w", err)
+	}
+	if ok {
+		return Task{}, Opening{}, fmt.Errorf("task #%d is still open (%s): finish it with task_advance or fail it with /task fail", open.ID, open.Phase)
+	}
 	now := c.opts.Now()
 	t, err := NewTask(c.classified, goal, scope, doneWhen, now)
 	if err != nil {
@@ -446,8 +455,23 @@ func (c *Controller) Advance(ctx context.Context, to Phase, text string) (Task, 
 		c.active = nil
 		c.classified = ""
 		c.finishRoute()
+		c.resume(ctx)
 	}
 	return next, nil
+}
+
+// resume makes the open task the store holds the open task of the controller
+// again after the current task closed: a delivered assignment waits for its
+// owner in the store. Callers hold c.mu.
+func (c *Controller) resume(ctx context.Context) {
+	tk, ok, err := c.opts.Store.Active(ctx, c.opts.Space, c.opts.Agent)
+	if err != nil {
+		c.Warn(fmt.Sprintf("open task not reloaded: %v", err))
+		return
+	}
+	if ok {
+		c.active = &tk
+	}
 }
 
 // Verify records the verdict of spec n of the open large task. It is only

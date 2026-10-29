@@ -139,8 +139,9 @@ inbox. The space's manager gets a tracking copy.
   answers, waits for the report, or fails the task with a reason.
 - The delegate gets `task:#N handover` with the goal, scope, done-when, plan path,
   the origin address (`<space>/<agent>`) and the instructions. It works the task
-  through its own flow, and its task records the origin, so `/tasks` shows the chain
-  (`reader → developer`, `developer ← payments/reader #12`).
+  through its own flow, and its task records the origin, so `/tasks` shows the handover
+  in ASSIGNED (`developer (handed over)`) and the origin in AGENT
+  (`developer ← payments/reader #12`).
 - When the delegate delivers, its deliver note goes back as `task:#N delivered`.
   The origin records it as evidence and moves to `verify`, where it checks the work
   and delivers to you as usual.
@@ -148,6 +149,29 @@ inbox. The space's manager gets a tracking copy.
   <reason>`. The origin records the reason and goes back to `implement`.
 - The manager gets `task:#N tracking` when a task is handed over, and a copy of
   each `delivered` and `returned`. It does not implement handed-over tasks.
+
+#### Assignment
+
+The space manager, or the agent that owns a task, can hand an open task to another
+agent of the space with `task_assign {task, agent, note}`. The operator does the same
+with `/task assign #N <agent>` on the screen of the owner or the manager. An
+assignment works whatever the size route and the `delegation` mode. It sends the same
+`task:#N handover` as a route, from the owner, with the note in the body, and the same
+tracking copy and reports.
+
+- The task stays with its owner. The delivery and the return come back to the owner's
+  task by its id, even while the owner works on other tasks.
+- The task must be classified or planned, or have no command or verdict recorded yet
+  (a medium task opens in implement), or have been returned. A task whose handover is
+  waiting for its report is not reassigned.
+- The recipient is another agent of the space, is not the caller, is not the owner,
+  and holds no open task of its own.
+- While an assignment is in flight, the owner's open slot is free: the owner can open
+  and assign its next task. Several tasks can be with different agents at once.
+- A delivered assignment waits for its owner. It is the owner's open task again, and
+  it becomes the current task when the owner's current task closes.
+- The owner's `task_status` and `/task` do not show a task that is in flight; `/tasks`
+  shows it with its handover state.
 
 The subject is the contract: `task:#<id>`, a space, then the signal (`handover`,
 `delivered`, `returned` or `tracking`). A leading `Re:` is ignored, and the text
@@ -187,3 +211,5 @@ Limits:
 - The return path depends on the delegate following its rule. A delivery is sent by
   groot when the delegate delivers.
 - Delegation runs in the same space only.
+- Assignment does not change budgets or turn limits, starts no turn without a message,
+  and adds no scheduler: agents run in parallel only through their own conversations.

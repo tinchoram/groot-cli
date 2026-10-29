@@ -27,6 +27,14 @@ built in one day of live testing, so they are grouped by what shipped.
   the question when its turn ends. `@agent` alone still switches.
 - Notices: an answer that ends on another screen shows one line, `<space>/<agent>: <first
   line>`, when you asked that agent or it mentions you. The `@` marker is unchanged.
+- Assignment: the space manager, or the agent that owns a task, hands an open task to
+  another agent of the space with `task_assign`; the operator uses `/task assign #N
+  <agent>`. The owner keeps the task and gets the delivery or the return. An assigned
+  task frees its owner's open slot while it runs, so the owner can open the next task,
+  and several tasks run with different agents at once. `/tasks` has an ASSIGNED column
+  with the agent and the handover state, and the arrow in the agent column is gone.
+  Out of scope: budgets, turns that start without a message, skills, and providers.
+  The counterpart review comes next, on the same handover path.
 - A message delivered to an idle agent starts a turn that reads it, in work mode or
   not, so the recipient answers without `/readinbox`. A message that arrives during a
   turn gets one follow-up turn when that turn ends. Each automatic turn counts against

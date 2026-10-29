@@ -51,8 +51,8 @@ var tasksSchema = []string{
 	)`,
 }
 
-// taskAddedColumns are the columns of the delegation record and the parent
-// link, with the statement that adds each one to a database that lacks it.
+// taskAddedColumns are the columns of the delegation record, the parent link
+// and the assignment flag, with the statement that adds each one to a database that lacks it.
 var taskAddedColumns = []struct{ name, ddl string }{
 	{"delegate", `ALTER TABLE tasks ADD COLUMN delegate TEXT NOT NULL DEFAULT ''`},
 	{"manager", `ALTER TABLE tasks ADD COLUMN manager TEXT NOT NULL DEFAULT ''`},
@@ -62,6 +62,7 @@ var taskAddedColumns = []struct{ name, ddl string }{
 	{"parent_space", `ALTER TABLE tasks ADD COLUMN parent_space TEXT NOT NULL DEFAULT ''`},
 	{"parent_agent", `ALTER TABLE tasks ADD COLUMN parent_agent TEXT NOT NULL DEFAULT ''`},
 	{"parent_task", `ALTER TABLE tasks ADD COLUMN parent_task INTEGER NOT NULL DEFAULT 0`},
+	{"delegation_assigned", `ALTER TABLE tasks ADD COLUMN delegation_assigned INTEGER NOT NULL DEFAULT 0`},
 }
 
 // Tasks returns the flow task store of this space database.
@@ -79,13 +80,13 @@ func nullTime(t time.Time) sql.NullTime {
 func (s taskStore) Open(ctx context.Context, t flow.Task) (flow.Task, error) {
 	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO tasks (space, agent, size, phase, goal, scope, done_when, plan_path, opened_at, phase_at, updated_at,
-			delegate, manager, delegation_status, delegated_at, delegation_at, parent_space, parent_agent, parent_task)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			delegate, manager, delegation_status, delegated_at, delegation_at, parent_space, parent_agent, parent_task, delegation_assigned)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.Space, t.Agent, string(t.Size), string(t.Phase), t.Goal, t.Scope, t.DoneWhen, t.PlanPath,
 		t.OpenedAt, t.PhaseAt, t.UpdatedAt,
 		t.Delegation.Delegate, t.Delegation.Manager, string(t.Delegation.Status),
 		nullTime(t.Delegation.HandedAt), nullTime(t.Delegation.StatusAt),
-		t.Parent.Space, t.Parent.Agent, t.Parent.Task)
+		t.Parent.Space, t.Parent.Agent, t.Parent.Task, boolInt(t.Delegation.Assigned))
 	if err != nil {
 		return flow.Task{}, fmt.Errorf("insert task: %w", err)
 	}
@@ -112,8 +113,9 @@ func (s taskStore) Get(ctx context.Context, id int64) (flow.Task, error) {
 }
 
 func (s taskStore) Active(ctx context.Context, space, agent string) (flow.Task, bool, error) {
-	row := s.db.QueryRowContext(ctx, taskColumns+` WHERE space = ? AND agent = ? AND closed_at IS NULL ORDER BY id DESC LIMIT 1`,
-		space, agent)
+	row := s.db.QueryRowContext(ctx, taskColumns+` WHERE space = ? AND agent = ? AND closed_at IS NULL `+
+		`AND NOT (delegation_assigned = 1 AND delegation_status IN (?, ?)) ORDER BY id DESC LIMIT 1`,
+		space, agent, string(flow.DelegationHandedOver), string(flow.DelegationAccepted))
 	t, err := scanTask(row)
 	if err == sql.ErrNoRows {
 		return flow.Task{}, false, nil
@@ -137,11 +139,11 @@ func (s taskStore) Update(ctx context.Context, t flow.Task) error {
 	}
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE tasks SET phase = ?, plan_path = ?, phase_at = ?, updated_at = ?, closed_at = ?,
-			delegate = ?, manager = ?, delegation_status = ?, delegated_at = ?, delegation_at = ?
+			delegate = ?, manager = ?, delegation_status = ?, delegated_at = ?, delegation_at = ?, delegation_assigned = ?
 		WHERE id = ?`,
 		string(t.Phase), t.PlanPath, t.PhaseAt, t.UpdatedAt, closed,
 		t.Delegation.Delegate, t.Delegation.Manager, string(t.Delegation.Status),
-		nullTime(t.Delegation.HandedAt), nullTime(t.Delegation.StatusAt), t.ID)
+		nullTime(t.Delegation.HandedAt), nullTime(t.Delegation.StatusAt), boolInt(t.Delegation.Assigned), t.ID)
 	if err != nil {
 		return fmt.Errorf("update task #%d: %w", t.ID, err)
 	}
@@ -223,7 +225,7 @@ func (s *SQLite) TaskSummaries(ctx context.Context, includeClosed bool, closedSi
 		SELECT t.id, t.space, t.agent, t.size, t.phase, t.goal, t.opened_at, t.updated_at,
 			(SELECT COUNT(*) FROM task_evidence e WHERE e.task_id = t.id),
 			t.delegate, t.manager, t.delegation_status, t.delegated_at, t.delegation_at,
-			t.parent_space, t.parent_agent, t.parent_task
+			t.parent_space, t.parent_agent, t.parent_task, t.delegation_assigned
 		FROM tasks t
 		WHERE `+where+`
 		ORDER BY t.space, t.updated_at DESC, t.id DESC`, args...)
@@ -239,14 +241,15 @@ func (s *SQLite) TaskSummaries(ctx context.Context, includeClosed bool, closedSi
 			delegate, manager, status string
 			delegatedAt, delegationAt sql.NullTime
 			parentSpace, parentAgent  string
+			assigned                  int64
 		)
 		if err := rows.Scan(&r.ID, &r.Space, &r.Agent, &size, &phase, &r.Goal, &r.OpenedAt, &r.UpdatedAt, &r.Evidence,
 			&delegate, &manager, &status, &delegatedAt, &delegationAt,
-			&parentSpace, &parentAgent, &r.Parent.Task); err != nil {
+			&parentSpace, &parentAgent, &r.Parent.Task, &assigned); err != nil {
 			return nil, fmt.Errorf("scan task summary: %w", err)
 		}
 		r.Size, r.Phase = flow.Size(size), flow.Phase(phase)
-		r.Delegation = delegationOf(delegate, manager, status, delegatedAt, delegationAt)
+		r.Delegation = delegationOf(delegate, manager, status, delegatedAt, delegationAt, assigned)
 		r.Parent.Space, r.Parent.Agent = parentSpace, parentAgent
 		out = append(out, r)
 	}
@@ -256,15 +259,15 @@ func (s *SQLite) TaskSummaries(ctx context.Context, includeClosed bool, closedSi
 const taskColumns = `SELECT id, space, agent, size, phase, goal, scope, done_when, plan_path,
 	opened_at, phase_at, updated_at, closed_at,
 	delegate, manager, delegation_status, delegated_at, delegation_at,
-	parent_space, parent_agent, parent_task FROM tasks`
+	parent_space, parent_agent, parent_task, delegation_assigned FROM tasks`
 
 type rowScanner interface {
 	Scan(dest ...any) error
 }
 
 // delegationOf builds the handover record from its stored columns.
-func delegationOf(delegate, manager, status string, handedAt, statusAt sql.NullTime) flow.Delegation {
-	d := flow.Delegation{Delegate: delegate, Manager: manager, Status: flow.DelegationStatus(status)}
+func delegationOf(delegate, manager, status string, handedAt, statusAt sql.NullTime, assigned int64) flow.Delegation {
+	d := flow.Delegation{Delegate: delegate, Manager: manager, Status: flow.DelegationStatus(status), Assigned: assigned == 1}
 	if handedAt.Valid {
 		d.HandedAt = handedAt.Time
 	}
@@ -281,11 +284,12 @@ func scanTask(r rowScanner) (flow.Task, error) {
 		closed                    sql.NullTime
 		delegate, manager, status string
 		delegatedAt, delegationAt sql.NullTime
+		assigned                  int64
 	)
 	err := r.Scan(&t.ID, &t.Space, &t.Agent, &size, &phase, &t.Goal, &t.Scope, &t.DoneWhen, &t.PlanPath,
 		&t.OpenedAt, &t.PhaseAt, &t.UpdatedAt, &closed,
 		&delegate, &manager, &status, &delegatedAt, &delegationAt,
-		&t.Parent.Space, &t.Parent.Agent, &t.Parent.Task)
+		&t.Parent.Space, &t.Parent.Agent, &t.Parent.Task, &assigned)
 	if err != nil {
 		return flow.Task{}, err
 	}
@@ -293,7 +297,7 @@ func scanTask(r rowScanner) (flow.Task, error) {
 	if closed.Valid {
 		t.ClosedAt = closed.Time
 	}
-	t.Delegation = delegationOf(delegate, manager, status, delegatedAt, delegationAt)
+	t.Delegation = delegationOf(delegate, manager, status, delegatedAt, delegationAt, assigned)
 	return t, nil
 }
 

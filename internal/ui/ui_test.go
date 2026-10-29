@@ -38,6 +38,9 @@ type fakeSession struct {
 	task      *flow.Task
 	seen      flow.Phase
 	failed    []string
+	assigned  []string
+	// assignErr is what AssignTask reports.
+	assignErr error
 	workOn    bool
 	review    string
 	accepted  []string
@@ -137,6 +140,15 @@ func (f *fakeSession) TaskStatus(context.Context) string {
 		return "no open task; nothing classified in this turn"
 	}
 	return fmt.Sprintf("task #%d · %s · %s\ngoal: %s", f.task.ID, f.task.Size, f.task.Phase, f.task.Goal)
+}
+
+// AssignTask records the assignment as "<id> <agent>".
+func (f *fakeSession) AssignTask(_ context.Context, id int64, agent, _ string) (string, error) {
+	f.assigned = append(f.assigned, fmt.Sprintf("%d %s", id, agent))
+	if f.assignErr != nil {
+		return "", f.assignErr
+	}
+	return fmt.Sprintf("task #%d assigned to %s", id, agent), nil
 }
 
 func (f *fakeSession) FailTask(_ context.Context, reason string) (string, error) {

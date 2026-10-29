@@ -2,9 +2,11 @@ package workspace
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/tinchoram/groot-cli/internal/api"
 	"github.com/tinchoram/groot-cli/internal/catalog"
 	"github.com/tinchoram/groot-cli/internal/config"
 	"github.com/tinchoram/groot-cli/internal/flow"
@@ -227,6 +229,118 @@ func TestDelegationLoopEndToEnd(t *testing.T) {
 	if !accepted || !delivered {
 		t.Fatalf("origin evidence lacks the acceptance or the report: %+v", tk.Evidence)
 	}
+}
+
+// assignStep is a task_assign call; toolStep cannot carry the task number, which
+// is a JSON integer.
+func assignStep(id string, task int64, agent, note string) provider.Step {
+	in, _ := json.Marshal(map[string]any{"task": task, "agent": agent, "note": note})
+	return provider.Step{Response: api.Response{
+		Content:    []api.Block{{Type: api.BlockToolUse, ID: id, Name: "task_assign", Input: in}},
+		StopReason: api.StopToolUse,
+	}}
+}
+
+// TestOperatorAskAssignsTwoTasksAndTheAnswerReturnsToTheOrigin runs the whole
+// loop: the operator asks the manager from the reader's screen, the manager opens
+// two tasks and assigns one to each agent, both deliver, and the manager's answer
+// comes back to the reader's screen. The turns run one after another: the mock
+// provider is shared, so the script is consumed in order.
+func TestOperatorAskAssignsTwoTasksAndTheAnswerReturnsToTheOrigin(t *testing.T) {
+	ctx := context.Background()
+	scope := map[string]string{"scope": "payments", "done_when": "tests pass"}
+	open := func(id, goal string) provider.Step {
+		in := map[string]string{"goal": goal, "scope": scope["scope"], "done_when": scope["done_when"]}
+		return toolStep(id, "task_open", in)
+	}
+	f := assignFixture(t,
+		// The manager answers the ask: open #1, assign it, open #2, assign it.
+		classifyStep("m_1", "medium", true, "two tasks"),
+		open("m_2", "split billing"),
+		assignStep("m_3", 1, "developer", "split billing first"),
+		open("m_4", "billing reports"),
+		assignStep("m_5", 2, "tester", "test the reports"),
+		text("both tasks are with their agents"),
+		// The developer takes #1: open its own task, check, deliver.
+		classifyStep("d_1", "medium", true, "handed over"),
+		open("d_2", "split billing"),
+		toolStep("d_3", "bash", map[string]string{"command": "echo ok"}),
+		toolStep("d_4", "task_advance", map[string]string{"phase": "verify"}),
+		toolStep("d_5", "task_advance", map[string]string{"phase": "deliver", "evidence": "billing split, tests pass"}),
+		text("developer delivered"),
+		// The tester takes #2 the same way.
+		classifyStep("t_1", "medium", true, "handed over"),
+		open("t_2", "billing reports"),
+		toolStep("t_3", "bash", map[string]string{"command": "echo ok"}),
+		toolStep("t_4", "task_advance", map[string]string{"phase": "verify"}),
+		toolStep("t_5", "task_advance", map[string]string{"phase": "deliver", "evidence": "reports tested"}),
+		text("tester delivered"),
+	)
+	// Each turn below is explicit, so no automatic turn may start behind the script.
+	f.ws.opts.Config.Work.MaxAutoTurns = 0
+	f.ws.opts.Config.Flow.Routes.Medium.Agent = ""
+	if err := f.ws.reload(); err != nil {
+		t.Fatal(err)
+	}
+	saveAgent(t, f, "space-manager", "tracks work", []string{"read_inbox", "send_message", "list_tasks", "task_classify", "task_open", "task_advance", "task_status", "task_assign"})
+	saveAgent(t, f, "tester", "tests things", []string{"read_file", "bash", "task_classify", "task_open", "task_advance", "task_status"})
+	if err := f.ws.reload(); err != nil {
+		t.Fatal(err)
+	}
+
+	answers := make(chan answered, 4)
+	f.ws.opts.Hooks.OnAsk = func(origin, key, text string, err error) {
+		answers <- answered{origin, key, text, err}
+	}
+	if err := f.ws.SelectAgent("reader"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.ws.Ask("default/reader", "default/space-manager", "which tasks are open?"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.ws.SelectAgent("space-manager"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.ws.Chat().Send(ctx, "answer the operator"); err != nil {
+		t.Fatal(err)
+	}
+	got := awaitAnswer(t, answers)
+	if got.origin != "default/reader" || got.key != "default/space-manager" || got.text != "both tasks are with their agents" {
+		t.Fatalf("the answer must return to the operator's origin, got %+v", got)
+	}
+	if last := f.mock.Calls[0].Messages[len(f.mock.Calls[0].Messages)-1].Content[0].Text; !strings.Contains(last, "which tasks are open?") {
+		t.Fatalf("the manager must read the ask:\n%s", last)
+	}
+
+	for _, agent := range []string{"developer", "tester"} {
+		if err := f.ws.SelectAgent(agent); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.ws.Chat().Send(ctx, "go"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	first, second := taskOf(t, f, 1), taskOf(t, f, 2)
+	if first.Delegation.Delegate != "developer" || first.Delegation.Status != flow.DelegationDelivered || first.Phase != flow.PhaseVerify {
+		t.Fatalf("manager's task #1 after the loop: phase %s, delegation %+v", first.Phase, first.Delegation)
+	}
+	if second.Delegation.Delegate != "tester" || second.Delegation.Status != flow.DelegationDelivered || second.Phase != flow.PhaseVerify {
+		t.Fatalf("manager's task #2 after the loop: phase %s, delegation %+v", second.Phase, second.Delegation)
+	}
+	if first.Agent != "space-manager" || second.Agent != "space-manager" {
+		t.Fatalf("ownership must stay with the manager: %s and %s", first.Agent, second.Agent)
+	}
+	var accepted bool
+	for _, ev := range first.Evidence {
+		accepted = accepted || strings.Contains(ev.Text, "accepted by developer")
+	}
+	if !accepted {
+		t.Fatalf("task #1 must record the acceptance: %+v", first.Evidence)
+	}
+	onlyMessage(t, f, "developer", "task:#1 handover")
+	onlyMessage(t, f, "tester", "task:#2 handover")
+	onlyMessage(t, f, "space-manager", "task:#2 delivered")
 }
 
 func TestRulesReachTheDelegateAndTheManager(t *testing.T) {

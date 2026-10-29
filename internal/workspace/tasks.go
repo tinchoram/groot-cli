@@ -36,6 +36,10 @@ type TaskRow struct {
 	// "<space>/<agent> #<id>" of a task another agent opened to take over.
 	Delegate string
 	Parent   string
+	// Assigned is the handover of the task, "<agent> (<state>)", or "" when the
+	// task was never handed over. The state is handed over, accepted, delivered
+	// or returned.
+	Assigned string
 	// Active is true while the agent's open conversation runs a turn in this
 	// process. A task whose conversation is idle, or not open, is not active.
 	Active bool
@@ -85,7 +89,7 @@ func (w *Workspace) ListTasks(ctx context.Context, name string, includeClosed bo
 			rows = append(rows, TaskRow{
 				Space: t.Space, Agent: t.Agent, ID: t.ID, Size: t.Size, Phase: t.Phase,
 				Goal: shortGoal(t.Goal), Evidence: t.Evidence, OpenedAt: t.OpenedAt, UpdatedAt: t.UpdatedAt,
-				Delegate: t.Delegation.Delegate, Parent: parentLabel(t.Parent),
+				Delegate: t.Delegation.Delegate, Parent: parentLabel(t.Parent), Assigned: handoverLabel(t.Delegation),
 				Active: w.runningTurn(sp.Name, t.Agent),
 			})
 		}
@@ -123,13 +127,19 @@ func parentLabel(p flow.Parent) string {
 	return fmt.Sprintf("%s/%s #%d", p.Space, p.Agent, p.Task)
 }
 
-// agentCell is the agent column of the listing: "reader → developer" for a task
-// handed over, "developer ← space/reader #1" for a task taken over.
+// handoverLabel is the ASSIGNED cell of a task: its delegate and the state of
+// the handover, or "" when the task was never handed over.
+func handoverLabel(d flow.Delegation) string {
+	if !d.Set() {
+		return ""
+	}
+	return fmt.Sprintf("%s (%s)", d.Delegate, strings.ReplaceAll(string(d.Status), "_", " "))
+}
+
+// agentCell is the agent column of the listing: "developer ← space/reader #1"
+// for a task taken over. A handover is shown in the ASSIGNED column only.
 func agentCell(r TaskRow) string {
-	switch {
-	case r.Delegate != "":
-		return r.Agent + " → " + r.Delegate
-	case r.Parent != "":
+	if r.Parent != "" {
 		return r.Agent + " ← " + r.Parent
 	}
 	return r.Agent
@@ -150,15 +160,19 @@ func FormatTasks(rows []TaskRow) string {
 	}
 	var sb strings.Builder
 	tw := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "SPACE\tAGENT\tTASK\tSIZE\tPHASE\tEVIDENCE\tOPENED\tUPDATED\tACTIVE\tGOAL")
+	fmt.Fprintln(tw, "SPACE\tAGENT\tTASK\tSIZE\tPHASE\tEVIDENCE\tOPENED\tUPDATED\tACTIVE\tASSIGNED\tGOAL")
 	for _, r := range rows {
 		active := "no"
 		if r.Active {
 			active = "yes"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t#%d\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n", r.Space, agentCell(r), r.ID, r.Size, r.Phase,
+		assigned := r.Assigned
+		if assigned == "" {
+			assigned = "-"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t#%d\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n", r.Space, agentCell(r), r.ID, r.Size, r.Phase,
 			r.Evidence, r.OpenedAt.Local().Format("2006-01-02 15:04"), r.UpdatedAt.Local().Format("2006-01-02 15:04"),
-			active, r.Goal)
+			active, assigned, r.Goal)
 	}
 	_ = tw.Flush()
 	return strings.TrimRight(sb.String(), "\n")

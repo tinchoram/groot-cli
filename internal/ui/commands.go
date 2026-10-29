@@ -85,6 +85,7 @@ var helpEntries = []helpEntry{
 	{"/task accept", "accept the task's result"},
 	{"/task reject <reason>", "reject the task's result, with the reason"},
 	{"/task fail <reason>", "fail the task, with the reason"},
+	{"/task assign #N <agent>", "hand the open task to an agent of the space; the owner keeps it"},
 	{"/tasks [space]", "open tasks of every space, or of one space"},
 	{"/tasks all", "also the done and failed tasks of the last 7 days"},
 	{"/jobs", "background jobs of this agent: state, exit code, start and command"},

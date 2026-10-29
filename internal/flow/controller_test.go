@@ -37,8 +37,9 @@ func (s *fakeStore) Get(_ context.Context, id int64) (Task, error) {
 }
 
 func (s *fakeStore) Active(_ context.Context, space, agent string) (Task, bool, error) {
-	for _, t := range s.tasks {
-		if t.Space == space && t.Agent == agent && !t.Closed() {
+	for i := len(s.tasks) - 1; i >= 0; i-- {
+		t := s.tasks[i]
+		if t.Space == space && t.Agent == agent && !t.Closed() && !t.Delegation.Released() {
 			return s.withSpecs(t), true, nil
 		}
 	}

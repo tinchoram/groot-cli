@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -41,6 +42,40 @@ func TestTaskFailClosesWithReason(t *testing.T) {
 	}
 	if !strings.Contains(stripANSI(m.transcriptText()), "task #12 failed: the scope changed") {
 		t.Fatalf("confirmation missing:\n%s", m.transcriptText())
+	}
+}
+
+func TestTaskAssignHandsTheTaskToTheAgent(t *testing.T) {
+	chat := &fakeSession{model: "m", task: &flow.Task{ID: 4, Size: flow.SizeMedium, Phase: flow.PhaseImplement}}
+	m, _ := newTestModel(t, chat)
+	m = sendLine(t, m, "/task assign #4 developer")
+	if len(chat.assigned) != 1 || chat.assigned[0] != "4 developer" {
+		t.Fatalf("assigned = %v", chat.assigned)
+	}
+	if !strings.Contains(stripANSI(m.transcriptText()), "task #4 assigned to developer") {
+		t.Fatalf("confirmation missing:\n%s", m.transcriptText())
+	}
+}
+
+func TestTaskAssignAcceptsTheBareNumberAndShowsRefusals(t *testing.T) {
+	chat := &fakeSession{model: "m", assignErr: errors.New("agent tester holds open task #2")}
+	m, _ := newTestModel(t, chat)
+	m = sendLine(t, m, "/task assign 4 tester")
+	if len(chat.assigned) != 1 || chat.assigned[0] != "4 tester" {
+		t.Fatalf("assigned = %v", chat.assigned)
+	}
+	if !strings.Contains(stripANSI(m.transcriptText()), "error: agent tester holds open task #2") {
+		t.Fatalf("the refusal must be shown:\n%s", m.transcriptText())
+	}
+}
+
+func TestTaskAssignNeedsATaskAndAnAgent(t *testing.T) {
+	chat := &fakeSession{model: "m"}
+	m, _ := newTestModel(t, chat)
+	m = sendLine(t, m, "/task assign #4")
+	m = sendLine(t, m, "/task assign x developer")
+	if len(chat.assigned) != 0 || strings.Count(m.transcriptText(), "usage: /task assign #<n> <agent>") != 2 {
+		t.Fatalf("assignments without a task number and an agent must be refused: %v\n%s", chat.assigned, m.transcriptText())
 	}
 }
 

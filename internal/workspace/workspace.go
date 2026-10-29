@@ -61,6 +61,8 @@ type Chat interface {
 	TaskStatus(ctx context.Context) string
 	// FailTask closes the open task with a reason.
 	FailTask(ctx context.Context, reason string) (string, error)
+	// AssignTask hands an open task to another agent of the space.
+	AssignTask(ctx context.Context, id int64, agent, note string) (string, error)
 	// WorkMode reports whether work mode is on for this conversation.
 	WorkMode() bool
 	// SetWorkMode turns work mode on or off for this conversation.
@@ -690,6 +692,7 @@ func (w *Workspace) open(sp space.Space, agentName string) (*Conversation, error
 	}
 	conv.onIdle = func() { w.followUpUnread(key, conv) }
 	conv.asks = w.asks
+	conv.assigner = assigner{w: w, space: sp.Name, agent: agentName}
 	conv.onAsk = func(origin, answered, text string, err error) {
 		if h := w.opts.Hooks.OnAsk; h != nil {
 			h(origin, answered, text, err)
@@ -782,6 +785,9 @@ func (c idleChat) Task() (flow.Task, bool)                      { return flow.Ta
 func (c idleChat) Observed() (flow.Phase, bool)                 { return "", false }
 func (c idleChat) TaskStatus(context.Context) string            { return "" }
 func (c idleChat) FailTask(context.Context, string) (string, error) {
+	return "", c.err
+}
+func (c idleChat) AssignTask(context.Context, int64, string, string) (string, error) {
 	return "", c.err
 }
 func (c idleChat) WorkMode() bool   { return false }

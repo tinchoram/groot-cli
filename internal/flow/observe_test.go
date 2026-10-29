@@ -28,7 +28,7 @@ var observedTable = map[string]Phase{
 // silentTools say nothing about the phase: flow, memory, feedback, catalog and
 // admin tools.
 var silentTools = []string{
-	"task_classify", "task_open", "task_advance", "remember", "forget", "update_memory",
+	"task_classify", "task_open", "task_advance", "task_assign", "remember", "forget", "update_memory",
 	"bash_background", "monitor", "job_list", "job_output", "job_stop",
 	"feedback_report", "feedback_list", "feedback_update", "read_changelog", "current_time",
 	"list_spaces", "create_space", "assign_agent", "unassign_agent", "list_agents", "create_agent",

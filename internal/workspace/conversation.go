@@ -85,6 +85,8 @@ type Conversation struct {
 	asks    *askBook
 	askRead []string
 	onAsk   func(origin, key, text string, err error)
+	// assigner hands the open tasks of this conversation's space to other agents.
+	assigner tool.Assigner
 	// sysMu guards baseSystem: /clear refreshes it while a turn may be reading it.
 	sysMu      sync.Mutex
 	baseSystem string
@@ -445,11 +447,13 @@ func (w *Workspace) buildTools(root string, names []string, mem *memoryState, ms
 
 func (w *Workspace) newTool(name, root string, mem *memoryState, msg tool.Messenger, ctl *flow.Controller, files *fileLog, jm *jobs.Manager, agentName string) (tool.Tool, error) {
 	switch name {
-	case "task_classify", "task_open", "task_advance", "task_verify", "task_status":
+	case "task_classify", "task_open", "task_advance", "task_verify", "task_status", "task_assign":
 		if ctl == nil {
 			return nil, errors.New("the task flow is not available")
 		}
 		switch name {
+		case "task_assign":
+			return tool.NewTaskAssign(assigner{w: w, space: w.spaceNameFor(root), agent: agentName}), nil
 		case "task_classify":
 			return tool.NewTaskClassify(ctl), nil
 		case "task_open":

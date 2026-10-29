@@ -97,3 +97,44 @@ func TestListNewestFirst(t *testing.T) {
 		t.Fatalf("List = %+v, %v", got, err)
 	}
 }
+
+func TestAnAssignmentInFlightIsNotTheOwnersOpenTask(t *testing.T) {
+	ctx := context.Background()
+	st := openTempSQLite(t).Tasks()
+	routed, err := st.Open(ctx, newTask("payments", "developer", base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assigned, err := st.Open(ctx, newTask("payments", "developer", base.Add(time.Minute)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assigned.Delegation = flow.Delegation{Delegate: "tester", Status: flow.DelegationHandedOver, Assigned: true, HandedAt: base}
+	if err := st.Update(ctx, assigned); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, _ := st.Active(ctx, "payments", "developer"); !ok || got.ID != routed.ID {
+		t.Fatalf("Active = #%d, %v; the assignment in flight must be skipped", got.ID, ok)
+	}
+
+	back, _ := st.Get(ctx, assigned.ID)
+	if !back.Delegation.Assigned || back.Delegation.Status != flow.DelegationHandedOver {
+		t.Fatalf("the assigned flag must round-trip, got %+v", back.Delegation)
+	}
+	back.Delegation.Status = flow.DelegationDelivered
+	if err := st.Update(ctx, back); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, _ := st.Active(ctx, "payments", "developer"); !ok || got.ID != assigned.ID {
+		t.Fatalf("a delivered assignment is the owner's open task again, Active = #%d, %v", got.ID, ok)
+	}
+
+	routedHandover := routed
+	routedHandover.Delegation = flow.Delegation{Delegate: "tester", Status: flow.DelegationHandedOver, HandedAt: base}
+	if err := st.Update(ctx, routedHandover); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, _ := st.Active(ctx, "payments", "developer"); !ok || got.ID != assigned.ID {
+		t.Fatalf("a route handover is not an assignment and keeps the slot, Active = #%d, %v", got.ID, ok)
+	}
+}

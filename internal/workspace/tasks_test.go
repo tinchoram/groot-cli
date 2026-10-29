@@ -176,14 +176,48 @@ func TestFormatTasksShowsEveryColumn(t *testing.T) {
 	out := FormatTasks([]TaskRow{{
 		Space: "default", Agent: "reader", ID: 7, Size: flow.SizeLarge, Phase: flow.PhaseVerify,
 		Goal: "ship it", Evidence: 4, OpenedAt: t0, UpdatedAt: t0, Active: true,
+		Delegate: "developer", Assigned: "developer (handed over)",
 	}})
-	for _, want := range []string{"SPACE", "AGENT", "TASK", "SIZE", "PHASE", "EVIDENCE", "UPDATED", "ACTIVE", "GOAL",
-		"default", "reader", "#7", "large", "verify", "4", "yes", "ship it"} {
+	for _, want := range []string{"SPACE", "AGENT", "TASK", "SIZE", "PHASE", "EVIDENCE", "UPDATED", "ACTIVE", "ASSIGNED", "GOAL",
+		"default", "reader", "#7", "large", "verify", "4", "yes", "developer (handed over)", "ship it"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("table lacks %q:\n%s", want, out)
 		}
 	}
+	if strings.Contains(out, "reader →") {
+		t.Fatalf("the agent column must not repeat the handover:\n%s", out)
+	}
 	if empty := FormatTasks(nil); !strings.Contains(empty, "no tasks") {
 		t.Fatalf("empty table = %q", empty)
+	}
+}
+
+func TestAgentCellNamesOnlyTheOriginOfATakenOverTask(t *testing.T) {
+	handed := TaskRow{Agent: "reader", Delegate: "developer", Assigned: "developer (handed over)"}
+	if got := agentCell(handed); got != "reader" {
+		t.Fatalf("agentCell = %q, the handover is in the ASSIGNED column", got)
+	}
+	taken := TaskRow{Agent: "developer", Parent: "default/reader #1"}
+	if got := agentCell(taken); got != "developer ← default/reader #1" {
+		t.Fatalf("agentCell = %q", got)
+	}
+}
+
+func TestListTasksShowsTheAssignedHandoverState(t *testing.T) {
+	ctx := context.Background()
+	f := assignFixture(t, openMediumSteps("1", "split billing")...)
+	if _, err := f.ws.Chat().Send(ctx, "build it"); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := f.ws.ListTasks(ctx, "default", false)
+	if err != nil || len(rows) != 1 || rows[0].Assigned != "" {
+		t.Fatalf("an open task nobody holds has no ASSIGNED state: %+v, %v", rows, err)
+	}
+	if _, err := f.ws.assignTask(ctx, "default", "space-manager", 1, "developer", ""); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = f.ws.ListTasks(ctx, "default", false)
+	if err != nil || len(rows) != 1 || rows[0].Assigned != "developer (handed over)" {
+		t.Fatalf("rows = %+v, %v; want the delegate and the handover state", rows, err)
 	}
 }

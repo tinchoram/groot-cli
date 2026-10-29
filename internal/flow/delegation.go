@@ -44,6 +44,10 @@ type Delegation struct {
 	Status   DelegationStatus
 	HandedAt time.Time
 	StatusAt time.Time
+	// Assigned is set when the handover was placed by an assignment (task_assign
+	// or /task assign), not by a route. An assignment in flight is released from
+	// the owner's open slot: see Released.
+	Assigned bool
 }
 
 // Set reports whether the task was ever handed over.
@@ -54,6 +58,10 @@ func (d Delegation) Set() bool { return d.Status != "" }
 func (d Delegation) Active() bool {
 	return d.Status == DelegationHandedOver || d.Status == DelegationAccepted
 }
+
+// Released reports whether the task is an assignment in flight. Its owner does
+// not hold it as the open task, so the owner can open the next one.
+func (d Delegation) Released() bool { return d.Assigned && d.Active() }
 
 // Parent is the origin of a task that another agent took over. Task is the
 // origin's task id in the origin's space.
@@ -71,6 +79,9 @@ func (p Parent) Set() bool { return p.Task != 0 }
 type Handover struct {
 	Delegate string
 	Manager  string
+	// Note is what the origin adds for the delegate, when the handover is an
+	// assignment. It is part of the handover body.
+	Note string
 }
 
 // Opening is what Open decided beyond the task itself: a hint for the agent

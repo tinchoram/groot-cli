@@ -34,7 +34,7 @@ const (
 	copySessionCols = "id, parent_id, agent, model, started_at, ended_at, cost_usd, cleared_at, context_tokens"
 	copyMessageCols = "session_id, turn, role, content_json, in_tokens, out_tokens, created_at"
 	copyTaskCols    = "space, agent, size, phase, goal, scope, done_when, plan_path, opened_at, phase_at, updated_at, closed_at, " +
-		"delegate, manager, delegation_status, delegated_at, delegation_at, parent_space, parent_agent, parent_task"
+		"delegate, manager, delegation_status, delegated_at, delegation_at, parent_space, parent_agent, parent_task, delegation_assigned"
 	copyEvidenceCols = "task_id, phase, kind, text, at"
 )
 
@@ -65,7 +65,7 @@ func (s *SQLite) CopyAgentData(ctx context.Context, dst *SQLite, agent string) (
 	}
 	tasks, err := selectAll(ctx, s.db,
 		`SELECT id, space, agent, size, phase, goal, scope, done_when, plan_path, opened_at, phase_at, updated_at, closed_at, `+
-			`delegate, manager, delegation_status, delegated_at, delegation_at, parent_space, parent_agent, parent_task `+
+			`delegate, manager, delegation_status, delegated_at, delegation_at, parent_space, parent_agent, parent_task, delegation_assigned `+
 			`FROM tasks WHERE agent = ? ORDER BY id`, agent)
 	if err != nil {
 		return c, fmt.Errorf("copy agent: read tasks: %w", err)

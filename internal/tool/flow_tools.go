@@ -128,16 +128,92 @@ func (t *TaskOpen) handOver(ctx context.Context, out string, task flow.Task, h f
 	if t.msg == nil {
 		return out + "\nhanded over to " + h.Delegate + " but no messenger is wired: the handover was not sent", true
 	}
-	origin := t.ctl.Address()
-	if _, _, err := t.msg.Send(ctx, h.Delegate, flow.SubjectFor(flow.SignalHandover, task.ID), flow.HandoverBody(task, origin)); err != nil {
+	note, err := SendHandover(ctx, t.msg, t.ctl.Address(), task, h)
+	if err != nil {
 		return out + "\nhanded over to " + h.Delegate + " but the handover could not be sent: " + err.Error() + "\nfail the task with task_advance failed and a reason", true
 	}
 	out += "\nhanded over to " + h.Delegate + "; wait for the delivery report in your inbox, do not implement it yourself"
-	if h.Manager != "" {
-		body := fmt.Sprintf("Task #%d (%s) of %s is handed over to %s. Goal: %s", task.ID, task.Size, origin, h.Delegate, task.Goal)
-		if _, _, err := t.msg.Send(ctx, h.Manager, flow.SubjectFor(flow.SignalTracking, task.ID), body); err != nil {
-			out += "\ntracking copy to " + h.Manager + " not sent: " + err.Error()
-		}
+	if note != "" {
+		out += "\n" + note
+	}
+	return out, false
+}
+
+// SendHandover sends the handover of task to h.Delegate, from origin, and the
+// tracking copy to h.Manager when there is one. It returns an error only when the
+// handover is not sent. A tracking copy that fails is returned as a note: the
+// handover already happened. msg must send as the origin of the task.
+func SendHandover(ctx context.Context, msg Messenger, origin string, task flow.Task, h flow.Handover) (string, error) {
+	body := flow.HandoverBody(task, origin)
+	if h.Note != "" {
+		body += "Note from " + origin + ": " + h.Note + "\n"
+	}
+	if _, _, err := msg.Send(ctx, h.Delegate, flow.SubjectFor(flow.SignalHandover, task.ID), body); err != nil {
+		return "", err
+	}
+	if h.Manager == "" {
+		return "", nil
+	}
+	tracking := fmt.Sprintf("Task #%d (%s) of %s is handed over to %s. Goal: %s", task.ID, task.Size, origin, h.Delegate, task.Goal)
+	if _, _, err := msg.Send(ctx, h.Manager, flow.SubjectFor(flow.SignalTracking, task.ID), tracking); err != nil {
+		return "tracking copy to " + h.Manager + " not sent: " + err.Error(), nil
+	}
+	return "", nil
+}
+
+// Assigner hands an open task of the caller's space to another agent. The
+// workspace checks the assignment rules, saves them and sends the handover.
+type Assigner interface {
+	AssignTask(ctx context.Context, task int64, agent, note string) (string, error)
+}
+
+// TaskAssign hands an open task to another agent of the space.
+type TaskAssign struct{ a Assigner }
+
+// NewTaskAssign returns the task_assign tool.
+func NewTaskAssign(a Assigner) *TaskAssign { return &TaskAssign{a: a} }
+
+type taskAssignInput struct {
+	Task  int64  `json:"task"`
+	Agent string `json:"agent"`
+	Note  string `json:"note"`
+}
+
+func (*TaskAssign) Definition() api.ToolDef {
+	return api.ToolDef{
+		Name:        "task_assign",
+		Description: "Hand an open task of this space to another agent of the space, which works on it while you keep other tasks. Only the space manager and the agent that owns the task may assign it. The task stays with its owner, who gets the delivery or the return. Allowed before work starts on the task, or after a return; refused while another agent holds it, and while the chosen agent has an open task of its own.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+			`"task":{"type":"integer","description":"The task number, as list_tasks shows it"},` +
+			`"agent":{"type":"string","description":"The agent of this space that takes the task"},` +
+			`"note":{"type":"string","description":"What the agent should know: the scope, the order, the constraints; optional"}},` +
+			`"required":["task","agent"]}`),
+	}
+}
+
+// Risk is RiskWrite: an assignment sends a handover that starts another agent's work.
+func (*TaskAssign) Risk() Risk            { return RiskWrite }
+func (t *TaskAssign) RiskFor(string) Risk { return t.Risk() }
+
+func (*TaskAssign) Preview(input string) string {
+	var in taskAssignInput
+	if err := json.Unmarshal([]byte(input), &in); err != nil {
+		return "task_assign: invalid input"
+	}
+	return fmt.Sprintf("assign task #%d to %s: %s", in.Task, in.Agent, in.Note)
+}
+
+func (t *TaskAssign) Execute(ctx context.Context, input string) (string, bool) {
+	var in taskAssignInput
+	if err := json.Unmarshal([]byte(input), &in); err != nil {
+		return "invalid input: " + err.Error(), true
+	}
+	if in.Task <= 0 {
+		return "task must be the number of an open task, for example 4", true
+	}
+	out, err := t.a.AssignTask(ctx, in.Task, strings.TrimSpace(in.Agent), strings.TrimSpace(in.Note))
+	if err != nil {
+		return err.Error(), true
 	}
 	return out, false
 }

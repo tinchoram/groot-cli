@@ -162,6 +162,15 @@ func (c *Conversation) TaskStatus(ctx context.Context) string {
 	return c.ctl.Status(ctx)
 }
 
+// AssignTask hands the open task id of the space to agent, as this conversation's
+// agent asks: the owner of the task or the space manager.
+func (c *Conversation) AssignTask(ctx context.Context, id int64, agent, note string) (string, error) {
+	if c.assigner == nil {
+		return "", fmt.Errorf("task assignment is not available in this conversation")
+	}
+	return c.assigner.AssignTask(ctx, id, agent, note)
+}
+
 // FailTask closes the open task with a reason, as the user asked.
 func (c *Conversation) FailTask(ctx context.Context, reason string) (string, error) {
 	if c.ctl == nil {

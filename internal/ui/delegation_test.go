@@ -12,13 +12,13 @@ func TestTasksCommandShowsTheDelegateAndTheParentChain(t *testing.T) {
 	m, ws := newTestModel(t, &fakeSession{model: "m"})
 	ws.tasks = []workspace.TaskRow{
 		{Space: "default", Agent: "reader", ID: 1, Size: flow.SizeMedium, Phase: flow.PhaseImplement,
-			Goal: "split billing", Delegate: "developer"},
+			Goal: "split billing", Delegate: "developer", Assigned: "developer (handed over)"},
 		{Space: "default", Agent: "developer", ID: 2, Size: flow.SizeMedium, Phase: flow.PhaseDeliver,
 			Goal: "split billing", Parent: "default/reader #1"},
 	}
 	m = sendLine(t, m, "/tasks")
 	out := stripANSI(m.transcriptText())
-	for _, want := range []string{"reader → developer", "developer ← default/reader #1"} {
+	for _, want := range []string{"developer (handed over)", "developer ← default/reader #1"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("/tasks lacks %q:\n%s", want, out)
 		}
