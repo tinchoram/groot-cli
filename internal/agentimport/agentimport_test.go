@@ -143,6 +143,10 @@ func TestLoadRefusesLargeAndBinaryLocalFiles(t *testing.T) {
 	}
 }
 
+// fastClient times out quickly so the slow-server case below ends in well
+// under a second. The happy path uses the test server's own client: a slow CI
+// runner under the race detector can take longer than this to answer even on
+// the loopback interface.
 func fastClient() *http.Client { return &http.Client{Timeout: 200 * time.Millisecond} }
 
 func TestLoadFromURL(t *testing.T) {
@@ -151,7 +155,7 @@ func TestLoadFromURL(t *testing.T) {
 		_, _ = w.Write([]byte(claudeStyle))
 	}))
 	defer srv.Close()
-	p, err := loadWith(context.Background(), fastClient(), srv.URL+"/scout.md")
+	p, err := loadWith(context.Background(), srv.Client(), srv.URL+"/scout.md")
 	if err != nil || p.Def.Name != "code-scout" {
 		t.Fatalf("URL load = %+v (%v)", p.Def, err)
 	}
